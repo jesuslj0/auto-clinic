@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ patient }} · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Patient profile{% endblock %}
+
+{% block content %}
+<section class="grid gap-6 xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
+    <aside class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
+        <h3 class="text-xl font-semibold text-slate-900">{{ patient }}</h3>
+        <dl class="mt-6 space-y-4 text-sm text-slate-600">
+            <div>
+                <dt class="font-medium text-slate-900">Email</dt>
+                <dd class="mt-1">{{ patient.email|default:'Not provided' }}</dd>
+            </div>
+            <div>
+                <dt class="font-medium text-slate-900">Phone</dt>
+                <dd class="mt-1">{{ patient.phone }}</dd>
+            </div>
+            <div>
+                <dt class="font-medium text-slate-900">Date of birth</dt>
+                <dd class="mt-1">{{ patient.date_of_birth|date:"F j, Y"|default:'Not available' }}</dd>
+            </div>
+            <div>
+                <dt class="font-medium text-slate-900">Notes</dt>
+                <dd class="mt-1 whitespace-pre-line">{{ patient.notes|default:'No notes added yet.' }}</dd>
+            </div>
+        </dl>
+    </aside>
+
+    <section class="rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
+        <div class="border-b border-slate-200 px-6 py-5">
+            <h3 class="text-lg font-semibold text-slate-900">Appointment history</h3>
+            <p class="mt-1 text-sm text-slate-500">Recent and upcoming visits for this patient.</p>
+        </div>
+        <div class="divide-y divide-slate-100">
+            {% for appointment in appointments|default:patient.appointments.all %}
+                <article class="flex flex-col gap-4 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <p class="text-sm font-semibold text-slate-900">{{ appointment.service }}</p>
+                        <p class="mt-1 text-sm text-slate-500">{{ appointment.scheduled_at|date:"M j, Y" }} · {{ appointment.scheduled_at|date:"g:i A" }} – {{ appointment.end_at|date:"g:i A" }}</p>
+                    </div>
+                    <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold {% if appointment.status == 'confirmed' %}bg-emerald-50 text-emerald-700{% elif appointment.status == 'cancelled' %}bg-rose-50 text-rose-700{% else %}bg-amber-50 text-amber-700{% endif %}">{{ appointment.get_status_display|default:appointment.status|title }}</span>
+                </article>
+            {% empty %}
+                <div class="px-6 py-12 text-center text-sm text-slate-500">No appointment history available.</div>
+            {% endfor %}
+        </div>
+    </section>
+</section>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+
+{% block title %}Booking confirmed · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Booking confirmed{% endblock %}
+
+{% block content %}
+<section class="mx-auto max-w-2xl rounded-3xl bg-white px-6 py-12 text-center shadow-soft ring-1 ring-slate-200 sm:px-10">
+    <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-2xl text-emerald-600">✓</div>
+    <h3 class="mt-6 text-3xl font-semibold text-slate-900">Appointment booked successfully</h3>
+    <p class="mt-3 text-sm leading-6 text-slate-500">Your appointment{% if appointment %} for {{ appointment.scheduled_at|date:"F j, Y \a\t g:i A" }}{% endif %} has been recorded. A confirmation message can be sent to the patient with next steps.</p>
+    <div class="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+        <a href="{{ booking_services_url|default:'#' }}" class="inline-flex items-center justify-center rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white hover:bg-brand-700">Book another appointment</a>
+        <a href="{{ dashboard_url|default:'/' }}" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">Return to dashboard</a>
+    </div>
+</section>
+{% endblock %}

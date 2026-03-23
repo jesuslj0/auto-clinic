@@ -1,0 +1,88 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-100">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{{ clinic.name|default:"Auto Clinic" }}{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <script defer src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        },
+                    },
+                    boxShadow: {
+                        soft: '0 12px 32px rgba(15, 23, 42, 0.08)',
+                    },
+                },
+            },
+        };
+    </script>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="h-full text-slate-800 antialiased">
+    <div class="min-h-full lg:flex">
+        <aside class="hidden w-72 flex-shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col">
+            <div class="border-b border-slate-200 px-6 py-6">
+                <a href="/" class="flex items-center gap-3">
+                    <span class="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-600 text-lg font-semibold text-white">AC</span>
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">Clinic OS</p>
+                        <h1 class="text-lg font-semibold text-slate-900">{{ clinic.name|default:"Auto Clinic" }}</h1>
+                    </div>
+                </a>
+            </div>
+            <nav class="flex-1 space-y-1 px-4 py-6 text-sm font-medium">
+                <a href="{{ dashboard_url|default:'/' }}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'dashboard' %}bg-brand-50 text-brand-700{% endif %}">
+                    <span>Dashboard</span>
+                </a>
+                <a href="{{ appointments_list_url|default:'#' }}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'appointments' %}bg-brand-50 text-brand-700{% endif %}">
+                    <span>Appointments</span>
+                </a>
+                <a href="{{ patients_list_url|default:'#' }}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'patients' %}bg-brand-50 text-brand-700{% endif %}">
+                    <span>Patients</span>
+                </a>
+            </nav>
+            <div class="border-t border-slate-200 px-6 py-5">
+                <p class="text-sm font-medium text-slate-900">{{ request.user.get_full_name|default:request.user.email|default:"Clinic team" }}</p>
+                <p class="mt-1 text-xs text-slate-500">Manage schedules, bookings, and patients.</p>
+            </div>
+        </aside>
+
+        <div class="flex min-h-screen flex-1 flex-col">
+            <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
+                <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">{{ clinic.name|default:"Auto Clinic" }}</p>
+                        <h2 class="text-xl font-semibold text-slate-900">{% block page_heading %}Clinic Dashboard{% endblock %}</h2>
+                    </div>
+                    <button type="button" class="inline-flex items-center rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 shadow-sm lg:hidden">Menu</button>
+                </div>
+                <div class="border-t border-slate-200 bg-white lg:hidden">
+                    <nav class="flex items-center gap-2 overflow-x-auto px-4 py-3 text-sm font-medium sm:px-6">
+                        <a href="{{ dashboard_url|default:'/' }}" class="rounded-full px-4 py-2 {% if section == 'dashboard' %}bg-brand-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Dashboard</a>
+                        <a href="{{ appointments_list_url|default:'#' }}" class="rounded-full px-4 py-2 {% if section == 'appointments' %}bg-brand-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Appointments</a>
+                        <a href="{{ patients_list_url|default:'#' }}" class="rounded-full px-4 py-2 {% if section == 'patients' %}bg-brand-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Patients</a>
+                    </nav>
+                </div>
+            </header>
+
+            <main class="flex-1">
+                <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+                    {% block content %}{% endblock %}
+                </div>
+            </main>
+        </div>
+    </div>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

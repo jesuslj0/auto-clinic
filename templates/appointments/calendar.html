@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+
+{% block title %}Calendar · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Weekly calendar{% endblock %}
+
+{% block content %}
+<section class="space-y-6">
+    <div class="flex flex-col gap-4 rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+            <h3 class="text-lg font-semibold text-slate-900">Weekly schedule</h3>
+            <p class="mt-1 text-sm text-slate-500">{{ week_start|date:"M j"|default:"This week" }}{% if week_end %} – {{ week_end|date:"M j, Y" }}{% endif %}</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="?week={{ previous_week|date:'Y-m-d' }}" class="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Previous</a>
+            <a href="?week={{ next_week|date:'Y-m-d' }}" class="rounded-full bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">Next</a>
+        </div>
+    </div>
+
+    <section class="overflow-hidden rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
+        <div class="overflow-x-auto">
+            <div class="grid min-w-[900px] grid-cols-[80px_repeat(7,minmax(140px,1fr))]">
+                <div class="border-b border-r border-slate-200 bg-slate-50 p-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Time</div>
+                {% for day in week_days %}
+                    <div class="border-b border-r border-slate-200 bg-slate-50 p-4">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ day|date:"D" }}</p>
+                        <p class="mt-1 text-sm font-semibold text-slate-900">{{ day|date:"M j" }}</p>
+                    </div>
+                {% endfor %}
+
+                {% for slot in time_slots %}
+                    <div class="border-r border-slate-200 px-3 py-4 text-xs font-medium text-slate-500">{{ slot|time:"g:i A"|default:slot }}</div>
+                    {% for day in week_days %}
+                        <div class="relative min-h-28 border-r border-t border-slate-200 bg-white p-2 align-top">
+                            {% for appointment in appointments %}
+                                {% if appointment.scheduled_at|date:'Y-m-d' == day|date:'Y-m-d' and appointment.scheduled_at|time:'H:i' == slot|time:'H:i' %}
+                                    <article class="rounded-2xl border border-brand-100 bg-brand-50 p-3 shadow-sm">
+                                        <p class="text-sm font-semibold text-brand-700">{{ appointment.patient }}</p>
+                                        <p class="mt-1 text-xs text-brand-600">{{ appointment.service }}</p>
+                                        <p class="mt-2 text-xs text-slate-500">{{ appointment.scheduled_at|date:"g:i A" }} – {{ appointment.end_at|date:"g:i A" }}</p>
+                                    </article>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    {% endfor %}
+                {% empty %}
+                    <div class="col-span-8 px-6 py-10 text-center text-sm text-slate-500">No time slots configured for this week.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+</section>
+{% endblock %}
