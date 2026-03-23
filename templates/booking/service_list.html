@@ -1,13 +1,13 @@
 {% extends 'base.html' %}
 
-{% block title %}Book a service · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
-{% block page_heading %}Choose a service{% endblock %}
+{% block title %}Reservar un servicio · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Elige un servicio{% endblock %}
 
 {% block content %}
 <section class="space-y-6">
     <div class="max-w-2xl">
-        <h3 class="text-2xl font-semibold text-slate-900">Select the service your patient needs</h3>
-        <p class="mt-2 text-sm text-slate-500">Clear service cards make online booking fast and easy.</p>
+        <h3 class="text-2xl font-semibold text-slate-900">Selecciona el servicio que necesita tu paciente</h3>
+        <p class="mt-2 text-sm text-slate-500">Tarjetas de servicio claras hacen que la reserva en línea sea rápida y sencilla.</p>
     </div>
 
     <div class="grid gap-4 lg:grid-cols-2">
@@ -16,7 +16,7 @@
                 <div class="flex items-start justify-between gap-4">
                     <div>
                         <h4 class="text-lg font-semibold text-slate-900">{{ service.name }}</h4>
-                        <p class="mt-2 text-sm leading-6 text-slate-500">{{ service.description|default:'A professional clinic service with a streamlined booking flow.' }}</p>
+                        <p class="mt-2 text-sm leading-6 text-slate-500">{{ service.description|default:'Un servicio profesional de clínica con un flujo de reserva ágil.' }}</p>
                     </div>
                     <div class="rounded-2xl bg-slate-100 px-3 py-2 text-right text-sm font-semibold text-slate-700">
                         ${{ service.price }}<br>
@@ -24,13 +24,13 @@
                     </div>
                 </div>
                 <div class="mt-6">
-                    <a href="{% url 'booking:datetime' %}?service={{ service.id|default:'' }}" class="inline-flex items-center rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white hover:bg-brand-700">Select date & time</a>
+                    <a href="{% url 'booking:datetime' %}?service={{ service.id|default:'' }}" class="inline-flex items-center rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white hover:bg-brand-700">Seleccionar fecha y hora</a>
                 </div>
             </article>
         {% empty %}
             <div class="rounded-3xl bg-white px-6 py-12 text-center shadow-soft ring-1 ring-slate-200">
-                <p class="text-base font-medium text-slate-900">No services are available right now.</p>
-                <p class="mt-2 text-sm text-slate-500">Please check back soon or contact the clinic for help.</p>
+                <p class="text-base font-medium text-slate-900">No hay servicios disponibles en este momento.</p>
+                <p class="mt-2 text-sm text-slate-500">Vuelve a intentarlo pronto o contacta a la clínica para recibir ayuda.</p>
             </div>
         {% endfor %}
     </div>

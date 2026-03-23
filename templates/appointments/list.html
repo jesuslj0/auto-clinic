@@ -1,28 +1,28 @@
 {% extends 'base.html' %}
 
-{% block title %}Appointments · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
-{% block page_heading %}Appointments{% endblock %}
+{% block title %}Citas · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Citas{% endblock %}
 
 {% block content %}
 <section class="space-y-6">
     <form method="get" class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200">
         <div class="grid gap-4 md:grid-cols-3">
             <label class="block">
-                <span class="mb-2 block text-sm font-medium text-slate-700">Date</span>
+                <span class="mb-2 block text-sm font-medium text-slate-700">Fecha</span>
                 <input type="date" name="date" value="{{ request.GET.date|default:selected_date|date:'Y-m-d' }}" class="block w-full rounded-2xl border-slate-200 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
             </label>
             <label class="block">
-                <span class="mb-2 block text-sm font-medium text-slate-700">Status</span>
+                <span class="mb-2 block text-sm font-medium text-slate-700">Estado</span>
                 <select name="status" class="block w-full rounded-2xl border-slate-200 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
-                    <option value="">All statuses</option>
+                    <option value="">Todos los estados</option>
                     {% for value, label in status_choices %}
                         <option value="{{ value }}" {% if request.GET.status == value or selected_status == value %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </label>
             <div class="flex items-end gap-3">
-                <button type="submit" class="inline-flex w-full items-center justify-center rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white hover:bg-brand-700 md:w-auto">Apply filters</button>
-                <a href="{% url 'appointments:list' %}" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">Reset</a>
+                <button type="submit" class="inline-flex w-full items-center justify-center rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white hover:bg-brand-700 md:w-auto">Aplicar filtros</button>
+                <a href="{% url 'appointments:list' %}" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">Restablecer</a>
             </div>
         </div>
     </form>
@@ -32,11 +32,11 @@
             <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
                 <thead class="bg-slate-50 text-slate-500">
                     <tr>
-                        <th class="px-6 py-4 font-semibold">Patient</th>
-                        <th class="px-6 py-4 font-semibold">Service</th>
-                        <th class="px-6 py-4 font-semibold">Date & time</th>
-                        <th class="px-6 py-4 font-semibold">Status</th>
-                        <th class="px-6 py-4 font-semibold">Assigned</th>
+                        <th class="px-6 py-4 font-semibold">Paciente</th>
+                        <th class="px-6 py-4 font-semibold">Servicio</th>
+                        <th class="px-6 py-4 font-semibold">Fecha y hora</th>
+                        <th class="px-6 py-4 font-semibold">Estado</th>
+                        <th class="px-6 py-4 font-semibold">Asignado a</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 bg-white">
@@ -44,15 +44,15 @@
                         <tr class="align-top">
                             <td class="px-6 py-4 font-medium text-slate-900">{{ appointment.patient }}</td>
                             <td class="px-6 py-4 text-slate-600">{{ appointment.service }}</td>
-                            <td class="px-6 py-4 text-slate-600">{{ appointment.scheduled_at|date:"M j, Y" }}<br><span class="text-xs text-slate-500">{{ appointment.scheduled_at|date:"g:i A" }} – {{ appointment.end_at|date:"g:i A" }}</span></td>
+                            <td class="px-6 py-4 text-slate-600">{{ appointment.scheduled_at|date:"j M Y" }}<br><span class="text-xs text-slate-500">{{ appointment.scheduled_at|date:"g:i A" }} – {{ appointment.end_at|date:"g:i A" }}</span></td>
                             <td class="px-6 py-4">
                                 <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold {% if appointment.status == 'confirmed' %}bg-emerald-50 text-emerald-700{% elif appointment.status == 'cancelled' %}bg-rose-50 text-rose-700{% else %}bg-amber-50 text-amber-700{% endif %}">{{ appointment.get_status_display|default:appointment.status|title }}</span>
                             </td>
-                            <td class="px-6 py-4 text-slate-600">{{ appointment.assigned_to.get_full_name|default:appointment.assigned_to.email|default:'Unassigned' }}</td>
+                            <td class="px-6 py-4 text-slate-600">{{ appointment.assigned_to.get_full_name|default:appointment.assigned_to.email|default:'Sin asignar' }}</td>
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="5" class="px-6 py-12 text-center text-sm text-slate-500">No appointments match the selected filters.</td>
+                            <td colspan="5" class="px-6 py-12 text-center text-sm text-slate-500">No hay citas que coincidan con los filtros seleccionados.</td>
                         </tr>
                     {% endfor %}
                 </tbody>
