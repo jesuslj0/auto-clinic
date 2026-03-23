@@ -1,13 +1,13 @@
 {% extends 'base.html' %}
 
-{% block title %}Select date & time · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
-{% block page_heading %}Pick an available slot{% endblock %}
+{% block title %}Seleccionar fecha y hora · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Elige un horario disponible{% endblock %}
 
 {% block content %}
 <section class="space-y-6">
     <div class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
         <h3 class="text-lg font-semibold text-slate-900">{{ service.name }}</h3>
-        <p class="mt-2 text-sm text-slate-500">Choose one of the available appointment times below.</p>
+        <p class="mt-2 text-sm text-slate-500">Elige uno de los horarios de cita disponibles a continuación.</p>
     </div>
 
     <div id="slot-grid" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -19,20 +19,20 @@
                 hx-target="#booking-panel"
                 hx-swap="innerHTML"
             >
-                <p class="text-sm font-semibold uppercase tracking-wide text-brand-600">Available</p>
-                <p class="mt-3 text-lg font-semibold text-slate-900">{{ slot|date:"l, M j" }}</p>
+                <p class="text-sm font-semibold uppercase tracking-wide text-brand-600">Disponible</p>
+                <p class="mt-3 text-lg font-semibold text-slate-900">{{ slot|date:"l, j M" }}</p>
                 <p class="mt-1 text-sm text-slate-500">{{ slot|date:"g:i A" }}</p>
             </button>
         {% empty %}
             <div class="sm:col-span-2 xl:col-span-3 rounded-3xl bg-white px-6 py-12 text-center shadow-soft ring-1 ring-slate-200">
-                <p class="text-base font-medium text-slate-900">No available slots found.</p>
-                <p class="mt-2 text-sm text-slate-500">Try another service or date range.</p>
+                <p class="text-base font-medium text-slate-900">No se encontraron horarios disponibles.</p>
+                <p class="mt-2 text-sm text-slate-500">Prueba con otro servicio o rango de fechas.</p>
             </div>
         {% endfor %}
     </div>
 
     <div id="booking-panel" class="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center text-sm text-slate-500">
-        Select a time slot to continue booking.
+        Selecciona un horario para continuar con la reserva.
     </div>
 </section>
 {% endblock %}

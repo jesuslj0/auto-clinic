@@ -1,6 +1,6 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="en" class="h-full bg-slate-100">
+<html lang="es" class="h-full bg-slate-100">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -36,25 +36,25 @@
                 <a href="/" class="flex items-center gap-3">
                     <span class="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-600 text-lg font-semibold text-white">AC</span>
                     <div>
-                        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">Clinic OS</p>
+                        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">Sistema Clínica</p>
                         <h1 class="text-lg font-semibold text-slate-900">{{ clinic.name|default:"Auto Clinic" }}</h1>
                     </div>
                 </a>
             </div>
             <nav class="flex-1 space-y-1 px-4 py-6 text-sm font-medium">
                 <a href="{% url 'core:dashboard'%}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'dashboard' %}bg-brand-50 text-brand-700{% endif %}">
-                    <span>Dashboard</span>
+                    <span>Panel</span>
                 </a>
                 <a href="{% url 'appointments:list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'appointments' %}bg-brand-50 text-brand-700{% endif %}">
-                    <span>Appointments</span>
+                    <span>Citas</span>
                 </a>
                 <a href="{% url 'patients:list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'patients' %}bg-brand-50 text-brand-700{% endif %}">
-                    <span>Patients</span>
+                    <span>Pacientes</span>
                 </a>
             </nav>
             <div class="border-t border-slate-200 px-6 py-5">
-                <p class="text-sm font-medium text-slate-900">{{ request.user.get_full_name|default:request.user.email|default:"Clinic team" }}</p>
-                <p class="mt-1 text-xs text-slate-500">Manage schedules, bookings, and patients.</p>
+                <p class="text-sm font-medium text-slate-900">{{ request.user.get_full_name|default:request.user.email|default:"Equipo de la clínica" }}</p>
+                <p class="mt-1 text-xs text-slate-500">Gestiona horarios, reservas y pacientes.</p>
             </div>
         </aside>
 
@@ -63,15 +63,15 @@
                 <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
                     <div>
                         <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">{{ clinic.name|default:"Auto Clinic" }}</p>
-                        <h2 class="text-xl font-semibold text-slate-900">{% block page_heading %}Clinic Dashboard{% endblock %}</h2>
+                        <h2 class="text-xl font-semibold text-slate-900">{% block page_heading %}Panel de la clínica{% endblock %}</h2>
                     </div>
-                    <button type="button" class="inline-flex items-center rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 shadow-sm lg:hidden">Menu</button>
+                    <button type="button" class="inline-flex items-center rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 shadow-sm lg:hidden">Menú</button>
                 </div>
                 <div class="border-t border-slate-200 bg-white lg:hidden">
                     <nav class="flex items-center gap-2 overflow-x-auto px-4 py-3 text-sm font-medium sm:px-6">
-                        <a href="{{ dashboard_url|default:'/' }}" class="rounded-full px-4 py-2 {% if section == 'dashboard' %}bg-brand-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Dashboard</a>
-                        <a href="{{ appointments_list_url|default:'#' }}" class="rounded-full px-4 py-2 {% if section == 'appointments' %}bg-brand-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Appointments</a>
-                        <a href="{{ patients_list_url|default:'#' }}" class="rounded-full px-4 py-2 {% if section == 'patients' %}bg-brand-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Patients</a>
+                        <a href="{{ dashboard_url|default:'/' }}" class="rounded-full px-4 py-2 {% if section == 'dashboard' %}bg-brand-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Panel</a>
+                        <a href="{{ appointments_list_url|default:'#' }}" class="rounded-full px-4 py-2 {% if section == 'appointments' %}bg-brand-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Citas</a>
+                        <a href="{{ patients_list_url|default:'#' }}" class="rounded-full px-4 py-2 {% if section == 'patients' %}bg-brand-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Pacientes</a>
                     </nav>
                 </div>
             </header>

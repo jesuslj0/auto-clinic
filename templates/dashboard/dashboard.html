@@ -1,35 +1,35 @@
 {% extends 'base.html' %}
 
-{% block title %}Dashboard · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
-{% block page_heading %}Dashboard overview{% endblock %}
+{% block title %}Panel · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Resumen del panel{% endblock %}
 
 {% block content %}
 <section class="space-y-6">
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <article class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
-            <p class="text-sm font-medium text-slate-500">Appointments today</p>
+            <p class="text-sm font-medium text-slate-500">Citas de hoy</p>
             <p class="mt-4 text-3xl font-semibold text-slate-900">{{ stats.today|default:today_appointments|default:0 }}</p>
-            <p class="mt-2 text-sm text-slate-500">Scheduled visits for {{ today|date:"l, F j"|default:"today" }}.</p>
+            <p class="mt-2 text-sm text-slate-500">Visitas programadas para {{ today|date:"l, j \d\e F"|default:"hoy" }}.</p>
         </article>
         <article class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
-            <p class="text-sm font-medium text-slate-500">Pending</p>
+            <p class="text-sm font-medium text-slate-500">Pendientes</p>
             <p class="mt-4 text-3xl font-semibold text-amber-500">{{ stats.pending|default:pending_appointments|default:0 }}</p>
-            <p class="mt-2 text-sm text-slate-500">Appointments awaiting confirmation.</p>
+            <p class="mt-2 text-sm text-slate-500">Citas en espera de confirmación.</p>
         </article>
         <article class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200 sm:col-span-2 xl:col-span-1">
-            <p class="text-sm font-medium text-slate-500">Cancelled</p>
+            <p class="text-sm font-medium text-slate-500">Canceladas</p>
             <p class="mt-4 text-3xl font-semibold text-rose-500">{{ stats.cancelled|default:cancelled_appointments|default:0 }}</p>
-            <p class="mt-2 text-sm text-slate-500">Cancelled appointments for the current period.</p>
+            <p class="mt-2 text-sm text-slate-500">Citas canceladas en el periodo actual.</p>
         </article>
     </div>
 
     <section class="rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
         <div class="flex items-center justify-between border-b border-slate-200 px-6 py-5">
             <div>
-                <h3 class="text-lg font-semibold text-slate-900">Today’s appointments</h3>
-                <p class="mt-1 text-sm text-slate-500">A quick snapshot of what is scheduled next.</p>
+                <h3 class="text-lg font-semibold text-slate-900">Citas de hoy</h3>
+                <p class="mt-1 text-sm text-slate-500">Una vista rápida de lo que sigue en agenda.</p>
             </div>
-            <a href="{% url 'appointments:list' %}" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">View all</a>
+            <a href="{% url 'appointments:list' %}" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">Ver todo</a>
         </div>
         <div class="divide-y divide-slate-100">
             {% for appointment in appointments|default:today_schedule %}
@@ -42,13 +42,13 @@
                         <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold {% if appointment.status == 'confirmed' %}bg-emerald-50 text-emerald-700{% elif appointment.status == 'cancelled' %}bg-rose-50 text-rose-700{% else %}bg-amber-50 text-amber-700{% endif %}">
                             {{ appointment.get_status_display|default:appointment.status|title }}
                         </span>
-                        <a href="#" class="text-sm font-medium text-brand-600 hover:text-brand-700">Details</a>
+                        <a href="#" class="text-sm font-medium text-brand-600 hover:text-brand-700">Detalles</a>
                     </div>
                 </article>
             {% empty %}
                 <div class="px-6 py-12 text-center">
-                    <p class="text-base font-medium text-slate-900">No appointments scheduled yet.</p>
-                    <p class="mt-2 text-sm text-slate-500">Your calendar is open for new bookings today.</p>
+                    <p class="text-base font-medium text-slate-900">Todavía no hay citas programadas.</p>
+                    <p class="mt-2 text-sm text-slate-500">Tu calendario está abierto para nuevas reservas hoy.</p>
                 </div>
             {% endfor %}
         </div>

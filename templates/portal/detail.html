@@ -1,38 +1,38 @@
 {% extends 'base.html' %}
 
-{% block title %}Appointment portal · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
-{% block page_heading %}Appointment details{% endblock %}
+{% block title %}Portal de citas · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Detalles de la cita{% endblock %}
 
 {% block content %}
 <section class="mx-auto max-w-3xl rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
     <div class="border-b border-slate-200 px-6 py-6 sm:px-8">
-        <p class="text-sm font-semibold uppercase tracking-wide text-brand-600">Patient portal</p>
+        <p class="text-sm font-semibold uppercase tracking-wide text-brand-600">Portal del paciente</p>
         <h3 class="mt-2 text-2xl font-semibold text-slate-900">{{ appointment.service }}</h3>
-        <p class="mt-2 text-sm text-slate-500">{{ appointment.scheduled_at|date:"l, F j, Y" }} at {{ appointment.scheduled_at|date:"g:i A" }}</p>
+        <p class="mt-2 text-sm text-slate-500">{{ appointment.scheduled_at|date:"l, j \d\e F \d\e Y" }} a las {{ appointment.scheduled_at|date:"g:i A" }}</p>
     </div>
 
     <div class="space-y-6 px-6 py-6 sm:px-8">
         <dl class="grid gap-5 sm:grid-cols-2">
             <div>
-                <dt class="text-sm font-medium text-slate-500">Patient</dt>
+                <dt class="text-sm font-medium text-slate-500">Paciente</dt>
                 <dd class="mt-1 text-base font-semibold text-slate-900">{{ appointment.patient }}</dd>
             </div>
             <div>
-                <dt class="text-sm font-medium text-slate-500">Status</dt>
+                <dt class="text-sm font-medium text-slate-500">Estado</dt>
                 <dd class="mt-1"><span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold {% if appointment.status == 'confirmed' %}bg-emerald-50 text-emerald-700{% elif appointment.status == 'cancelled' %}bg-rose-50 text-rose-700{% else %}bg-amber-50 text-amber-700{% endif %}">{{ appointment.get_status_display|default:appointment.status|title }}</span></dd>
             </div>
             <div>
-                <dt class="text-sm font-medium text-slate-500">Email</dt>
-                <dd class="mt-1 text-sm text-slate-700">{{ appointment.patient.email|default:'Not provided' }}</dd>
+                <dt class="text-sm font-medium text-slate-500">Correo electrónico</dt>
+                <dd class="mt-1 text-sm text-slate-700">{{ appointment.patient.email|default:'No proporcionado' }}</dd>
             </div>
             <div>
-                <dt class="text-sm font-medium text-slate-500">Phone</dt>
-                <dd class="mt-1 text-sm text-slate-700">{{ appointment.patient.phone|default:'Not provided' }}</dd>
+                <dt class="text-sm font-medium text-slate-500">Teléfono</dt>
+                <dd class="mt-1 text-sm text-slate-700">{{ appointment.patient.phone|default:'No proporcionado' }}</dd>
             </div>
         </dl>
 
         <div class="rounded-2xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-            {{ appointment.notes|default:'Use the actions below to confirm or cancel this appointment. The clinic can follow up with the patient automatically.' }}
+            {{ appointment.notes|default:'Usa las acciones de abajo para confirmar o cancelar esta cita. La clínica puede hacer seguimiento con el paciente automáticamente.' }}
         </div>
 
         <div class="flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end">
@@ -43,7 +43,7 @@
                 hx-target="#portal-response"
                 hx-swap="innerHTML"
             >
-                Confirm
+                Confirmar
             </button>
             <button
                 type="button"
@@ -52,12 +52,12 @@
                 hx-target="#portal-response"
                 hx-swap="innerHTML"
             >
-                Cancel
+                Cancelar
             </button>
         </div>
 
         <div id="portal-response" class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-            Updates will appear here after the patient responds.
+            Las actualizaciones aparecerán aquí cuando el paciente responda.
         </div>
     </div>
 </section>

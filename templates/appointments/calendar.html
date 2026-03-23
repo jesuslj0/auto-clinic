@@ -1,29 +1,29 @@
 {% extends 'base.html' %}
 
-{% block title %}Calendar · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
-{% block page_heading %}Weekly calendar{% endblock %}
+{% block title %}Calendario · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Calendario semanal{% endblock %}
 
 {% block content %}
 <section class="space-y-6">
     <div class="flex flex-col gap-4 rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:flex-row sm:items-center sm:justify-between">
         <div>
-            <h3 class="text-lg font-semibold text-slate-900">Weekly schedule</h3>
-            <p class="mt-1 text-sm text-slate-500">{{ week_start|date:"M j"|default:"This week" }}{% if week_end %} – {{ week_end|date:"M j, Y" }}{% endif %}</p>
+            <h3 class="text-lg font-semibold text-slate-900">Agenda semanal</h3>
+            <p class="mt-1 text-sm text-slate-500">{{ week_start|date:"j M"|default:"Esta semana" }}{% if week_end %} – {{ week_end|date:"j M, Y" }}{% endif %}</p>
         </div>
         <div class="flex items-center gap-2">
-            <a href="?week={{ previous_week|date:'Y-m-d' }}" class="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Previous</a>
-            <a href="?week={{ next_week|date:'Y-m-d' }}" class="rounded-full bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">Next</a>
+            <a href="?week={{ previous_week|date:'Y-m-d' }}" class="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Anterior</a>
+            <a href="?week={{ next_week|date:'Y-m-d' }}" class="rounded-full bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">Siguiente</a>
         </div>
     </div>
 
     <section class="overflow-hidden rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
         <div class="overflow-x-auto">
             <div class="grid min-w-[900px] grid-cols-[80px_repeat(7,minmax(140px,1fr))]">
-                <div class="border-b border-r border-slate-200 bg-slate-50 p-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Time</div>
+                <div class="border-b border-r border-slate-200 bg-slate-50 p-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Hora</div>
                 {% for day in week_days %}
                     <div class="border-b border-r border-slate-200 bg-slate-50 p-4">
                         <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ day|date:"D" }}</p>
-                        <p class="mt-1 text-sm font-semibold text-slate-900">{{ day|date:"M j" }}</p>
+                        <p class="mt-1 text-sm font-semibold text-slate-900">{{ day|date:"j M" }}</p>
                     </div>
                 {% endfor %}
 
@@ -43,7 +43,7 @@
                         </div>
                     {% endfor %}
                 {% empty %}
-                    <div class="col-span-8 px-6 py-10 text-center text-sm text-slate-500">No time slots configured for this week.</div>
+                    <div class="col-span-8 px-6 py-10 text-center text-sm text-slate-500">No hay franjas horarias configuradas para esta semana.</div>
                 {% endfor %}
             </div>
         </div>
