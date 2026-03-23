@@ -37,7 +37,7 @@
                     <span class="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-600 text-lg font-semibold text-white">AC</span>
                     <div>
                         <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">Sistema Clínica</p>
-                        <h1 class="text-lg font-semibold text-slate-900">{{ clinic.name|default:"Auto Clinic" }}</h1>
+                        <h1 class="text-lg font-semibold text-slate-900">{{ request.user.clinic.name|default:"Auto Clinic" }}</h1>
                     </div>
                 </a>
             </div>
@@ -50,6 +50,9 @@
                 </a>
                 <a href="{% url 'patients:list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'patients' %}bg-brand-50 text-brand-700{% endif %}">
                     <span>Pacientes</span>
+                </a>
+                <a href="{% url 'appointments:calendar' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'calendar' %}bg-brand-50 text-brand-700{% endif %}">
+                    <span>Agenda</span>
                 </a>
             </nav>
             <div class="border-t border-slate-200 px-6 py-5">

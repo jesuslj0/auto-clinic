@@ -32,8 +32,7 @@
                         <td class="px-6 py-4 text-slate-600">{{ patient.email|default:'—' }}</td>
                         <td class="px-6 py-4 text-slate-600">{{ patient.phone }}</td>
                         <td class="px-6 py-4 text-slate-600">{{ patient.date_of_birth|date:"j M, Y"|default:'—' }}</td>
-                        <td class="px-6 py-4 text-slate-600">{{ patient.appointments.count|default:0 }}</td>
-                    </tr>
+                        <td class="px-6 py-4 text-slate-600">{{ patient.appointments.count|default:0 }}</td>                    </tr>
                 {% empty %}
                     <tr>
                         <td colspan="5" class="px-6 py-12 text-center text-sm text-slate-500">No se encontraron pacientes.</td>
