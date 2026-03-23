@@ -24,7 +24,7 @@
                     </div>
                 </div>
                 <div class="mt-6">
-                    <a href="{{ service.booking_url|default:'#' }}" class="inline-flex items-center rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white hover:bg-brand-700">Select date & time</a>
+                    <a href="{% url 'booking:datetime' %}?service={{ service.id|default:'' }}" class="inline-flex items-center rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white hover:bg-brand-700">Select date & time</a>
                 </div>
             </article>
         {% empty %}

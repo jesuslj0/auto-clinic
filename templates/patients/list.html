@@ -28,7 +28,7 @@
             <tbody class="divide-y divide-slate-100 bg-white">
                 {% for patient in patients %}
                     <tr>
-                        <td class="px-6 py-4 font-medium text-slate-900"><a href="#" class="hover:text-brand-600">{{ patient }}</a></td>
+                        <td class="px-6 py-4 font-medium text-slate-900"><a href="{% url 'patients:detail' patient.id %}" class="hover:text-brand-600">{{ patient }}</a></td>
                         <td class="px-6 py-4 text-slate-600">{{ patient.email|default:'—' }}</td>
                         <td class="px-6 py-4 text-slate-600">{{ patient.phone }}</td>
                         <td class="px-6 py-4 text-slate-600">{{ patient.date_of_birth|date:"M j, Y"|default:'—' }}</td>

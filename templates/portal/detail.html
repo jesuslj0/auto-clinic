@@ -39,7 +39,7 @@
             <button
                 type="button"
                 class="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-700"
-                hx-post="{{ portal_confirm_url|default:'#' }}"
+                hx-post="{% url 'portal:confirm' appointment.confirmation_token %}"
                 hx-target="#portal-response"
                 hx-swap="innerHTML"
             >
@@ -48,7 +48,7 @@
             <button
                 type="button"
                 class="inline-flex items-center justify-center rounded-2xl bg-rose-600 px-5 py-3 text-sm font-semibold text-white hover:bg-rose-700"
-                hx-post="{{ portal_cancel_url|default:'#' }}"
+                hx-post="{% url 'portal:cancel' appointment.confirmation_token %}"
                 hx-target="#portal-response"
                 hx-swap="innerHTML"
             >
