@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+
+{% block title %}Confirm booking · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Confirm booking{% endblock %}
+
+{% block content %}
+<section class="mx-auto max-w-3xl rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200 sm:p-8">
+    <div class="mb-8">
+        <p class="text-sm font-semibold uppercase tracking-wide text-brand-600">Selected time</p>
+        <h3 class="mt-2 text-2xl font-semibold text-slate-900">{{ selected_datetime|date:"l, F j, Y" }}</h3>
+        <p class="mt-1 text-sm text-slate-500">{{ selected_datetime|date:"g:i A" }}{% if service %} · {{ service.name }}{% endif %}</p>
+    </div>
+
+    <form method="post" class="space-y-5">
+        {% csrf_token %}
+        <input type="hidden" name="selected_datetime" value="{{ selected_datetime|date:'c' }}">
+        {% if service %}<input type="hidden" name="service_id" value="{{ service.id }}">{% endif %}
+
+        <div class="grid gap-5 sm:grid-cols-2">
+            <label class="block sm:col-span-2">
+                <span class="mb-2 block text-sm font-medium text-slate-700">Full name</span>
+                <input type="text" name="name" value="{{ form.name.value|default_if_none:'' }}" required class="block w-full rounded-2xl border-slate-200 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
+            </label>
+            <label class="block">
+                <span class="mb-2 block text-sm font-medium text-slate-700">Email</span>
+                <input type="email" name="email" value="{{ form.email.value|default_if_none:'' }}" required class="block w-full rounded-2xl border-slate-200 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
+            </label>
+            <label class="block">
+                <span class="mb-2 block text-sm font-medium text-slate-700">Phone</span>
+                <input type="tel" name="phone" value="{{ form.phone.value|default_if_none:'' }}" required class="block w-full rounded-2xl border-slate-200 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
+            </label>
+        </div>
+
+        <div class="flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <p class="text-sm text-slate-500">You’ll receive a confirmation once the booking is submitted.</p>
+            <button type="submit" class="inline-flex items-center justify-center rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white hover:bg-brand-700">Confirm booking</button>
+        </div>
+    </form>
+</section>
+{% endblock %}
