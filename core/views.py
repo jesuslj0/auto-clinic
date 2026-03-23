@@ -43,7 +43,6 @@ class DashboardView(TemplateView):
                 'today_appointments': today_schedule.count(),
                 'pending_appointments': appointments.filter(status=Appointment.Status.PENDING).count(),
                 'cancelled_appointments': appointments.filter(status=Appointment.Status.CANCELLED).count(),
-                'appointments_list_url': 'appointments:list',
             }
         )
         return context

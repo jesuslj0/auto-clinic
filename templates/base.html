@@ -42,13 +42,13 @@
                 </a>
             </div>
             <nav class="flex-1 space-y-1 px-4 py-6 text-sm font-medium">
-                <a href="{{ dashboard_url|default:'/' }}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'dashboard' %}bg-brand-50 text-brand-700{% endif %}">
+                <a href="{% url 'core:dashboard'%}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'dashboard' %}bg-brand-50 text-brand-700{% endif %}">
                     <span>Dashboard</span>
                 </a>
-                <a href="{{ appointments_list_url|default:'#' }}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'appointments' %}bg-brand-50 text-brand-700{% endif %}">
+                <a href="{% url 'appointments:list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'appointments' %}bg-brand-50 text-brand-700{% endif %}">
                     <span>Appointments</span>
                 </a>
-                <a href="{{ patients_list_url|default:'#' }}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'patients' %}bg-brand-50 text-brand-700{% endif %}">
+                <a href="{% url 'patients:list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'patients' %}bg-brand-50 text-brand-700{% endif %}">
                     <span>Patients</span>
                 </a>
             </nav>
