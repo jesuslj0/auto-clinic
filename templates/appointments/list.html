@@ -22,7 +22,7 @@
             </label>
             <div class="flex items-end gap-3">
                 <button type="submit" class="inline-flex w-full items-center justify-center rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white hover:bg-brand-700 md:w-auto">Apply filters</button>
-                <a href="{{ appointments_list_url|default:'#' }}" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">Reset</a>
+                <a href="{% url 'appointments:list' %}" class="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">Reset</a>
             </div>
         </div>
     </form>

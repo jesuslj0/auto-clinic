@@ -19,6 +19,11 @@ router.register('reminders', ReminderViewSet, basename='reminder')
 router.register('subscriptions', SubscriptionViewSet, basename='subscription')
 
 urlpatterns = [
+    path('', include('core.urls')),
+    path('appointments/', include('appointments.urls')),
+    path('patients/', include('patients.urls')),
+    path('booking/', include('booking.urls')),
+    path('portal/', include('portal.urls')),
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
     path(

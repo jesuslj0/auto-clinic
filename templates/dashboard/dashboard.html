@@ -29,7 +29,7 @@
                 <h3 class="text-lg font-semibold text-slate-900">Today’s appointments</h3>
                 <p class="mt-1 text-sm text-slate-500">A quick snapshot of what is scheduled next.</p>
             </div>
-            <a href="{{ appointments_list_url|default:'#' }}" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">View all</a>
+            <a href="{% url 'appointments:list' %}" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">View all</a>
         </div>
         <div class="divide-y divide-slate-100">
             {% for appointment in appointments|default:today_schedule %}
