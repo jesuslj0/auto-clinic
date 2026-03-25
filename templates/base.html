@@ -7,6 +7,7 @@
     <title>{% block title %}{{ clinic.name|default:"Auto Clinic" }}{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
     <script defer src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -22,16 +23,153 @@
                     },
                     boxShadow: {
                         soft: '0 12px 32px rgba(15, 23, 42, 0.08)',
+                        sidebar: '4px 0 24px rgba(15, 23, 42, 0.12)',
+                    },
+                    transitionProperty: {
+                        sidebar: 'transform, opacity, visibility',
                     },
                 },
             },
         };
     </script>
+    <style>
+        [x-cloak] { display: none !important; }
+
+        .sidebar-enter {
+            transform: translateX(-100%);
+        }
+        .sidebar-enter-active {
+            transform: translateX(0);
+            transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+        }
+        .sidebar-leave-active {
+            transform: translateX(-100%);
+            transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+        }
+
+        .overlay-enter {
+            opacity: 0;
+        }
+        .overlay-enter-active {
+            opacity: 1;
+            transition: opacity 0.28s ease;
+        }
+        .overlay-leave-active {
+            opacity: 0;
+            transition: opacity 0.22s ease;
+        }
+    </style>
     {% block extra_head %}{% endblock %}
 </head>
-<body class="h-full text-slate-800 antialiased">
+<body class="h-full text-slate-800 antialiased" x-data="{ sidebarOpen: false }" @keydown.escape.window="sidebarOpen = false">
+
+    <!-- Mobile overlay -->
+    {% if request.user.is_authenticated %}
+    <div
+        x-cloak
+        x-show="sidebarOpen"
+        x-transition:enter="transition ease-out duration-300"
+        x-transition:enter-start="opacity-0"
+        x-transition:enter-end="opacity-100"
+        x-transition:leave="transition ease-in duration-200"
+        x-transition:leave-start="opacity-100"
+        x-transition:leave-end="opacity-0"
+        @click="sidebarOpen = false"
+        class="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm lg:hidden"
+        aria-hidden="true"
+    ></div>
+
+    <!-- Mobile sidebar (slide-in) -->
+    <aside
+        x-cloak
+        x-show="sidebarOpen"
+        x-transition:enter="transition ease-out duration-300"
+        x-transition:enter-start="-translate-x-full"
+        x-transition:enter-end="translate-x-0"
+        x-transition:leave="transition ease-in duration-200"
+        x-transition:leave-start="translate-x-0"
+        x-transition:leave-end="-translate-x-full"
+        class="fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-white shadow-[4px_0_24px_rgba(15,23,42,0.12)] lg:hidden"
+        aria-label="Navegación principal"
+    >
+        <div class="border-b border-slate-200 px-6 py-6">
+            <div class="flex items-center justify-between">
+                <a href="/" class="flex items-center gap-3">
+                    <span class="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-600 text-lg font-semibold text-white">AC</span>
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">Sistema Clínica</p>
+                        <h1 class="text-lg font-semibold text-slate-900">{{ request.user.clinic.name|default:"Auto Clinic" }}</h1>
+                    </div>
+                </a>
+                <button
+                    @click="sidebarOpen = false"
+                    class="ml-2 rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+                    aria-label="Cerrar menú"
+                >
+                    <!-- X icon -->
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <nav class="flex-1 space-y-1 overflow-y-auto px-4 py-6 text-sm font-medium">
+            <a href="{% url 'core:dashboard' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'dashboard' %}bg-brand-50 text-brand-700{% endif %}">
+                <!-- Home icon -->
+                <svg class="h-5 w-5 flex-shrink-0 {% if section == 'dashboard' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12L11.204 3.045a1.125 1.125 0 011.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+                </svg>
+                <span>Panel</span>
+            </a>
+            <a href="{% url 'appointments:list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'appointments' %}bg-brand-50 text-brand-700{% endif %}">
+                <!-- Calendar icon -->
+                <svg class="h-5 w-5 flex-shrink-0 {% if section == 'appointments' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                </svg>
+                <span>Citas</span>
+            </a>
+            <a href="{% url 'patients:list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'patients' %}bg-brand-50 text-brand-700{% endif %}">
+                <!-- Users icon -->
+                <svg class="h-5 w-5 flex-shrink-0 {% if section == 'patients' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+                </svg>
+                <span>Pacientes</span>
+            </a>
+            <a href="{% url 'appointments:calendar' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'calendar' %}bg-brand-50 text-brand-700{% endif %}">
+                <!-- Clock icon -->
+                <svg class="h-5 w-5 flex-shrink-0 {% if section == 'calendar' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Agenda</span>
+            </a>
+            <a href="{% url 'booking:service_list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'booking' %}bg-brand-50 text-brand-700{% endif %}">
+                <!-- Wrench/Services icon -->
+                <svg class="h-5 w-5 flex-shrink-0 {% if section == 'booking' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
+                </svg>
+                <span>Servicios</span>
+            </a>
+        </nav>
+
+        <div class="border-t border-slate-200 px-6 py-5">
+            <p class="text-sm font-medium text-slate-900">{{ request.user.get_full_name|default:request.user.email }}</p>
+            <p class="mt-1 text-xs text-slate-500">{{ request.user.get_role_display|default:"Personal" }}</p>
+            <form method="post" action="{% url 'core:logout' %}" class="mt-3">
+                {% csrf_token %}
+                <button type="submit" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+                    </svg>
+                    Cerrar sesión
+                </button>
+            </form>
+        </div>
+    </aside>
+    {% endif %}
+
     <div class="min-h-full lg:flex">
-        {% if request.user.is_authenticated %}
+        <!-- Desktop sidebar (always visible) -->
         <aside class="hidden w-72 flex-shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col">
             <div class="border-b border-slate-200 px-6 py-6">
                 <a href="/" class="flex items-center gap-3">
@@ -43,46 +181,77 @@
                 </a>
             </div>
             <nav class="flex-1 space-y-1 px-4 py-6 text-sm font-medium">
-                <a href="{% url 'core:dashboard'%}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'dashboard' %}bg-brand-50 text-brand-700{% endif %}">
+                <a href="{% url 'core:dashboard' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'dashboard' %}bg-brand-50 text-brand-700{% endif %}">
+                    <svg class="h-5 w-5 flex-shrink-0 {% if section == 'dashboard' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12L11.204 3.045a1.125 1.125 0 011.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+                    </svg>
                     <span>Panel</span>
                 </a>
                 <a href="{% url 'appointments:list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'appointments' %}bg-brand-50 text-brand-700{% endif %}">
+                    <svg class="h-5 w-5 flex-shrink-0 {% if section == 'appointments' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                    </svg>
                     <span>Citas</span>
                 </a>
                 <a href="{% url 'patients:list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'patients' %}bg-brand-50 text-brand-700{% endif %}">
+                    <svg class="h-5 w-5 flex-shrink-0 {% if section == 'patients' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+                    </svg>
                     <span>Pacientes</span>
                 </a>
                 <a href="{% url 'appointments:calendar' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'calendar' %}bg-brand-50 text-brand-700{% endif %}">
+                    <svg class="h-5 w-5 flex-shrink-0 {% if section == 'calendar' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
                     <span>Agenda</span>
+                </a>
+                <a href="{% url 'booking:service_list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'booking' %}bg-brand-50 text-brand-700{% endif %}">
+                    <svg class="h-5 w-5 flex-shrink-0 {% if section == 'booking' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
+                    </svg>
+                    <span>Servicios</span>
                 </a>
             </nav>
             <div class="border-t border-slate-200 px-6 py-5">
                 <p class="text-sm font-medium text-slate-900">{{ request.user.get_full_name|default:request.user.email }}</p>
-                <p class="mt-1 text-xs text-slate-500">Gestiona horarios, reservas y pacientes.</p>
+                <p class="mt-1 text-xs text-slate-500">{{ request.user.get_role_display|default:"Personal" }}</p>
+                <form method="post" action="{% url 'core:logout' %}" class="mt-3">
+                    {% csrf_token %}
+                    <button type="submit" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+                        </svg>
+                        Cerrar sesión
+                    </button>
+                </form>
             </div>
         </aside>
-        {% endif %}
 
         <div class="flex min-h-screen flex-1 flex-col">
             <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
                 <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-                    <div>
-                        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">{{ clinic.name|default:"Auto Clinic" }}</p>
-                        <h2 class="text-xl font-semibold text-slate-900">{% block page_heading %}Panel de la clínica{% endblock %}</h2>
+                    <div class="flex items-center gap-3">
+                        {% if request.user.is_authenticated %}
+                        <!-- Hamburger button (mobile only) -->
+                        <button
+                            @click="sidebarOpen = true"
+                            type="button"
+                            class="rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition lg:hidden"
+                            aria-label="Abrir menú"
+                            aria-expanded="false"
+                            :aria-expanded="sidebarOpen"
+                        >
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                            </svg>
+                        </button>
+                        {% endif %}
+                        <div>
+                            <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">{{ clinic.name|default:"Auto Clinic" }}</p>
+                            <h2 class="text-xl font-semibold text-slate-900">{% block page_heading %}Panel de la clínica{% endblock %}</h2>
+                        </div>
                     </div>
-                    {% if request.user.is_authenticated %}
-                <button type="button" class="inline-flex items-center rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 shadow-sm lg:hidden">Menú</button>
-                {% endif %}
                 </div>
-                {% if request.user.is_authenticated %}
-                <div class="border-t border-slate-200 bg-white lg:hidden">
-                    <nav class="flex items-center gap-2 overflow-x-auto px-4 py-3 text-sm font-medium sm:px-6">
-                        <a href="{{ dashboard_url|default:'/' }}" class="rounded-full px-4 py-2 {% if section == 'dashboard' %}bg-brand-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Panel</a>
-                        <a href="{{ appointments_list_url|default:'#' }}" class="rounded-full px-4 py-2 {% if section == 'appointments' %}bg-brand-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Citas</a>
-                        <a href="{{ patients_list_url|default:'#' }}" class="rounded-full px-4 py-2 {% if section == 'patients' %}bg-brand-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Pacientes</a>
-                    </nav>
-                </div>
-                {% endif %}
             </header>
 
             <main class="flex-1">

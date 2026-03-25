@@ -42,7 +42,7 @@
                         <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold {% if appointment.status == 'confirmed' %}bg-emerald-50 text-emerald-700{% elif appointment.status == 'cancelled' %}bg-rose-50 text-rose-700{% else %}bg-amber-50 text-amber-700{% endif %}">
                             {{ appointment.get_status_display|default:appointment.status|title }}
                         </span>
-                        <a href="#" class="text-sm font-medium text-brand-600 hover:text-brand-700">Detalles</a>
+                        <a href="{% url 'portal:detail' appointment.confirmation_token %}" class="text-sm font-medium text-brand-600 hover:text-brand-700">Detalles</a>
                     </div>
                 </article>
             {% empty %}

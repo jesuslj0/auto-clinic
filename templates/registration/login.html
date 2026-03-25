@@ -1,0 +1,109 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-100">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Iniciar sesión — Auto Clinic</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50:  '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        },
+                    },
+                },
+            },
+        };
+    </script>
+</head>
+<body class="h-full antialiased text-slate-800">
+    <div class="flex min-h-full flex-col justify-center px-4 py-12 sm:px-6 lg:px-8 bg-slate-100">
+
+        <!-- Logo / Brand -->
+        <div class="sm:mx-auto sm:w-full sm:max-w-sm text-center">
+            <a href="/" class="inline-flex items-center justify-center gap-3 mb-6">
+                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-600 text-xl font-bold text-white shadow-md">
+                    AC
+                </span>
+            </a>
+            <h1 class="text-2xl font-semibold tracking-tight text-slate-900">Auto Clinic</h1>
+            <p class="mt-1 text-sm text-slate-500">Inicia sesión para continuar</p>
+        </div>
+
+        <!-- Card -->
+        <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-sm">
+            <div class="bg-white px-8 py-8 shadow-sm ring-1 ring-slate-200 rounded-2xl">
+
+                <!-- Non-field errors -->
+                {% if form.non_field_errors %}
+                <div class="mb-5 rounded-xl bg-red-50 px-4 py-3 ring-1 ring-red-200">
+                    {% for error in form.non_field_errors %}
+                    <p class="text-sm text-red-700">{{ error }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <form method="post" novalidate class="space-y-5">
+                    {% csrf_token %}
+
+                    <!-- Email -->
+                    <div>
+                        <label for="{{ form.username.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">
+                            {{ form.username.label }}
+                        </label>
+                        <input
+                            type="email"
+                            name="{{ form.username.html_name }}"
+                            id="{{ form.username.id_for_label }}"
+                            value="{{ form.username.value|default:'' }}"
+                            autocomplete="email"
+                            autofocus
+                            required
+                            placeholder="tucorreo@ejemplo.com"
+                            class="block w-full rounded-xl border {% if form.username.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                        >
+                        {% if form.username.errors %}
+                        <p class="mt-1.5 text-xs text-red-600">{{ form.username.errors|join:", " }}</p>
+                        {% endif %}
+                    </div>
+
+                    <!-- Password -->
+                    <div>
+                        <label for="{{ form.password.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">
+                            {{ form.password.label }}
+                        </label>
+                        <input
+                            type="password"
+                            name="{{ form.password.html_name }}"
+                            id="{{ form.password.id_for_label }}"
+                            autocomplete="current-password"
+                            required
+                            placeholder="••••••••"
+                            class="block w-full rounded-xl border {% if form.password.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                        >
+                        {% if form.password.errors %}
+                        <p class="mt-1.5 text-xs text-red-600">{{ form.password.errors|join:", " }}</p>
+                        {% endif %}
+                    </div>
+
+                    <!-- Submit -->
+                    <button
+                        type="submit"
+                        class="mt-2 w-full rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 transition active:scale-[0.98]"
+                    >
+                        Iniciar sesión
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

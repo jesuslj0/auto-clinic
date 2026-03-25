@@ -1,11 +1,25 @@
+from django.contrib.auth.views import LoginView, LogoutView
+from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views.generic import TemplateView
 from rest_framework import viewsets
+from django.contrib.auth.mixins import LoginRequiredMixin
 
 from appointments.models import Appointment
+from core.forms import EmailAuthenticationForm
 from core.models import Clinic, User
 from core.permissions import IsClinicAdminOrReadOnly, IsStaffOrAdmin
 from core.serializers import ClinicSerializer, UserSerializer
+
+
+class ClinicLoginView(LoginView):
+    form_class = EmailAuthenticationForm
+    template_name = 'registration/login.html'
+    redirect_authenticated_user = True
+
+
+class ClinicLogoutView(LogoutView):
+    next_page = reverse_lazy('core:login')
 
 
 class ClinicViewSet(viewsets.ModelViewSet):
@@ -28,7 +42,7 @@ class UserViewSet(viewsets.ModelViewSet):
         return queryset.filter(clinic=user.clinic)
 
 
-class DashboardView(TemplateView):
+class DashboardView(LoginRequiredMixin, TemplateView):
     template_name = 'dashboard/dashboard.html'
 
     def get_context_data(self, **kwargs):

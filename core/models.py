@@ -10,16 +10,35 @@ class TimeStampedModel(models.Model):
         abstract = True
 
 
-class Clinic(TimeStampedModel):
+class Clinic(models.Model):
+    clinic_id = models.CharField(max_length=100, primary_key=True)
     name = models.CharField(max_length=255)
-    slug = models.SlugField(unique=True)
-    email = models.EmailField(blank=True)
-    phone = models.CharField(max_length=32, blank=True)
-    address = models.TextField(blank=True)
-    is_active = models.BooleanField(default=True)
+    timezone = models.CharField(max_length=50, default="Europe/Madrid")
+    whatsapp_phone_number_id = models.CharField(max_length=100, blank=True)
+
+    # Integración de calendario
+    api_type = models.CharField(
+        max_length=20,
+        choices=[
+            ("calendly", "Calendly"),
+            ("google_calendar", "Google Calendar"),
+            ("custom", "Custom"),
+        ],
+        blank=True,
+    )
+    api_url = models.CharField(max_length=500, blank=True)
+    api_key = models.CharField(max_length=500, blank=True)
+
+    # Calendly
+    calendly_link = models.CharField(max_length=500, blank=True)
+    calendly_token = models.CharField(max_length=500, blank=True)
+    calendly_event_type_uuid = models.UUIDField(null=True, blank=True)
+
+    # Google Calendar
+    google_calendar_id = models.CharField(max_length=255, blank=True)
 
     class Meta:
-        ordering = ['name']
+        db_table = "clinics"
 
     def __str__(self):
         return self.name
