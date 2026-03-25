@@ -13,14 +13,23 @@ def send_appointment_reminder(reminder_id):
     reminder = Reminder.objects.select_related('appointment__patient', 'appointment__clinic').get(id=reminder_id)
     appointment = reminder.appointment
     patient = appointment.patient
+
+    if patient and patient.email:
+        recipient_name = patient.first_name
+        recipient_list = [patient.email]
+    else:
+        # Bot-created appointment: no linked Patient record
+        recipient_name = appointment.patient_name or appointment.patient_phone
+        recipient_list = []
+
     send_mail(
         subject=f'Reminder: appointment at {appointment.clinic.name}',
         message=(
-            f'Hello {patient.first_name}, this is your {reminder.reminder_type} reminder '
+            f'Hello {recipient_name}, this is your {reminder.reminder_type} reminder '
             f'for {appointment.scheduled_at:%Y-%m-%d %H:%M UTC}.'
         ),
         from_email='no-reply@clinic.local',
-        recipient_list=[patient.email] if patient.email else [],
+        recipient_list=recipient_list,
         fail_silently=True,
     )
     reminder.sent_at = timezone.now()

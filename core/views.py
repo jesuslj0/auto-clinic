@@ -26,7 +26,7 @@ class ClinicViewSet(viewsets.ModelViewSet):
     queryset = Clinic.objects.all()
     serializer_class = ClinicSerializer
     permission_classes = [IsClinicAdminOrReadOnly]
-    search_fields = ['name', 'slug']
+    search_fields = ['name', 'clinic_id']
 
 
 class UserViewSet(viewsets.ModelViewSet):

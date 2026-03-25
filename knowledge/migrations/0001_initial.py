@@ -17,7 +17,7 @@ class Migration(migrations.Migration):
             name='ClinicKnowledgeBase',
             fields=[
                 ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('kb_type', models.CharField(choices=[('services', 'Servicios'), ('pricing', 'Precios'), ('schedule', 'Horarios'), ('faq', 'FAQ'), ('location', 'Ubicación'), ('policies', 'Políticas'), ('team', 'Equipo')], max_length=50)),
+                ('kb_type', models.CharField(choices=[('services', 'Services'), ('pricing', 'Pricing'), ('schedule', 'Schedule'), ('faq', 'FAQ'), ('location', 'Location'), ('policies', 'Policies'), ('team', 'Team')], max_length=50)),
                 ('title', models.CharField(blank=True, max_length=200)),
                 ('content', models.TextField()),
                 ('metadata', models.JSONField(default=dict)),

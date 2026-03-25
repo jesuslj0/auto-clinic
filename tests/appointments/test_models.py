@@ -32,7 +32,7 @@ class TestAppointmentModel:
 
     def test_status_choices(self):
         choices = {c[0] for c in Appointment.Status.choices}
-        assert {"pending", "confirmed", "cancelled", "no_show"} == choices
+        assert {"pending", "confirmed", "cancelled", "rescheduled", "no_show"} == choices
 
     def test_str_representation(self, appointment_a):
         expected = f"{appointment_a.patient} - {appointment_a.scheduled_at:%Y-%m-%d %H:%M}"

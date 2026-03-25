@@ -7,13 +7,13 @@ from core.models import Clinic
 
 class ClinicKnowledgeBase(models.Model):
     KB_TYPE_CHOICES = [
-        ("services", "Servicios"),
-        ("pricing", "Precios"),
-        ("schedule", "Horarios"),
+        ("services", "Services"),
+        ("pricing", "Pricing"),
+        ("schedule", "Schedule"),
         ("faq", "FAQ"),
-        ("location", "Ubicación"),
-        ("policies", "Políticas"),
-        ("team", "Equipo"),
+        ("location", "Location"),
+        ("policies", "Policies"),
+        ("team", "Team"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

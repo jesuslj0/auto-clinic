@@ -57,4 +57,4 @@ class ConversationSession(models.Model):
         db_table = "conversation_sessions"
 
     def __str__(self):
-        return f"Sesión {self.phone}"
+        return f"Session {self.phone}"
