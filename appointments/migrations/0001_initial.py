@@ -84,14 +84,14 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='appointment',
-            index=models.Index(fields=['clinic', 'scheduled_at', 'status'], name='idx_appointments_clinic_dt_status'),
+            index=models.Index(fields=['clinic', 'scheduled_at', 'status'], name='idx_appointments_clinic_status'),
         ),
         migrations.AddIndex(
             model_name='appointment',
-            index=models.Index(fields=['patient_phone', 'status', 'scheduled_at'], name='idx_appointments_phone_status_dt'),
+            index=models.Index(fields=['patient_phone', 'status', 'scheduled_at'], name='idx_appointments_phone_status'),
         ),
         migrations.AddIndex(
             model_name='appointment',
-            index=models.Index(fields=['reminder_24h_sent', 'reminder_responded', 'reminder_3h_sent'], name='idx_appointments_reminder_flags'),
+            index=models.Index(fields=['reminder_24h_sent', 'reminder_responded', 'reminder_3h_sent'], name='idx_appointments_reminder'),
         ),
     ]
