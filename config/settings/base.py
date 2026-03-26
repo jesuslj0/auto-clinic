@@ -4,7 +4,7 @@ from decouple import Csv, config
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
-SECRET_KEY = config('SECRET_KEY', default='unsafe-secret-key')
+SECRET_KEY = config('SECRET_KEY', default='dummy-key-for-collectstatic')
 DEBUG = config('DEBUG', default=False, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='127.0.0.1,localhost', cast=Csv())
 CSRF_TRUSTED_ORIGINS = config(
