@@ -56,14 +56,14 @@ class Appointment(models.Model):
         db_table = 'appointments'
         ordering = ['scheduled_at']
         indexes = [
-            models.Index(fields=['clinic', 'scheduled_at', 'status'], name='idx_appointments_clinic_dt_status'),
+            models.Index(fields=['clinic', 'scheduled_at', 'status'], name='idx_clinic_scheduled_at_status'),
             models.Index(
                 fields=['patient_phone', 'status', 'scheduled_at'],
-                name='idx_appointments_phone_status_dt',
+                name='idx_phone_status_scheduled_at',
             ),
             models.Index(
                 fields=['reminder_24h_sent', 'reminder_responded', 'reminder_3h_sent'],
-                name='idx_appointments_reminder_flags',
+                name='idx_appointments_remdr_flags',
             ),
         ]
 

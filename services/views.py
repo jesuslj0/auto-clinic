@@ -1,15 +1,22 @@
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.urls import reverse_lazy
+from django.views.generic import CreateView, ListView
 from rest_framework import viewsets
 
+from core.mixins import ExportMixin
 from core.permissions import IsStaffOrAdmin
+from services.forms import ServiceForm
 from services.models import Service
 from services.serializers import ServiceSerializer
 
 
-class ServiceViewSet(viewsets.ModelViewSet):
+class ServiceViewSet(ExportMixin, viewsets.ModelViewSet):
     serializer_class = ServiceSerializer
     permission_classes = [IsStaffOrAdmin]
     search_fields = ['name', 'description']
     filterset_fields = ['clinic', 'is_active']
+    ordering_fields = ['name', 'price', 'duration_minutes', 'created_at']
+    ordering = ['name']
 
     def get_queryset(self):
         queryset = Service.objects.select_related('clinic')
@@ -17,3 +24,20 @@ class ServiceViewSet(viewsets.ModelViewSet):
         if user.is_superuser or not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
+
+class ServiceListView(LoginRequiredMixin, ListView):
+    model = Service
+    template_name = 'services/service_list.html'
+    context_object_name = 'services'
+    ordering = ['name']
+
+
+class ServiceCreateView(LoginRequiredMixin, CreateView):
+    model = Service
+    form_class = ServiceForm
+    template_name = 'services/service_form.html'
+    success_url = reverse_lazy('services:list')
+
+    def form_valid(self, form):
+        form.instance.clinic = self.request.user.clinic
+        return super().form_valid(form)

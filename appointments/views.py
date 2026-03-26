@@ -3,20 +3,24 @@ from datetime import datetime, time, timedelta
 from django.utils import timezone
 from django.views.generic import TemplateView
 from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from appointments.models import Appointment
 from appointments.serializers import AppointmentSerializer
+from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
 from core.permissions import IsStaffOrAdmin
 
 
-class AppointmentViewSet(viewsets.ModelViewSet):
+class AppointmentViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets.ModelViewSet):
     serializer_class = AppointmentSerializer
     permission_classes = [IsStaffOrAdmin]
-    search_fields = ['patient__first_name', 'patient__last_name', 'service__name', 'status']
+    search_fields = ['patient__first_name', 'patient__last_name', 'patient_name', 'patient_phone', 'status']
     filterset_fields = ['clinic', 'status', 'service', 'patient']
+    ordering_fields = ['scheduled_at', 'status', 'created_at', 'patient_name']
+    ordering = ['scheduled_at']
 
     def get_queryset(self):
         queryset = Appointment.objects.select_related('clinic', 'patient', 'service', 'assigned_to')
@@ -24,6 +28,17 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         if user.is_superuser or not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
+
+    @action(detail=True, methods=['get'], url_path='status')
+    def get_status(self, request, pk=None):
+        appointment = self.get_object()
+        return Response({
+            'id': str(appointment.pk),
+            'status': appointment.status,
+            'patient_name': appointment.patient_name or str(appointment.patient),
+            'scheduled_at': appointment.scheduled_at,
+            'confirmation_token': str(appointment.confirmation_token),
+        })
 
 
 class AppointmentCalendarView(TemplateView):

@@ -23,22 +23,16 @@ from services.models import Service
 @pytest.fixture
 def clinic_a(db):
     return Clinic.objects.create(
+        clinic_id="clinic-alpha",
         name="Clinic Alpha",
-        slug="clinic-alpha",
-        email="alpha@clinic.test",
-        phone="111-0000",
-        is_active=True,
     )
 
 
 @pytest.fixture
 def clinic_b(db):
     return Clinic.objects.create(
+        clinic_id="clinic-beta",
         name="Clinic Beta",
-        slug="clinic-beta",
-        email="beta@clinic.test",
-        phone="222-0000",
-        is_active=True,
     )
 
 

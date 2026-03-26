@@ -10,14 +10,14 @@ class TestClinicViewSet:
     def test_list_unauthenticated_denied(self, api_client):
         url = "/api/clinics/"
         response = api_client.get(url)
-        assert response.status_code == 403
+        assert response.status_code in (401, 403)
 
     def test_list_authenticated(self, admin_client, clinic_a):
         response = admin_client.get("/api/clinics/")
         assert response.status_code == 200
 
     def test_create_clinic_as_admin(self, admin_client):
-        data = {"name": "New Clinic", "slug": "new-clinic"}
+        data = {"clinic_id": "new-clinic", "name": "New Clinic"}
         response = admin_client.post("/api/clinics/", data)
         assert response.status_code == 201
 

@@ -1,0 +1,181 @@
+{% extends 'base.html' %}
+
+{% block title %}Servicios · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Servicios{% endblock %}
+
+{% block content %}
+<div
+    x-data="{
+        search: '',
+        filter: 'all'
+    }"
+    class="space-y-5"
+>
+
+    {# ── Stats ── #}
+    <div class="grid gap-4 sm:grid-cols-3">
+        <article class="rounded-2xl bg-white px-5 py-4 shadow-soft ring-1 ring-slate-200">
+            <p class="text-xs font-semibold uppercase tracking-widest text-slate-400">Total servicios</p>
+            <p class="mt-2 text-3xl font-semibold text-slate-900" data-stat-total>—</p>
+        </article>
+        <article class="rounded-2xl bg-white px-5 py-4 shadow-soft ring-1 ring-slate-200">
+            <p class="text-xs font-semibold uppercase tracking-widest text-slate-400">Activos</p>
+            <p class="mt-2 text-3xl font-semibold text-emerald-600" data-stat-active>—</p>
+        </article>
+        <article class="rounded-2xl bg-white px-5 py-4 shadow-soft ring-1 ring-slate-200">
+            <p class="text-xs font-semibold uppercase tracking-widest text-slate-400">Inactivos</p>
+            <p class="mt-2 text-3xl font-semibold text-slate-400" data-stat-inactive>—</p>
+        </article>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const cards = document.querySelectorAll('[data-service]');
+            let active = 0, inactive = 0;
+            cards.forEach(c => {
+                if (c.dataset.active === 'true') active++; else inactive++;
+            });
+            document.querySelectorAll('[data-stat-active]').forEach(el => el.textContent = active);
+            document.querySelectorAll('[data-stat-inactive]').forEach(el => el.textContent = inactive);
+            document.querySelectorAll('[data-stat-total]').forEach(el => el.textContent = cards.length);
+        });
+    </script>
+
+    {# ── Barra de herramientas ── #}
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+        <a
+            href="{% url 'services:create' %}"
+            class="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 transition active:scale-[0.98]"
+        >
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Añadir servicio
+        </a>
+
+        {# Búsqueda + filtros #}
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+
+            {# Búsqueda #}
+            <div class="relative w-full sm:w-64">
+                <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                    </svg>
+                </span>
+                <input
+                    type="search"
+                    x-model="search"
+                    placeholder="Buscar servicio…"
+                    class="block w-full rounded-2xl border-slate-200 py-2.5 pl-9 pr-4 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
+                >
+            </div>
+
+            {# Filtros de estado #}
+            <div class="flex items-center gap-1 rounded-2xl bg-slate-100 p-1">
+                <button
+                    @click="filter = 'all'"
+                    :class="filter === 'all' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'"
+                    class="rounded-xl px-4 py-1.5 text-sm font-medium transition"
+                >Todos</button>
+                <button
+                    @click="filter = 'active'"
+                    :class="filter === 'active' ? 'bg-white shadow-sm text-emerald-700' : 'text-slate-500 hover:text-slate-700'"
+                    class="rounded-xl px-4 py-1.5 text-sm font-medium transition"
+                >Activos</button>
+                <button
+                    @click="filter = 'inactive'"
+                    :class="filter === 'inactive' ? 'bg-white shadow-sm text-slate-700' : 'text-slate-500 hover:text-slate-700'"
+                    class="rounded-xl px-4 py-1.5 text-sm font-medium transition"
+                >Inactivos</button>
+            </div>
+        </div>
+    </div>
+
+    {# ── Cuadrícula de servicios ── #}
+    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {% for service in services %}
+        <article
+            data-service
+            data-name="{{ service.name|lower }}"
+            data-active="{{ service.is_active|yesno:'true,false' }}"
+            x-show="
+                (filter === 'all' || (filter === 'active' && $el.dataset.active === 'true') || (filter === 'inactive' && $el.dataset.active === 'false'))
+                &&
+                (search === '' || $el.dataset.name.includes(search.toLowerCase()))
+            "
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="opacity-0 scale-95"
+            x-transition:enter-end="opacity-100 scale-100"
+            class="group relative flex flex-col overflow-hidden rounded-3xl bg-white shadow-soft ring-1 ring-slate-200 transition hover:shadow-md hover:ring-brand-200"
+        >
+            {# Indicador lateral de estado #}
+            <div class="absolute inset-y-0 left-0 w-1 rounded-l-3xl {% if service.is_active %}bg-emerald-400{% else %}bg-slate-200{% endif %}"></div>
+
+            <div class="flex flex-1 flex-col gap-3 px-6 py-5 pl-8">
+
+                {# Nombre + badge de estado #}
+                <div class="flex items-start justify-between gap-3">
+                    <h3 class="text-base font-semibold leading-snug text-slate-900 group-hover:text-brand-700 transition">
+                        {{ service.name }}
+                    </h3>
+                    {% if service.is_active %}
+                        <span class="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                            <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                            Activo
+                        </span>
+                    {% else %}
+                        <span class="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-500">
+                            <span class="h-1.5 w-1.5 rounded-full bg-slate-300"></span>
+                            Inactivo
+                        </span>
+                    {% endif %}
+                </div>
+
+                {# Descripción #}
+                {% if service.description %}
+                    <p class="line-clamp-2 text-sm text-slate-500">{{ service.description }}</p>
+                {% else %}
+                    <p class="text-sm italic text-slate-300">Sin descripción</p>
+                {% endif %}
+
+                {# Duración + precio #}
+                <div class="mt-auto flex items-center justify-between pt-3 border-t border-slate-100">
+                    <span class="flex items-center gap-1.5 text-sm text-slate-600">
+                        <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        {{ service.duration_minutes }} min
+                    </span>
+                    <span class="text-lg font-semibold text-slate-900">{{ service.price }} €</span>
+                </div>
+            </div>
+        </article>
+        {% empty %}
+        {# Estado vacío #}
+        <div class="col-span-full rounded-3xl bg-white py-16 text-center shadow-soft ring-1 ring-slate-200">
+            <svg class="mx-auto h-10 w-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
+            </svg>
+            <p class="mt-4 text-base font-medium text-slate-900">No hay servicios registrados</p>
+            <p class="mt-1 text-sm text-slate-500">Crea el primer servicio para tu clínica.</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    {# Mensaje de "sin resultados" al filtrar #}
+    <p
+        class="hidden py-10 text-center text-sm text-slate-400"
+        x-show="
+            search !== '' &&
+            [...document.querySelectorAll('[data-service]')].every(el =>
+                !el.dataset.name.includes(search.toLowerCase())
+            )
+        "
+    >
+        No se encontraron servicios que coincidan con "<span x-text="search" class="font-medium text-slate-600"></span>".
+    </p>
+
+</div>
+{% endblock %}

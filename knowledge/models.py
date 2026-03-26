@@ -7,7 +7,6 @@ from core.models import Clinic
 
 class ClinicKnowledgeBase(models.Model):
     KB_TYPE_CHOICES = [
-        ("services", "Services"),
         ("pricing", "Pricing"),
         ("schedule", "Schedule"),
         ("faq", "FAQ"),

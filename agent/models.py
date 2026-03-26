@@ -35,7 +35,7 @@ class WorkflowError(models.Model):
     class Meta:
         db_table = "workflow_errors"
         indexes = [
-            models.Index(fields=["workflow", "created_at"], name="idx_workflow_errors_workflow_dt"),
+            models.Index(fields=["workflow", "created_at"], name="idx_workflow_errors"),
         ]
 
     def __str__(self):

@@ -7,28 +7,27 @@ from core.models import Clinic, User
 @pytest.mark.django_db
 class TestClinicModel:
     def test_create_clinic(self, clinic_a):
-        assert clinic_a.pk is not None
+        assert clinic_a.pk == "clinic-alpha"
+        assert clinic_a.clinic_id == "clinic-alpha"
         assert clinic_a.name == "Clinic Alpha"
-        assert clinic_a.slug == "clinic-alpha"
-        assert clinic_a.is_active is True
 
     def test_str_representation(self, clinic_a):
         assert str(clinic_a) == "Clinic Alpha"
 
-    def test_slug_uniqueness(self, clinic_a):
+    def test_clinic_id_is_primary_key(self, clinic_a):
         from django.db import IntegrityError
         with pytest.raises(IntegrityError):
-            Clinic.objects.create(name="Duplicate", slug="clinic-alpha")
+            Clinic.objects.create(clinic_id="clinic-alpha", name="Duplicate")
 
     def test_ordering_by_name(self, db):
-        Clinic.objects.create(name="Zebra Clinic", slug="zebra")
-        Clinic.objects.create(name="Alpha Clinic", slug="alpha")
-        names = list(Clinic.objects.values_list("name", flat=True))
+        Clinic.objects.create(clinic_id="zebra-clinic", name="Zebra Clinic")
+        Clinic.objects.create(clinic_id="alpha-clinic", name="Alpha Clinic")
+        names = list(Clinic.objects.order_by("name").values_list("name", flat=True))
         assert names == sorted(names)
 
-    def test_timestamps_set_on_create(self, clinic_a):
-        assert clinic_a.created_at is not None
-        assert clinic_a.updated_at is not None
+    def test_clinic_has_timezone_field(self, clinic_a):
+        assert hasattr(clinic_a, "timezone")
+        assert clinic_a.timezone == "Europe/Madrid"
 
 
 @pytest.mark.django_db

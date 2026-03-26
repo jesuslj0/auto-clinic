@@ -1,0 +1,146 @@
+{% extends 'base.html' %}
+
+{% block title %}Nuevo servicio · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Nuevo servicio{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-xl">
+    <div class="rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
+
+        {# Cabecera #}
+        <div class="border-b border-slate-200 px-8 py-6">
+            <h2 class="text-lg font-semibold text-slate-900">Datos del servicio</h2>
+            <p class="mt-1 text-sm text-slate-500">Completa la información para añadir un nuevo servicio a tu clínica.</p>
+        </div>
+
+        {# Formulario #}
+        <form method="post" novalidate class="px-8 py-7 space-y-6">
+            {% csrf_token %}
+
+            {# Errores generales #}
+            {% if form.non_field_errors %}
+            <div class="rounded-xl bg-red-50 px-4 py-3 ring-1 ring-red-200">
+                {% for error in form.non_field_errors %}
+                <p class="text-sm text-red-700">{{ error }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {# Nombre #}
+            <div>
+                <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">
+                    {{ form.name.label }}
+                </label>
+                <input
+                    type="text"
+                    name="{{ form.name.html_name }}"
+                    id="{{ form.name.id_for_label }}"
+                    value="{{ form.name.value|default:'' }}"
+                    placeholder="Ej. Revisión general"
+                    class="block w-full rounded-xl border {% if form.name.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                >
+                {% if form.name.errors %}
+                <p class="mt-1.5 text-xs text-red-600">{{ form.name.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            {# Descripción #}
+            <div>
+                <label for="{{ form.description.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">
+                    {{ form.description.label }}
+                    <span class="ml-1 font-normal text-slate-400">(opcional)</span>
+                </label>
+                <textarea
+                    name="{{ form.description.html_name }}"
+                    id="{{ form.description.id_for_label }}"
+                    rows="3"
+                    placeholder="Describe brevemente en qué consiste el servicio…"
+                    class="block w-full rounded-xl border {% if form.description.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition resize-none"
+                >{{ form.description.value|default:'' }}</textarea>
+                {% if form.description.errors %}
+                <p class="mt-1.5 text-xs text-red-600">{{ form.description.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            {# Duración y precio en fila #}
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label for="{{ form.duration_minutes.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">
+                        {{ form.duration_minutes.label }}
+                    </label>
+                    <div class="relative">
+                        <input
+                            type="number"
+                            name="{{ form.duration_minutes.html_name }}"
+                            id="{{ form.duration_minutes.id_for_label }}"
+                            value="{{ form.duration_minutes.value|default:'30' }}"
+                            min="1"
+                            step="5"
+                            class="block w-full rounded-xl border {% if form.duration_minutes.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 pr-12 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                        >
+                        <span class="pointer-events-none absolute inset-y-0 right-4 flex items-center text-xs text-slate-400">min</span>
+                    </div>
+                    {% if form.duration_minutes.errors %}
+                    <p class="mt-1.5 text-xs text-red-600">{{ form.duration_minutes.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.price.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">
+                        {{ form.price.label }}
+                    </label>
+                    <div class="relative">
+                        <span class="pointer-events-none absolute inset-y-0 left-4 flex items-center text-sm text-slate-400">€</span>
+                        <input
+                            type="number"
+                            name="{{ form.price.html_name }}"
+                            id="{{ form.price.id_for_label }}"
+                            value="{{ form.price.value|default:'' }}"
+                            min="0"
+                            step="0.01"
+                            placeholder="0.00"
+                            class="block w-full rounded-xl border {% if form.price.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white pl-8 pr-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                        >
+                    </div>
+                    {% if form.price.errors %}
+                    <p class="mt-1.5 text-xs text-red-600">{{ form.price.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# Estado activo #}
+            <div class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <input
+                    type="checkbox"
+                    name="{{ form.is_active.html_name }}"
+                    id="{{ form.is_active.id_for_label }}"
+                    {% if form.is_active.value %}checked{% endif %}
+                    class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                >
+                <div>
+                    <label for="{{ form.is_active.id_for_label }}" class="text-sm font-medium text-slate-700 cursor-pointer">
+                        Servicio activo
+                    </label>
+                    <p class="text-xs text-slate-500">Los servicios activos aparecen en el portal de reservas.</p>
+                </div>
+            </div>
+
+            {# Acciones #}
+            <div class="flex items-center justify-between pt-2">
+                <a
+                    href="{% url 'services:list' %}"
+                    class="rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition"
+                >
+                    Cancelar
+                </a>
+                <button
+                    type="submit"
+                    class="rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 transition active:scale-[0.98]"
+                >
+                    Guardar servicio
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

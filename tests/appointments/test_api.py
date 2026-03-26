@@ -14,8 +14,8 @@ class TestAppointmentViewSet:
         response = admin_client.get("/api/appointments/")
         assert response.status_code == 200
         ids = [a["id"] for a in response.data["results"]]
-        assert appointment_a.pk in ids
-        assert appointment_b.pk not in ids
+        assert str(appointment_a.pk) in ids
+        assert str(appointment_b.pk) not in ids
 
     def test_staff_can_list_appointments(self, staff_client, appointment_a):
         response = staff_client.get("/api/appointments/")
@@ -29,8 +29,8 @@ class TestAppointmentViewSet:
         response = superuser_client.get("/api/appointments/")
         assert response.status_code == 200
         ids = [a["id"] for a in response.data["results"]]
-        assert appointment_a.pk in ids
-        assert appointment_b.pk in ids
+        assert str(appointment_a.pk) in ids
+        assert str(appointment_b.pk) in ids
 
     def test_admin_b_cannot_see_clinic_a_appointments(self, client_b, appointment_a):
         response = client_b.get("/api/appointments/")
