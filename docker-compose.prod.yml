@@ -17,6 +17,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    command: redis-server --requirepass ""
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
