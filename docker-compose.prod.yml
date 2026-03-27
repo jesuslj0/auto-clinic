@@ -46,6 +46,16 @@ services:
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
     volumes:
       - media_files:/app/media
+    networks:
+      - coolify
+      - default
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.autoclinic-web.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.autoclinic-web.entrypoints=https
+      - traefik.http.routers.autoclinic-web.tls=true
+      - traefik.http.routers.autoclinic-web.tls.certresolver=letsencrypt
+      - traefik.http.services.autoclinic-web.loadbalancer.server.port=8000
     depends_on:
       db:
         condition: service_healthy
@@ -97,6 +107,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+networks:
+  coolify:
+    external: true
 
 volumes:
   postgres_data:
