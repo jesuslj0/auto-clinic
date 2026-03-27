@@ -29,8 +29,6 @@ services:
     command: >
       bash -c "python manage.py migrate --noinput &&
                daphne -b 0.0.0.0 -p 8000 config.asgi:application"
-    ports:
-      - "8000:8000"
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
       SECRET_KEY: ${SECRET_KEY}
