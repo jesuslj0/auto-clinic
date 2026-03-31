@@ -48,6 +48,8 @@ python manage.py runserver    # Uses config.settings.dev by default
 | `billing` | Subscription management |
 | `booking` | Template-only public booking flow (no models) |
 | `portal` | Template-only patient portal for confirm/cancel via token (no models) |
+| `agent` | WhatsApp bot state: `AgentMemory`, `ConversationSession`, `WorkflowError` |
+| `knowledge` | Clinic knowledge base: `ClinicKnowledgeBase`, `ClinicInfoQuery`, `ClinicInfoCache` |
 
 ### Multi-tenancy
 

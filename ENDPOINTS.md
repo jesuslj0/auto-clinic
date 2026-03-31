@@ -37,9 +37,9 @@ Todos los ViewSets de DRF generan automáticamente las rutas estándar:
 
 | ViewSet | Ruta base | Permiso | Búsqueda | Filtros | Ordenación |
 |---------|-----------|---------|----------|---------|------------|
-| `PatientViewSet` | `/api/patients/` | `IsStaffOrAdmin` | first_name, last_name, email, phone | clinic | first_name, last_name, email, phone, created_at |
+| `PatientViewSet` | `/api/patients/` | `IsStaffOrAdmin` | first_name, last_name, email, phone | clinic, phone | first_name, last_name, email, phone, created_at |
 | `ServiceViewSet` | `/api/services/` | `IsStaffOrAdmin` | name, description | clinic, is_active | name, price, duration_minutes, created_at |
-| `AppointmentViewSet` | `/api/appointments/` | `IsStaffOrAdmin` | patient__first_name, patient__last_name, patient_name, patient_phone, status | clinic, status, service, patient | scheduled_at, status, created_at, patient_name |
+| `AppointmentViewSet` | `/api/appointments/` | `IsStaffOrAdmin` | patient__first_name, patient__last_name, patient_name, patient_phone, status | clinic, status, service, patient, patient_phone, reminder_24h_sent, reminder_3h_sent, reminder_responded, scheduled_at_gte, scheduled_at_lte | scheduled_at, status, created_at, patient_name |
 | `ReminderViewSet` | `/api/reminders/` | `IsStaffOrAdmin` | — | clinic, appointment, reminder_type, success | scheduled_for, sent_at, reminder_type, success |
 
 > `PatientViewSet` y `AppointmentViewSet` soportan **BulkCreate** y **BulkUpdate**.
@@ -69,7 +69,7 @@ Todos los ViewSets de DRF generan automáticamente las rutas estándar:
 | ViewSet | Ruta base | Permiso | Búsqueda | Filtros | Notas |
 |---------|-----------|---------|----------|---------|-------|
 | `AgentMemoryViewSet` | `/api/agent/memory/` | `IsStaffOrAdmin` | session_id | session_id | — |
-| `WorkflowErrorViewSet` | `/api/agent/errors/` | `IsStaffOrAdmin` | workflow, workflow_name, node_name, phone, error_message | workflow, phone | Solo lectura (ReadOnlyModelViewSet) |
+| `WorkflowErrorViewSet` | `/api/agent/errors/` | `IsStaffOrAdmin` | workflow, workflow_name, node_name, phone, error_message | workflow, phone | — |
 | `ConversationSessionViewSet` | `/api/agent/sessions/` | `IsStaffOrAdmin` | phone | clinic, phone | BulkCreate + BulkUpdate |
 
 #### Acción personalizada en ConversationSessionViewSet

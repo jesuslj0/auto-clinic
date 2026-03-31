@@ -17,6 +17,10 @@ Production-ready Django SaaS starter for a clinic appointment system.
 - `appointments`: booking workflows and public token actions
 - `notifications`: reminders and Celery tasks
 - `billing`: optional clinic subscription management
+- `booking`: public booking flow (templates only)
+- `portal`: patient portal for confirm/cancel via token (templates only)
+- `agent`: WhatsApp bot state (AgentMemory, ConversationSession, WorkflowError)
+- `knowledge`: clinic knowledge base (entries, queries, cache)
 
 ## Quickstart
 1. Copy `.env.example` to `.env`.
