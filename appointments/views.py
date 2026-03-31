@@ -26,6 +26,10 @@ class AppointmentFilter(django_filters.FilterSet):
     reminder_responded = django_filters.BooleanFilter(field_name='reminder_responded')
     scheduled_at_gte = django_filters.IsoDateTimeFilter(field_name='scheduled_at', lookup_expr='gte')
     scheduled_at_lte = django_filters.IsoDateTimeFilter(field_name='scheduled_at', lookup_expr='lte')
+    status_exclude = django_filters.CharFilter(method='filter_status_exclude')
+
+    def filter_status_exclude(self, queryset, name, value):
+        return queryset.exclude(status=value)
 
     class Meta:
         model = Appointment
