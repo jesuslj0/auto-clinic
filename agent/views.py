@@ -24,7 +24,7 @@ class AgentMemoryViewSet(ExportMixin, viewsets.ModelViewSet):
         return AgentMemory.objects.all()
 
 
-class WorkflowErrorViewSet(ExportMixin, viewsets.ReadOnlyModelViewSet):
+class WorkflowErrorViewSet(ExportMixin, viewsets.ModelViewSet):
     serializer_class = WorkflowErrorSerializer
     permission_classes = [IsStaffOrAdmin]
     filterset_fields = ['workflow', 'phone']

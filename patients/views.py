@@ -13,7 +13,7 @@ class PatientViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets.Mod
     serializer_class = PatientSerializer
     permission_classes = [IsStaffOrAdmin]
     search_fields = ['first_name', 'last_name', 'email', 'phone']
-    filterset_fields = ['clinic']
+    filterset_fields = ['clinic', 'phone']
     ordering_fields = ['first_name', 'last_name', 'email', 'phone', 'created_at']
     ordering = ['last_name', 'first_name']
 

@@ -1,5 +1,6 @@
 from datetime import datetime, time, timedelta
 
+import django_filters
 from django.utils import timezone
 from django.views.generic import TemplateView
 from rest_framework import status, viewsets
@@ -14,11 +15,31 @@ from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
 from core.permissions import IsStaffOrAdmin
 
 
+class AppointmentFilter(django_filters.FilterSet):
+    clinic = django_filters.CharFilter(field_name='clinic_id')
+    status = django_filters.CharFilter(field_name='status')
+    service = django_filters.NumberFilter(field_name='service_id')
+    patient = django_filters.NumberFilter(field_name='patient_id')
+    patient_phone = django_filters.CharFilter(field_name='patient_phone', lookup_expr='exact')
+    reminder_24h_sent = django_filters.BooleanFilter(field_name='reminder_24h_sent')
+    reminder_3h_sent = django_filters.BooleanFilter(field_name='reminder_3h_sent')
+    reminder_responded = django_filters.BooleanFilter(field_name='reminder_responded')
+    scheduled_at_gte = django_filters.IsoDateTimeFilter(field_name='scheduled_at', lookup_expr='gte')
+    scheduled_at_lte = django_filters.IsoDateTimeFilter(field_name='scheduled_at', lookup_expr='lte')
+
+    class Meta:
+        model = Appointment
+        fields = [
+            'clinic', 'status', 'service', 'patient', 'patient_phone',
+            'reminder_24h_sent', 'reminder_3h_sent', 'reminder_responded',
+        ]
+
+
 class AppointmentViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets.ModelViewSet):
     serializer_class = AppointmentSerializer
     permission_classes = [IsStaffOrAdmin]
     search_fields = ['patient__first_name', 'patient__last_name', 'patient_name', 'patient_phone', 'status']
-    filterset_fields = ['clinic', 'status', 'service', 'patient']
+    filterset_class = AppointmentFilter
     ordering_fields = ['scheduled_at', 'status', 'created_at', 'patient_name']
     ordering = ['scheduled_at']
 
