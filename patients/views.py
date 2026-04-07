@@ -5,6 +5,7 @@ from rest_framework import viewsets
 from appointments.models import Appointment
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
 from core.permissions import IsStaffOrAdmin
+from patients.filters import PatientFilter
 from patients.models import Patient
 from patients.serializers import PatientSerializer
 
@@ -12,8 +13,8 @@ from patients.serializers import PatientSerializer
 class PatientViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets.ModelViewSet):
     serializer_class = PatientSerializer
     permission_classes = [IsStaffOrAdmin]
-    search_fields = ['first_name', 'last_name', 'email', 'phone']
-    filterset_fields = ['clinic', 'phone']
+    search_fields = ["first_name", "last_name", "email", "phone"]
+    filterset_class = PatientFilter
     ordering_fields = ['first_name', 'last_name', 'email', 'phone', 'created_at']
     ordering = ['last_name', 'first_name']
 

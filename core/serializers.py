@@ -6,8 +6,8 @@ from core.models import Clinic, User
 class ClinicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Clinic
-        fields = '__all__'
-        read_only_fields = ('created_at', 'updated_at')
+        fields = "__all__"
+        read_only_fields = ("created_at", "updated_at")
 
 
 class UserSerializer(serializers.ModelSerializer):
