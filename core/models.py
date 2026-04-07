@@ -13,7 +13,25 @@ class TimeStampedModel(models.Model):
 class Clinic(models.Model):
     clinic_id = models.CharField(max_length=100, primary_key=True)
     name = models.CharField(max_length=255)
+    nif = models.CharField(max_length=20, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    # Contacto
+    phone = models.CharField(max_length=20, blank=True)
+    email = models.EmailField(blank=True)
+    website = models.URLField(blank=True)
+
+    # Dirección
+    address = models.CharField(max_length=255, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    province = models.CharField(max_length=100, blank=True)
+    postal_code = models.CharField(max_length=10, blank=True)
+    country = models.CharField(max_length=2, default="ES")
+
+    # Configuración
     timezone = models.CharField(max_length=50, default="Europe/Madrid")
+    description = models.TextField(blank=True)
+    logo_url = models.URLField(blank=True)
     whatsapp_phone_number_id = models.CharField(max_length=100, blank=True)
 
     # Integración de calendario
