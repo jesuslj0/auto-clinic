@@ -4,84 +4,101 @@
 {% block page_heading %}{% if form.instance.pk %}Editar entrada{% else %}Nueva entrada{% endif %}{% endblock %}
 
 {% block content %}
-<div class="space-y-5">
-
+<div class="mx-auto max-w-2xl">
     <div class="rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
-        <form method="post" class="divide-y divide-slate-100">
+
+        <div class="border-b border-slate-200 px-8 py-6">
+            <h2 class="text-lg font-semibold text-slate-900">{% if form.instance.pk %}Editar entrada{% else %}Nueva entrada{% endif %}</h2>
+            <p class="mt-1 text-sm text-slate-500">Información que el agente usará para responder a los pacientes.</p>
+        </div>
+
+        <form method="post" novalidate class="px-8 py-7 space-y-6">
             {% csrf_token %}
 
-            {# Errores generales #}
             {% if form.non_field_errors %}
-            <div class="px-6 pt-5">
-                <div class="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-red-200">
-                    {% for error in form.non_field_errors %}
-                    <p>{{ error }}</p>
-                    {% endfor %}
-                </div>
+            <div class="rounded-xl bg-red-50 px-4 py-3 ring-1 ring-red-200">
+                {% for error in form.non_field_errors %}
+                <p class="text-sm text-red-700">{{ error }}</p>
+                {% endfor %}
             </div>
             {% endif %}
 
-            <div class="px-6 py-5">
-                <div class="grid gap-4">
+            {# Categoría + Título #}
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label for="{{ form.kb_type.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">{{ form.kb_type.label }}</label>
+                    <select
+                        name="{{ form.kb_type.html_name }}"
+                        id="{{ form.kb_type.id_for_label }}"
+                        class="block w-full rounded-xl border {% if form.kb_type.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                    >
+                        {% for value, label in form.kb_type.field.choices %}
+                        <option value="{{ value }}" {% if form.kb_type.value == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if form.kb_type.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.kb_type.errors|join:", " }}</p>{% endif %}
+                </div>
 
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        {# Categoría #}
-                        <div>
-                            <label for="{{ form.kb_type.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ form.kb_type.label }}</label>
-                            {{ form.kb_type }}
-                            {% if form.kb_type.errors %}
-                            <p class="mt-1 text-xs text-red-600">{{ form.kb_type.errors.0 }}</p>
-                            {% endif %}
-                        </div>
-
-                        {# Título #}
-                        <div>
-                            <label for="{{ form.title.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ form.title.label }}</label>
-                            {{ form.title }}
-                            {% if form.title.errors %}
-                            <p class="mt-1 text-xs text-red-600">{{ form.title.errors.0 }}</p>
-                            {% endif %}
-                        </div>
-                    </div>
-
-                    {# Contenido #}
-                    <div>
-                        <label for="{{ form.content.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ form.content.label }}</label>
-                        {{ form.content }}
-                        {% if form.content.errors %}
-                        <p class="mt-1 text-xs text-red-600">{{ form.content.errors.0 }}</p>
-                        {% endif %}
-                    </div>
-
-                    {# Activo #}
-                    <div class="flex items-center gap-3">
-                        {{ form.active }}
-                        <label for="{{ form.active.id_for_label }}" class="text-sm font-medium text-slate-700">{{ form.active.label }}</label>
-                        {% if form.active.errors %}
-                        <p class="text-xs text-red-600">{{ form.active.errors.0 }}</p>
-                        {% endif %}
-                    </div>
-
+                <div>
+                    <label for="{{ form.title.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">
+                        {{ form.title.label }}
+                        <span class="ml-1 font-normal text-slate-400">(opcional)</span>
+                    </label>
+                    <input
+                        type="text"
+                        name="{{ form.title.html_name }}"
+                        id="{{ form.title.id_for_label }}"
+                        value="{{ form.title.value|default:'' }}"
+                        placeholder="Ej. Horario de atención"
+                        class="block w-full rounded-xl border {% if form.title.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                    >
+                    {% if form.title.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.title.errors|join:", " }}</p>{% endif %}
                 </div>
             </div>
 
-            {# Botones #}
-            <div class="flex items-center justify-end gap-3 px-6 py-5">
-                <a
-                    href="{% url 'knowledge:list' %}"
-                    class="rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition"
+            {# Contenido #}
+            <div>
+                <label for="{{ form.content.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">{{ form.content.label }}</label>
+                <textarea
+                    name="{{ form.content.html_name }}"
+                    id="{{ form.content.id_for_label }}"
+                    rows="8"
+                    placeholder="Escribe aquí la información que el agente debe conocer…"
+                    class="block w-full resize-none rounded-xl border {% if form.content.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                >{{ form.content.value|default:'' }}</textarea>
+                {% if form.content.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.content.errors|join:", " }}</p>{% endif %}
+            </div>
+
+            {# Activo #}
+            <div class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <input
+                    type="checkbox"
+                    name="{{ form.active.html_name }}"
+                    id="{{ form.active.id_for_label }}"
+                    {% if form.active.value %}checked{% endif %}
+                    class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
                 >
+                <div>
+                    <label for="{{ form.active.id_for_label }}" class="text-sm font-medium text-slate-700 cursor-pointer">
+                        Entrada activa
+                    </label>
+                    <p class="text-xs text-slate-500">Solo las entradas activas las usa el agente para responder.</p>
+                </div>
+            </div>
+
+            {# Acciones #}
+            <div class="flex items-center justify-between pt-2">
+                <a href="{% url 'knowledge:list' %}" class="rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
                     Cancelar
                 </a>
                 <button
                     type="submit"
-                    class="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 transition active:scale-[0.98]"
+                    class="rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 transition active:scale-[0.98]"
                 >
                     {% if form.instance.pk %}Guardar cambios{% else %}Crear entrada{% endif %}
                 </button>
             </div>
         </form>
     </div>
-
 </div>
 {% endblock %}
