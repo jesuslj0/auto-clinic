@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if form.instance.pk %}Editar entrada{% else %}Nueva entrada{% endif %} · Base de conocimiento{% endblock %}
+{% block page_heading %}{% if form.instance.pk %}Editar entrada{% else %}Nueva entrada{% endif %}{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+
+    <div class="rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
+        <form method="post" class="divide-y divide-slate-100">
+            {% csrf_token %}
+
+            {# Errores generales #}
+            {% if form.non_field_errors %}
+            <div class="px-6 pt-5">
+                <div class="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-red-200">
+                    {% for error in form.non_field_errors %}
+                    <p>{{ error }}</p>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="px-6 py-5">
+                <div class="grid gap-4">
+
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        {# Categoría #}
+                        <div>
+                            <label for="{{ form.kb_type.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ form.kb_type.label }}</label>
+                            {{ form.kb_type }}
+                            {% if form.kb_type.errors %}
+                            <p class="mt-1 text-xs text-red-600">{{ form.kb_type.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+
+                        {# Título #}
+                        <div>
+                            <label for="{{ form.title.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ form.title.label }}</label>
+                            {{ form.title }}
+                            {% if form.title.errors %}
+                            <p class="mt-1 text-xs text-red-600">{{ form.title.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {# Contenido #}
+                    <div>
+                        <label for="{{ form.content.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ form.content.label }}</label>
+                        {{ form.content }}
+                        {% if form.content.errors %}
+                        <p class="mt-1 text-xs text-red-600">{{ form.content.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+
+                    {# Activo #}
+                    <div class="flex items-center gap-3">
+                        {{ form.active }}
+                        <label for="{{ form.active.id_for_label }}" class="text-sm font-medium text-slate-700">{{ form.active.label }}</label>
+                        {% if form.active.errors %}
+                        <p class="text-xs text-red-600">{{ form.active.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+
+                </div>
+            </div>
+
+            {# Botones #}
+            <div class="flex items-center justify-end gap-3 px-6 py-5">
+                <a
+                    href="{% url 'knowledge:list' %}"
+                    class="rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition"
+                >
+                    Cancelar
+                </a>
+                <button
+                    type="submit"
+                    class="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 transition active:scale-[0.98]"
+                >
+                    {% if form.instance.pk %}Guardar cambios{% else %}Crear entrada{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

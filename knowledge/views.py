@@ -1,14 +1,76 @@
+from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse_lazy
+from django.views import View
+from django.views.generic import CreateView, ListView, UpdateView
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
 from core.permissions import IsClinicAdminOrReadOnly, IsStaffOrAdmin
+from knowledge.forms import KB_TYPE_LABELS, KnowledgeBaseForm
 from knowledge.models import ClinicInfoCache, ClinicInfoQuery, ClinicKnowledgeBase
 from knowledge.serializers import (
     ClinicInfoCacheSerializer,
     ClinicInfoQuerySerializer,
     ClinicKnowledgeBaseSerializer,
 )
+
+
+KB_TYPE_DISPLAY = dict(KB_TYPE_LABELS)
+
+
+class KnowledgeBaseListView(LoginRequiredMixin, ListView):
+    model = ClinicKnowledgeBase
+    template_name = 'knowledge/knowledge_list.html'
+    context_object_name = 'entries'
+
+    def get_queryset(self):
+        return ClinicKnowledgeBase.objects.filter(clinic=self.request.user.clinic).order_by('kb_type', 'title')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        grouped = {}
+        for entry in context['entries']:
+            label = KB_TYPE_DISPLAY.get(entry.kb_type, entry.kb_type)
+            grouped.setdefault(label, []).append(entry)
+        context['grouped_entries'] = grouped
+        return context
+
+
+class KnowledgeBaseCreateView(LoginRequiredMixin, CreateView):
+    model = ClinicKnowledgeBase
+    form_class = KnowledgeBaseForm
+    template_name = 'knowledge/knowledge_form.html'
+    success_url = reverse_lazy('knowledge:list')
+
+    def form_valid(self, form):
+        form.instance.clinic = self.request.user.clinic
+        messages.success(self.request, 'Entrada creada correctamente.')
+        return super().form_valid(form)
+
+
+class KnowledgeBaseEditView(LoginRequiredMixin, UpdateView):
+    model = ClinicKnowledgeBase
+    form_class = KnowledgeBaseForm
+    template_name = 'knowledge/knowledge_form.html'
+    success_url = reverse_lazy('knowledge:list')
+
+    def get_queryset(self):
+        return ClinicKnowledgeBase.objects.filter(clinic=self.request.user.clinic)
+
+    def form_valid(self, form):
+        messages.success(self.request, 'Entrada actualizada correctamente.')
+        return super().form_valid(form)
+
+
+class KnowledgeBaseDeleteView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        entry = get_object_or_404(ClinicKnowledgeBase, pk=pk, clinic=request.user.clinic)
+        entry.delete()
+        messages.success(request, 'Entrada eliminada correctamente.')
+        return redirect('knowledge:list')
 
 
 class ClinicKnowledgeBaseViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets.ModelViewSet):

@@ -1,14 +1,14 @@
+from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, LogoutView
 from django.urls import reverse_lazy
 from django.utils import timezone
-from django.views.generic import TemplateView
+from django.views.generic import TemplateView, UpdateView
 from rest_framework import viewsets
-from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.contrib.auth.mixins import LoginRequiredMixin
 
 from appointments.models import Appointment
-from core.forms import EmailAuthenticationForm
+from core.forms import ClinicForm, EmailAuthenticationForm
 from core.mixins import ExportMixin
 from core.models import Clinic, User
 from core.permissions import IsClinicAdminOrReadOnly, IsStaffOrAdmin
@@ -47,6 +47,29 @@ class UserViewSet(ExportMixin, viewsets.ModelViewSet):
         if user.is_superuser or not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
+
+
+class ClinicInfoView(LoginRequiredMixin, TemplateView):
+    template_name = 'clinics/clinic_info.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['clinic_obj'] = self.request.user.clinic
+        return context
+
+
+class ClinicEditView(LoginRequiredMixin, UpdateView):
+    model = Clinic
+    form_class = ClinicForm
+    template_name = 'clinics/clinic_edit.html'
+    success_url = reverse_lazy('core:clinic-info')
+
+    def get_object(self, queryset=None):
+        return self.request.user.clinic
+
+    def form_valid(self, form):
+        messages.success(self.request, 'Información de la clínica actualizada correctamente.')
+        return super().form_valid(form)
 
 
 class DashboardView(LoginRequiredMixin, TemplateView):

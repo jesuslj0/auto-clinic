@@ -1,0 +1,164 @@
+{% extends 'base.html' %}
+
+{% block title %}Editar información · {{ request.user.clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Editar información de la clínica{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+
+    <div class="rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
+        <form method="post" class="divide-y divide-slate-100">
+            {% csrf_token %}
+
+            {# Errores generales #}
+            {% if form.non_field_errors %}
+            <div class="px-6 pt-5">
+                <div class="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-red-200">
+                    {% for error in form.non_field_errors %}
+                    <p>{{ error }}</p>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {# Datos básicos #}
+            <div class="px-6 py-5">
+                <h4 class="mb-4 text-xs font-semibold uppercase tracking-widest text-slate-400">Datos básicos</h4>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div class="sm:col-span-2">
+                        <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ form.name.label }}</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                        <p class="mt-1 text-xs text-red-600">{{ form.name.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.timezone.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ form.timezone.label }}</label>
+                        {{ form.timezone }}
+                        {% if form.timezone.errors %}
+                        <p class="mt-1 text-xs text-red-600">{{ form.timezone.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label for="{{ form.description.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ form.description.label }}</label>
+                        {{ form.description }}
+                        {% if form.description.errors %}
+                        <p class="mt-1 text-xs text-red-600">{{ form.description.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {# Contacto #}
+            <div class="px-6 py-5">
+                <h4 class="mb-4 text-xs font-semibold uppercase tracking-widest text-slate-400">Contacto</h4>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div>
+                        <label for="{{ form.phone.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ form.phone.label }}</label>
+                        {{ form.phone }}
+                        {% if form.phone.errors %}
+                        <p class="mt-1 text-xs text-red-600">{{ form.phone.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.email.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ form.email.label }}</label>
+                        {{ form.email }}
+                        {% if form.email.errors %}
+                        <p class="mt-1 text-xs text-red-600">{{ form.email.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {# Dirección #}
+            <div class="px-6 py-5">
+                <h4 class="mb-4 text-xs font-semibold uppercase tracking-widest text-slate-400">Dirección</h4>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div class="sm:col-span-2">
+                        <label for="{{ form.address.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ form.address.label }}</label>
+                        {{ form.address }}
+                        {% if form.address.errors %}
+                        <p class="mt-1 text-xs text-red-600">{{ form.address.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.city.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ form.city.label }}</label>
+                        {{ form.city }}
+                        {% if form.city.errors %}
+                        <p class="mt-1 text-xs text-red-600">{{ form.city.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.province.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ form.province.label }}</label>
+                        {{ form.province }}
+                        {% if form.province.errors %}
+                        <p class="mt-1 text-xs text-red-600">{{ form.province.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.postal_code.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ form.postal_code.label }}</label>
+                        {{ form.postal_code }}
+                        {% if form.postal_code.errors %}
+                        <p class="mt-1 text-xs text-red-600">{{ form.postal_code.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {# Integración externa #}
+            <div class="px-6 py-5">
+                <h4 class="mb-4 text-xs font-semibold uppercase tracking-widest text-slate-400">Integración externa</h4>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div>
+                        <label for="{{ form.api_type.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ form.api_type.label }}</label>
+                        {{ form.api_type }}
+                        {% if form.api_type.errors %}
+                        <p class="mt-1 text-xs text-red-600">{{ form.api_type.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div id="api-url-field" class="sm:col-span-2" style="display:none;">
+                        <label for="{{ form.api_url.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ form.api_url.label }}</label>
+                        {{ form.api_url }}
+                        {% if form.api_url.errors %}
+                        <p class="mt-1 text-xs text-red-600">{{ form.api_url.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {# Botones #}
+            <div class="flex items-center justify-end gap-3 px-6 py-5">
+                <a
+                    href="{% url 'core:clinic-info' %}"
+                    class="rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition"
+                >
+                    Cancelar
+                </a>
+                <button
+                    type="submit"
+                    class="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 transition active:scale-[0.98]"
+                >
+                    Guardar cambios
+                </button>
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    (function () {
+        var apiTypeSelect = document.getElementById('{{ form.api_type.id_for_label }}');
+        var apiUrlField = document.getElementById('api-url-field');
+
+        function toggleApiUrl() {
+            apiUrlField.style.display = apiTypeSelect.value ? 'block' : 'none';
+        }
+
+        toggleApiUrl();
+        apiTypeSelect.addEventListener('change', toggleApiUrl);
+    })();
+</script>
+{% endblock %}

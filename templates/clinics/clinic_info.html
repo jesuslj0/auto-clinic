@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+
+{% block title %}Información de la clínica · {{ clinic_obj.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Información de la clínica{% endblock %}
+
+{% block content %}
+{% with section='clinic' %}
+
+{% if messages %}
+<div class="mb-5 space-y-2">
+    {% for message in messages %}
+    <div class="flex items-center gap-3 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 ring-1 ring-emerald-200">
+        <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+        </svg>
+        {{ message }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div class="space-y-5">
+
+    {# Cabecera #}
+    <div class="flex items-center justify-between">
+        <h3 class="text-lg font-semibold text-slate-900">Datos de la clínica</h3>
+        <a
+            href="{% url 'core:clinic-edit' %}"
+            class="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 transition active:scale-[0.98]"
+        >
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+            </svg>
+            Editar información
+        </a>
+    </div>
+
+    {# Ficha principal #}
+    <div class="rounded-3xl bg-white shadow-soft ring-1 ring-slate-200 divide-y divide-slate-100">
+
+        {# Identificación #}
+        <div class="px-6 py-5">
+            <h4 class="mb-4 text-xs font-semibold uppercase tracking-widest text-slate-400">Identificación</h4>
+            <dl class="grid gap-4 sm:grid-cols-2">
+                <div>
+                    <dt class="text-xs font-medium text-slate-500">Nombre</dt>
+                    <dd class="mt-1 text-sm font-semibold text-slate-900">{{ clinic_obj.name|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500">Estado</dt>
+                    <dd class="mt-1">
+                        {% if clinic_obj.is_active %}
+                        <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                            <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Activa
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-500">
+                            <span class="h-1.5 w-1.5 rounded-full bg-slate-300"></span>Inactiva
+                        </span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500">Zona horaria</dt>
+                    <dd class="mt-1 text-sm text-slate-700">{{ clinic_obj.timezone|default:"—" }}</dd>
+                </div>
+            </dl>
+        </div>
+
+        {# Contacto #}
+        <div class="px-6 py-5">
+            <h4 class="mb-4 text-xs font-semibold uppercase tracking-widest text-slate-400">Contacto</h4>
+            <dl class="grid gap-4 sm:grid-cols-2">
+                <div>
+                    <dt class="text-xs font-medium text-slate-500">Teléfono</dt>
+                    <dd class="mt-1 text-sm text-slate-700">{{ clinic_obj.phone|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500">Correo electrónico</dt>
+                    <dd class="mt-1 text-sm text-slate-700">{{ clinic_obj.email|default:"—" }}</dd>
+                </div>
+                {% if clinic_obj.website %}
+                <div>
+                    <dt class="text-xs font-medium text-slate-500">Sitio web</dt>
+                    <dd class="mt-1 text-sm text-slate-700">{{ clinic_obj.website }}</dd>
+                </div>
+                {% endif %}
+            </dl>
+        </div>
+
+        {# Dirección #}
+        <div class="px-6 py-5">
+            <h4 class="mb-4 text-xs font-semibold uppercase tracking-widest text-slate-400">Dirección</h4>
+            <dl class="grid gap-4 sm:grid-cols-2">
+                <div class="sm:col-span-2">
+                    <dt class="text-xs font-medium text-slate-500">Dirección</dt>
+                    <dd class="mt-1 text-sm text-slate-700">{{ clinic_obj.address|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500">Ciudad</dt>
+                    <dd class="mt-1 text-sm text-slate-700">{{ clinic_obj.city|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500">Provincia</dt>
+                    <dd class="mt-1 text-sm text-slate-700">{{ clinic_obj.province|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-slate-500">Código postal</dt>
+                    <dd class="mt-1 text-sm text-slate-700">{{ clinic_obj.postal_code|default:"—" }}</dd>
+                </div>
+            </dl>
+        </div>
+
+        {# Descripción #}
+        {% if clinic_obj.description %}
+        <div class="px-6 py-5">
+            <h4 class="mb-4 text-xs font-semibold uppercase tracking-widest text-slate-400">Descripción</h4>
+            <p class="text-sm text-slate-700 whitespace-pre-line">{{ clinic_obj.description }}</p>
+        </div>
+        {% endif %}
+
+        {# Integración externa #}
+        {% if clinic_obj.api_type %}
+        <div class="px-6 py-5">
+            <h4 class="mb-4 text-xs font-semibold uppercase tracking-widest text-slate-400">Integración externa</h4>
+            <dl class="grid gap-4 sm:grid-cols-2">
+                <div>
+                    <dt class="text-xs font-medium text-slate-500">Tipo</dt>
+                    <dd class="mt-1 text-sm font-medium text-slate-700">{{ clinic_obj.get_api_type_display }}</dd>
+                </div>
+                {% if clinic_obj.api_url %}
+                <div>
+                    <dt class="text-xs font-medium text-slate-500">URL de la API</dt>
+                    <dd class="mt-1 text-sm text-slate-700 break-all">{{ clinic_obj.api_url }}</dd>
+                </div>
+                {% endif %}
+            </dl>
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endwith %}
+{% endblock %}
