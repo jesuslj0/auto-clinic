@@ -32,6 +32,7 @@ class Clinic(models.Model):
     timezone = models.CharField(max_length=50, default="Europe/Madrid")
     description = models.TextField(blank=True)
     logo_url = models.URLField(blank=True)
+    logo = models.ImageField(upload_to='clinic_logos/', blank=True)
     whatsapp_phone_number_id = models.CharField(max_length=100, blank=True)
 
     # Integración de calendario

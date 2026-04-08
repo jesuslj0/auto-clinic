@@ -36,7 +36,7 @@ class ClinicForm(forms.ModelForm):
         model = Clinic
         fields = [
             'name', 'phone', 'email', 'address', 'city', 'province',
-            'postal_code', 'timezone', 'description', 'api_type', 'api_url',
+            'postal_code', 'timezone', 'description', 'logo', 'api_type', 'api_url',
         ]
         widgets = {
             'description': forms.Textarea(attrs={'rows': 3}),
@@ -51,6 +51,7 @@ class ClinicForm(forms.ModelForm):
             'province': 'Provincia',
             'postal_code': 'Código postal',
             'description': 'Descripción',
+            'logo': 'Logotipo',
             'api_type': 'Tipo de integración',
             'api_url': 'URL de la API',
         }
