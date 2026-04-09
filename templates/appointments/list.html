@@ -49,7 +49,7 @@
                         <td class="px-6 py-4">
                             <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold {% if appointment.status == 'confirmed' %}bg-emerald-50 text-emerald-700{% elif appointment.status == 'cancelled' %}bg-rose-50 text-rose-700{% else %}bg-amber-50 text-amber-700{% endif %}">{{ appointment.get_status_display|default:appointment.status|title }}</span>
                         </td>
-                        <td class="px-6 py-4 text-slate-600">{{ appointment.assigned_to.get_full_name|default:appointment.assigned_to.email|default:'Sin asignar' }}</td>
+                        <td class="px-6 py-4 text-slate-600">{% if appointment.assigned_to %}{{ appointment.assigned_to.get_full_name|default:appointment.assigned_to.email }}{% else %}Sin asignar{% endif %}</td>
                         <td class="px-6 py-4">
                             <a href="{% url 'portal:detail' appointment.confirmation_token %}">Ver cita</a>
                         </td>
