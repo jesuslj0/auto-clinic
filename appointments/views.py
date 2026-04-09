@@ -17,15 +17,15 @@ from core.permissions import IsStaffOrAdmin
 
 class AppointmentFilter(django_filters.FilterSet):
     clinic = django_filters.CharFilter(field_name='clinic_id')
-    status = django_filters.CharFilter(field_name='status')
+    status = django_filters.BaseInFilter(field_name='status', lookup_expr='in')
     service = django_filters.NumberFilter(field_name='service_id')
     patient = django_filters.NumberFilter(field_name='patient_id')
-    patient_phone = django_filters.CharFilter(field_name='patient_phone', lookup_expr='exact')
+    patient_phone = django_filters.CharFilter(field_name='patient__phone', lookup_expr='exact')
     reminder_24h_sent = django_filters.BooleanFilter(field_name='reminder_24h_sent')
     reminder_3h_sent = django_filters.BooleanFilter(field_name='reminder_3h_sent')
     reminder_responded = django_filters.BooleanFilter(field_name='reminder_responded')
-    scheduled_at_gte = django_filters.IsoDateTimeFilter(field_name='scheduled_at', lookup_expr='gte')
-    scheduled_at_lte = django_filters.IsoDateTimeFilter(field_name='scheduled_at', lookup_expr='lte')
+    scheduled_at_after = django_filters.IsoDateTimeFilter(field_name='scheduled_at', lookup_expr='gte')
+    scheduled_at_before = django_filters.IsoDateTimeFilter(field_name='scheduled_at', lookup_expr='lte')
     status_exclude = django_filters.CharFilter(method='filter_status_exclude')
 
     def filter_status_exclude(self, queryset, name, value):
@@ -57,6 +57,18 @@ class AppointmentViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets
     @action(detail=False, methods=['get'], url_path='available-slots')
     def available_slots(self, request):
         date_str = request.query_params.get('date')
+        clinic_param = request.query_params.get('clinic')
+
+        if clinic_param:
+            try:
+                clinic = Clinic.objects.get(pk=clinic_param)
+            except Clinic.DoesNotExist:
+                return Response({'detail': 'Clínica no encontrada.'}, status=status.HTTP_400_BAD_REQUEST)
+        elif request.user.clinic_id:
+            clinic = request.user.clinic
+        else:
+            return Response({'detail': 'El usuario no tiene clínica asignada.'}, status=status.HTTP_400_BAD_REQUEST)
+
         if not date_str:
             return Response({'detail': 'El parámetro "date" es requerido (YYYY-MM-DD).'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -79,16 +91,12 @@ class AppointmentViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets
         day_start = timezone.make_aware(datetime.combine(target_date, time(start_hour, 0)), tz)
         day_end = timezone.make_aware(datetime.combine(target_date, time(end_hour, 0)), tz)
 
-        if not request.user.clinic_id:
-            return Response({'detail': 'El usuario no tiene clínica asignada.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        queryset = self.get_queryset().filter(
-            clinic=request.user.clinic,
+        queryset = Appointment.objects.filter(
+            clinic=clinic,
             scheduled_at__date=target_date,
             status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED],
-        )
+        ).select_related('service')
 
-        # Construir lista de rangos ocupados (start, end)
         busy = []
         for appt in queryset:
             appt_start = appt.scheduled_at
@@ -105,8 +113,7 @@ class AppointmentViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets
         current = day_start
         while current + slot_duration <= day_end:
             slot_end = current + slot_duration
-            overlaps = any(current < b_end and slot_end > b_start for b_start, b_end in busy)
-            if not overlaps:
+            if not any(current < b_end and slot_end > b_start for b_start, b_end in busy):
                 slots.append(current.isoformat())
             current += slot_duration
 
@@ -122,6 +129,32 @@ class AppointmentViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets
             'scheduled_at': appointment.scheduled_at,
             'confirmation_token': str(appointment.confirmation_token),
         })
+    
+    @action(detail=False, methods=['get'], url_path='pending-reminders')
+    def pending_reminders(self, request):
+        reminder_type = request.query_params.get('type', '24h')
+        now = timezone.now()
+        
+        if reminder_type == '24h':
+            window_start = now + timedelta(hours=23)
+            window_end = now + timedelta(hours=25)
+            qs = self.get_queryset().filter(
+                scheduled_at__range=(window_start, window_end),
+                status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED],
+                reminder_24h_sent=False,
+            )
+        else:  # 3h
+            window_start = now + timedelta(hours=2, minutes=30)
+            window_end = now + timedelta(hours=3, minutes=30)
+            qs = self.get_queryset().filter(
+                scheduled_at__range=(window_start, window_end),
+                status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED],
+                reminder_3h_sent=False,
+            )
+        
+        serializer = self.get_serializer(qs, many=True)
+        return Response({'results': serializer.data, 'count': qs.count()})
+
 
 
 class AppointmentCalendarView(TemplateView):
