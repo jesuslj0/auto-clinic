@@ -54,6 +54,64 @@ class AppointmentViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets
             return queryset
         return queryset.filter(clinic=user.clinic)
 
+    @action(detail=False, methods=['get'], url_path='available-slots')
+    def available_slots(self, request):
+        date_str = request.query_params.get('date')
+        if not date_str:
+            return Response({'detail': 'El parámetro "date" es requerido (YYYY-MM-DD).'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return Response({'detail': 'Formato de fecha inválido. Usa YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            duration = int(request.query_params.get('duration', 30))
+            start_hour = int(request.query_params.get('start_hour', 8))
+            end_hour = int(request.query_params.get('end_hour', 18))
+        except ValueError:
+            return Response({'detail': 'Los parámetros duration, start_hour y end_hour deben ser enteros.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if duration <= 0 or start_hour < 0 or end_hour > 24 or start_hour >= end_hour:
+            return Response({'detail': 'Parámetros de horario inválidos.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        tz = timezone.get_current_timezone()
+        day_start = timezone.make_aware(datetime.combine(target_date, time(start_hour, 0)), tz)
+        day_end = timezone.make_aware(datetime.combine(target_date, time(end_hour, 0)), tz)
+
+        if not request.user.clinic_id:
+            return Response({'detail': 'El usuario no tiene clínica asignada.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        queryset = self.get_queryset().filter(
+            clinic=request.user.clinic,
+            scheduled_at__date=target_date,
+            status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED],
+        )
+
+        # Construir lista de rangos ocupados (start, end)
+        busy = []
+        for appt in queryset:
+            appt_start = appt.scheduled_at
+            if appt.end_at:
+                appt_end = appt.end_at
+            elif appt.service_id and appt.service:
+                appt_end = appt_start + timedelta(minutes=appt.service.duration_minutes)
+            else:
+                appt_end = appt_start + timedelta(minutes=30)
+            busy.append((appt_start, appt_end))
+
+        slot_duration = timedelta(minutes=duration)
+        slots = []
+        current = day_start
+        while current + slot_duration <= day_end:
+            slot_end = current + slot_duration
+            overlaps = any(current < b_end and slot_end > b_start for b_start, b_end in busy)
+            if not overlaps:
+                slots.append(current.isoformat())
+            current += slot_duration
+
+        return Response({'date': date_str, 'duration_minutes': duration, 'available_slots': slots})
+
     @action(detail=True, methods=['get'], url_path='status')
     def get_status(self, request, pk=None):
         appointment = self.get_object()
