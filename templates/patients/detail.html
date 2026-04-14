@@ -6,7 +6,11 @@
 {% block content %}
 <section class="grid gap-6 xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
     <aside class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
-        <h3 class="text-xl font-semibold text-slate-900">{{ patient }}</h3>
+        <h3 class="text-xl font-semibold text-slate-900 flex items-center justify-between">
+            {{ patient }} 
+            <a href="{% url 'patients:edit' patient.pk %}" 
+            class="rounded-full bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">Editar</a>
+        </h3>
         <dl class="mt-6 space-y-4 text-sm text-slate-600">
             <div>
                 <dt class="font-medium text-slate-900">Correo electrónico</dt>
