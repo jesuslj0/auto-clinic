@@ -78,7 +78,6 @@ class TestUserViewSet:
             "password": "pass123",
             "clinic": clinic_a.pk,
             "role": "staff",
-            "professional_role": "assistant",
         }
         response = admin_client.post("/api/users/", data)
         assert response.status_code == 201

@@ -12,7 +12,6 @@ class Professional(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='professional_profile')
     clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name='professionals')
     services = models.ManyToManyField(Service, related_name='professionals', blank=True)
-    role = models.CharField(max_length=100, blank=True)
 
     class Meta:
         db_table = 'professionals'

@@ -35,16 +35,9 @@ def ensure_professional_for_user(sender, instance, **kwargs):
 
     professional, _ = Professional.objects.get_or_create(
         user=instance,
-        defaults={'clinic': instance.clinic, 'role': instance.role},
+        defaults={'clinic': instance.clinic},
     )
 
-    update_fields = []
     if professional.clinic_id != instance.clinic_id:
         professional.clinic = instance.clinic
-        update_fields.append('clinic')
-    if professional.role != instance.role:
-        professional.role = instance.role
-        update_fields.append('role')
-
-    if update_fields:
-        professional.save(update_fields=update_fields)
+        professional.save(update_fields=['clinic'])

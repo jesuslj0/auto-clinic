@@ -113,7 +113,6 @@ class TestUserViewSetCreate:
             "password": "testpass123",
             "clinic": clinic_a.pk,
             "role": "staff",
-            "professional_role": "fisioterapeuta",
         }
         response = admin_client.post("/api/users/", data)
         assert response.status_code == 201

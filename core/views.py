@@ -47,9 +47,7 @@ class UserViewSet(ExportMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        queryset = User.objects.select_related('clinic', 'professional_profile').prefetch_related(
-            'professional_profile__services'
-        )
+        queryset = User.objects.select_related('clinic', 'professional_profile')
         if user.is_superuser or not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)

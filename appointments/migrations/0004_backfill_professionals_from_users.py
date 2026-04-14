@@ -1,4 +1,4 @@
-from django.db import migrations, models
+from django.db import migrations
 
 
 def create_missing_professionals(apps, schema_editor):
@@ -10,7 +10,6 @@ def create_missing_professionals(apps, schema_editor):
             user=user,
             defaults={
                 'clinic': user.clinic,
-                'role': user.role,
             },
         )
 
@@ -22,10 +21,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='professional',
-            name='role',
-            field=models.CharField(blank=True, max_length=100),
-        ),
         migrations.RunPython(create_missing_professionals, migrations.RunPython.noop),
     ]
