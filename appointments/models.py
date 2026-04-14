@@ -9,11 +9,11 @@ from services.models import Service
 
 class Appointment(models.Model):
     class Status(models.TextChoices):
-        PENDING = 'pending', 'Pending'
-        CONFIRMED = 'confirmed', 'Confirmed'
-        CANCELLED = 'cancelled', 'Cancelled'
-        RESCHEDULED = 'rescheduled', 'Rescheduled'
-        NO_SHOW = 'no_show', 'No Show'
+        PENDING = 'pending', 'Pendiente'
+        CONFIRMED = 'confirmed', 'Confirmada'
+        CANCELLED = 'cancelled', 'Cancelada'
+        RESCHEDULED = 'rescheduled', 'Reagendada'
+        NO_SHOW = 'no_show', 'No asistió'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     clinic = models.ForeignKey(Clinic, on_delete=models.PROTECT, related_name='appointments', db_column='clinic_id')
@@ -56,14 +56,14 @@ class Appointment(models.Model):
         db_table = 'appointments'
         ordering = ['scheduled_at']
         indexes = [
-            models.Index(fields=['clinic', 'scheduled_at', 'status'], name='idx_clinic_scheduled_at_status'),
+            models.Index(fields=['clinic', 'scheduled_at', 'status'], name='idx_appointments_clinic_status'),
             models.Index(
                 fields=['patient_phone', 'status', 'scheduled_at'],
-                name='idx_phone_status_scheduled_at',
+                name='idx_appointments_phone_status',
             ),
             models.Index(
                 fields=['reminder_24h_sent', 'reminder_responded', 'reminder_3h_sent'],
-                name='idx_appointments_remdr_flags',
+                name='idx_appointments_reminder',
             ),
         ]
 
