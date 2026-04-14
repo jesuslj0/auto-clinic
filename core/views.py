@@ -47,7 +47,9 @@ class UserViewSet(ExportMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        queryset = User.objects.select_related('clinic')
+        queryset = User.objects.select_related('clinic', 'professional_profile').prefetch_related(
+            'professional_profile__services'
+        )
         if user.is_superuser or not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
@@ -134,7 +136,7 @@ class DashboardAppointmentManageView(LoginRequiredMixin, TemplateView):
 
     def _get_scoped_appointment(self):
         appointment = get_object_or_404(
-            Appointment.objects.select_related('patient', 'service', 'assigned_to', 'clinic'),
+            Appointment.objects.select_related('patient', 'service', 'professional__user', 'clinic'),
             pk=self.kwargs['appointment_id'],
         )
 

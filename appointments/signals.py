@@ -3,7 +3,8 @@ from channels.layers import get_channel_layer
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from appointments.models import Appointment
+from appointments.models import Appointment, Professional
+from core.models import User
 
 
 @receiver(post_save, sender=Appointment)
@@ -21,3 +22,29 @@ def broadcast_appointment_update(sender, instance, created, **kwargs):
             },
         },
     )
+
+
+@receiver(post_save, sender=User)
+def ensure_professional_for_user(sender, instance, **kwargs):
+    if not instance.role:
+        return
+
+    if not instance.clinic_id:
+        Professional.objects.filter(user=instance).delete()
+        return
+
+    professional, _ = Professional.objects.get_or_create(
+        user=instance,
+        defaults={'clinic': instance.clinic, 'role': instance.role},
+    )
+
+    update_fields = []
+    if professional.clinic_id != instance.clinic_id:
+        professional.clinic = instance.clinic
+        update_fields.append('clinic')
+    if professional.role != instance.role:
+        professional.role = instance.role
+        update_fields.append('role')
+
+    if update_fields:
+        professional.save(update_fields=update_fields)

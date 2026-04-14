@@ -78,9 +78,11 @@ class TestUserViewSet:
             "password": "pass123",
             "clinic": clinic_a.pk,
             "role": "staff",
+            "professional_role": "assistant",
         }
         response = admin_client.post("/api/users/", data)
         assert response.status_code == 201
+        assert response.data["professional_id"] is not None
 
     def test_password_not_returned_in_response(self, admin_client, clinic_a):
         data = {
