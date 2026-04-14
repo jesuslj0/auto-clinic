@@ -141,14 +141,19 @@
                 {% endif %}
 
                 {# Duración + precio #}
-                <div class="mt-auto flex items-center justify-between pt-3 border-t border-slate-100">
+                <div class="mt-auto flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
                     <span class="flex items-center gap-1.5 text-sm text-slate-600">
                         <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         {{ service.duration_minutes }} min
                     </span>
-                    <span class="text-lg font-semibold text-slate-900">{{ service.price }} €</span>
+                    <div class="flex items-center gap-3">
+                        <span class="text-lg font-semibold text-slate-900">{{ service.price }} €</span>
+                        <a href="{% url 'services:edit' service.pk %}" class="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-brand-300 hover:text-brand-700">
+                            Editar
+                        </a>
+                    </div>
                 </div>
             </div>
         </article>

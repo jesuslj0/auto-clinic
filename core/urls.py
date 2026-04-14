@@ -1,6 +1,13 @@
 from django.urls import path
 
-from core.views import ClinicEditView, ClinicInfoView, ClinicLoginView, ClinicLogoutView, DashboardView
+from core.views import (
+    ClinicEditView,
+    ClinicInfoView,
+    ClinicLoginView,
+    ClinicLogoutView,
+    DashboardAppointmentActionView,
+    DashboardView,
+)
 
 app_name = 'core'
 
@@ -10,4 +17,5 @@ urlpatterns = [
     path('logout/', ClinicLogoutView.as_view(), name='logout'),
     path('clinic/info/', ClinicInfoView.as_view(), name='clinic-info'),
     path('clinic/edit/', ClinicEditView.as_view(), name='clinic-edit'),
+    path('dashboard/appointments/<uuid:appointment_id>/action/', DashboardAppointmentActionView.as_view(), name='dashboard-appointment-action'),
 ]
