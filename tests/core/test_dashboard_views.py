@@ -54,7 +54,7 @@ class TestDashboardView:
         assert all(appointment.clinic_id == admin_user.clinic_id for appointment in schedule)
         assert appointment_b not in schedule
 
-    def test_dashboard_manage_button_links_to_management_page(self, client, admin_user, clinic_a, patient_a, service_a):
+    def test_dashboard_manage_button_visible_for_pending(self, client, admin_user, clinic_a, patient_a, service_a):
         client.force_login(admin_user)
         appt = Appointment.objects.create(
             clinic=clinic_a,
@@ -69,20 +69,5 @@ class TestDashboardView:
         content = response.content.decode()
 
         assert response.status_code == 200
-        assert reverse('core:dashboard-manage-appointment', args=[appt.pk]) in content
-
-
-@pytest.mark.django_db
-class TestDashboardManageAppointmentView:
-    def test_manage_view_shows_appointment_detail(self, client, admin_user, appointment_a):
-        client.force_login(admin_user)
-        response = client.get(reverse('core:dashboard-manage-appointment', args=[appointment_a.pk]))
-
-        assert response.status_code == 200
-        assert response.context['appointment'].pk == appointment_a.pk
-
-    def test_manage_view_is_scoped_by_clinic(self, client, admin_user, appointment_b):
-        client.force_login(admin_user)
-        response = client.get(reverse('core:dashboard-manage-appointment', args=[appointment_b.pk]))
-
-        assert response.status_code == 403
+        assert str(appt.pk) in content
+        assert 'Gestionar' in content

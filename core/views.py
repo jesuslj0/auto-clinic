@@ -4,7 +4,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, LogoutView
 from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect
-from django.urls import reverse, reverse_lazy
+from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views import View
 from django.views.generic import TemplateView, UpdateView
@@ -100,35 +100,15 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         return context
 
 
-class DashboardAppointmentManageView(LoginRequiredMixin, TemplateView):
-    template_name = 'dashboard/appointment_manage.html'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['appointment'] = self._get_scoped_appointment()
-        return context
-
-    def _get_scoped_appointment(self):
-        appointment = get_object_or_404(
-            Appointment.objects.select_related('patient', 'service', 'assigned_to', 'clinic'),
-            pk=self.kwargs['appointment_id'],
-        )
-
-        user = self.request.user
-        if not user.is_superuser and (not user.clinic_id or appointment.clinic_id != user.clinic_id):
-            raise PermissionDenied('No tienes permiso para gestionar esta cita.')
-
-        return appointment
-
-
 class DashboardAppointmentActionView(LoginRequiredMixin, View):
     def post(self, request, appointment_id):
         appointment = get_object_or_404(Appointment, pk=appointment_id)
 
         user = request.user
-        if not user.is_superuser and (not user.clinic_id or appointment.clinic_id != user.clinic_id):
-            messages.error(request, 'No tienes permiso para gestionar esta cita.')
-            return redirect('core:dashboard')
+        if not user.is_superuser:
+            if not user.clinic_id or appointment.clinic_id != user.clinic_id:
+                messages.error(request, 'No tienes permiso para gestionar esta cita.')
+                return redirect('core:dashboard')
 
         action = request.POST.get('action')
         if action == 'confirm':
@@ -142,6 +122,4 @@ class DashboardAppointmentActionView(LoginRequiredMixin, View):
 
         appointment.save(update_fields=['status', 'updated_at'])
         messages.success(request, success_message)
-
-        next_url = request.POST.get('next') or reverse('core:dashboard-manage-appointment', args=[appointment.pk])
-        return redirect(next_url)
+        return redirect('core:dashboard')
