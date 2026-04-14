@@ -5,7 +5,7 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
-from appointments.models import Appointment
+from appointments.models import Appointment, Professional
 
 
 @pytest.mark.django_db
@@ -54,3 +54,14 @@ class TestAppointmentModel:
             Appointment.objects.filter(clinic=clinic_a).values_list("scheduled_at", flat=True)
         )
         assert times == sorted(times)
+
+
+@pytest.mark.django_db
+class TestProfessionalModel:
+    def test_default_professional_type(self, admin_user):
+        professional = admin_user.professional_profile
+        assert professional.professional_type == Professional.ProfessionalType.MEDICO
+
+    def test_professional_type_choices(self):
+        choices = {choice for choice, _ in Professional.ProfessionalType.choices}
+        assert {'medico', 'dentista', 'psicologo', 'enfermero', 'fisioterapeuta', 'nutricionista'} == choices

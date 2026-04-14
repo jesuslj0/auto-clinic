@@ -5,9 +5,9 @@ from appointments.models import Appointment, Professional
 
 @admin.register(Professional)
 class ProfessionalAdmin(admin.ModelAdmin):
-    list_display = ('user', 'clinic')
+    list_display = ('user', 'professional_type', 'clinic')
     search_fields = ('user__email', 'user__first_name', 'user__last_name', 'clinic__name')
-    list_filter = ('clinic',)
+    list_filter = ('clinic', 'professional_type')
     filter_horizontal = ('services',)
 
 

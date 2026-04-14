@@ -1,8 +1,12 @@
 from datetime import datetime, time, timedelta
 
 import django_filters
+from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.shortcuts import redirect
+from django.urls import reverse_lazy
 from django.utils import timezone
-from django.views.generic import TemplateView
+from django.views.generic import CreateView, ListView, TemplateView, UpdateView
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
@@ -14,6 +18,8 @@ from appointments.serializers import AppointmentSerializer
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
 from core.models import Clinic
 from core.permissions import IsStaffOrAdmin
+from appointments.forms import ProfessionalForm
+from appointments.models import Professional
 
 
 class AppointmentFilter(django_filters.FilterSet):
@@ -236,3 +242,75 @@ class AppointmentActionByTokenAPIView(APIView):
 
         appointment.save(update_fields=['status', 'updated_at'])
         return Response(AppointmentSerializer(appointment).data, status=status.HTTP_200_OK)
+
+
+class ProfessionalListView(LoginRequiredMixin, ListView):
+    model = Professional
+    template_name = 'appointments/professional_list.html'
+    context_object_name = 'professionals'
+    ordering = ['user__first_name', 'user__last_name', 'user__email']
+
+    def get_queryset(self):
+        queryset = Professional.objects.select_related('user', 'clinic').prefetch_related('services').order_by(*self.ordering)
+        user = self.request.user
+        if user.is_superuser or not user.clinic_id:
+            return queryset
+        return queryset.filter(clinic=user.clinic)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['section'] = 'professionals'
+        return context
+
+
+class ProfessionalCreateView(LoginRequiredMixin, CreateView):
+    model = Professional
+    form_class = ProfessionalForm
+    template_name = 'appointments/professional_form.html'
+    success_url = reverse_lazy('appointments:professionals-list')
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated and not request.user.is_superuser and not request.user.clinic_id:
+            messages.error(request, 'Tu usuario no tiene una clínica asignada.')
+            return redirect('appointments:professionals-list')
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['request_user'] = self.request.user
+        return kwargs
+
+    def form_valid(self, form):
+        if self.request.user.is_superuser:
+            form.instance.clinic = form.cleaned_data['user'].clinic
+        else:
+            form.instance.clinic = self.request.user.clinic
+        messages.success(self.request, 'Profesional creado correctamente.')
+        return super().form_valid(form)
+
+
+class ProfessionalUpdateView(LoginRequiredMixin, UpdateView):
+    model = Professional
+    form_class = ProfessionalForm
+    template_name = 'appointments/professional_form.html'
+    success_url = reverse_lazy('appointments:professionals-list')
+
+    def get_queryset(self):
+        queryset = Professional.objects.select_related('user', 'clinic').prefetch_related('services')
+        user = self.request.user
+        if user.is_superuser or not user.clinic_id:
+            return queryset
+        return queryset.filter(clinic=user.clinic)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['request_user'] = self.request.user
+        return kwargs
+
+    def form_valid(self, form):
+        if self.request.user.is_superuser:
+            form.instance.clinic = form.cleaned_data['user'].clinic
+        else:
+            form.instance.clinic = self.request.user.clinic
+        messages.success(self.request, 'Profesional actualizado correctamente.')
+        return super().form_valid(form)

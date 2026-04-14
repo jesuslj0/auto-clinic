@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block title %}Profesionales · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Profesionales{% endblock %}
+
+{% block content %}
+<section class="space-y-6">
+    <div class="flex items-center justify-end">
+        <a href="{% url 'appointments:professionals-create' %}" class="inline-flex items-center rounded-2xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700">
+            Nuevo profesional
+        </a>
+    </div>
+
+    <section class="overflow-hidden rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
+                <thead class="bg-slate-50 text-slate-500">
+                    <tr>
+                        <th class="px-6 py-4 font-semibold">Usuario</th>
+                        <th class="px-6 py-4 font-semibold">Tipo</th>
+                        <th class="px-6 py-4 font-semibold">Servicios</th>
+                        <th class="px-6 py-4 font-semibold">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 bg-white">
+                    {% for professional in professionals %}
+                    <tr>
+                        <td class="px-6 py-4 text-slate-900">{{ professional.user.get_full_name|default:professional.user.email }}</td>
+                        <td class="px-6 py-4 text-slate-600">{{ professional.get_professional_type_display }}</td>
+                        <td class="px-6 py-4 text-slate-600">
+                            {% for service in professional.services.all %}
+                                <span class="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs">{{ service.name }}</span>
+                            {% empty %}
+                                Sin servicios
+                            {% endfor %}
+                        </td>
+                        <td class="px-6 py-4">
+                            <a href="{% url 'appointments:professionals-edit' professional.pk %}" class="text-sm font-semibold text-brand-600 hover:text-brand-700">Editar</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="px-6 py-12 text-center text-sm text-slate-500">No hay profesionales registrados.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</section>
+{% endblock %}

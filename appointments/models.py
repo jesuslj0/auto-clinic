@@ -9,9 +9,22 @@ from services.models import Service
 
 
 class Professional(models.Model):
+    class ProfessionalType(models.TextChoices):
+        MEDICO = 'medico', 'Médico'
+        DENTISTA = 'dentista', 'Dentista'
+        PSICOLOGO = 'psicologo', 'Psicólogo'
+        ENFERMERO = 'enfermero', 'Enfermero/a'
+        FISIOTERAPEUTA = 'fisioterapeuta', 'Fisioterapeuta'
+        NUTRICIONISTA = 'nutricionista', 'Nutricionista'
+
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='professional_profile')
     clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name='professionals')
     services = models.ManyToManyField(Service, related_name='professionals', blank=True)
+    professional_type = models.CharField(
+        max_length=30,
+        choices=ProfessionalType.choices,
+        default=ProfessionalType.MEDICO,
+    )
 
     class Meta:
         db_table = 'professionals'
