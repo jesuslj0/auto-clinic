@@ -42,6 +42,14 @@
                         <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold {% if appointment.status == 'confirmed' %}bg-emerald-50 text-emerald-700{% elif appointment.status == 'cancelled' %}bg-rose-50 text-rose-700{% else %}bg-amber-50 text-amber-700{% endif %}">
                             {{ appointment.get_status_display|default:appointment.status|title }}
                         </span>
+                        {% if appointment.status == 'pending' %}
+                            <a
+                                href="{% url 'core:dashboard-manage-appointment' appointment.id %}"
+                                class="rounded-xl border border-brand-200 px-3 py-1.5 text-sm font-semibold text-brand-700 transition hover:bg-brand-50"
+                            >
+                                Gestionar
+                            </a>
+                        {% endif %}
                         <a href="{% url 'portal:detail' appointment.confirmation_token %}" class="text-sm font-medium text-brand-600 hover:text-brand-700">Detalles</a>
                     </div>
                 </article>
