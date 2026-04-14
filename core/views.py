@@ -123,3 +123,23 @@ class DashboardAppointmentActionView(LoginRequiredMixin, View):
         appointment.save(update_fields=['status', 'updated_at'])
         messages.success(request, success_message)
         return redirect('core:dashboard')
+
+class DashboardAppointmentManageView(LoginRequiredMixin, TemplateView):
+    template_name = 'dashboard/appointment_manage.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['appointment'] = self._get_scoped_appointment()
+        return context
+
+    def _get_scoped_appointment(self):
+        appointment = get_object_or_404(
+            Appointment.objects.select_related('patient', 'service', 'assigned_to', 'clinic'),
+            pk=self.kwargs['appointment_id'],
+        )
+
+        user = self.request.user
+        if not user.is_superuser and (not user.clinic_id or appointment.clinic_id != user.clinic_id):
+            raise PermissionDenied('No tienes permiso para gestionar esta cita.')
+
+        return appointment
