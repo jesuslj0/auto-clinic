@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+
+{% block title %}Gestionar cita · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Gestionar cita{% endblock %}
+
+{% block content %}
+<section class="mx-auto max-w-3xl space-y-6">
+    <div class="flex items-center justify-between">
+        <a href="{% url 'core:dashboard' %}" class="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-medium text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-50 hover:text-slate-900">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            </svg>
+            Volver al panel
+        </a>
+        <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold {% if appointment.status == 'confirmed' %}bg-emerald-50 text-emerald-700{% elif appointment.status == 'cancelled' %}bg-rose-50 text-rose-700{% else %}bg-amber-50 text-amber-700{% endif %}">
+            {{ appointment.get_status_display|default:appointment.status|title }}
+        </span>
+    </div>
+
+    <article class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
+        <h2 class="text-lg font-semibold text-slate-900">Detalle de la cita</h2>
+        <p class="mt-1 text-sm text-slate-500">Gestiona esta cita desde el equipo clínico, sin salir del dashboard.</p>
+
+        <dl class="mt-5 grid gap-4 sm:grid-cols-2">
+            <div class="rounded-2xl bg-slate-50 p-4">
+                <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Paciente</dt>
+                <dd class="mt-1 text-sm font-semibold text-slate-900">{{ appointment.patient|default:appointment.patient_name|default:'Sin paciente asignado' }}</dd>
+            </div>
+            <div class="rounded-2xl bg-slate-50 p-4">
+                <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Servicio</dt>
+                <dd class="mt-1 text-sm font-semibold text-slate-900">{{ appointment.service|default:appointment.service_name|default:'Sin servicio asignado' }}</dd>
+            </div>
+            <div class="rounded-2xl bg-slate-50 p-4">
+                <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Fecha y hora</dt>
+                <dd class="mt-1 text-sm font-semibold text-slate-900">{{ appointment.scheduled_at|date:"l, j \d\e F \d\e Y · H:i" }}</dd>
+            </div>
+            <div class="rounded-2xl bg-slate-50 p-4">
+                <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Profesional asignado</dt>
+                <dd class="mt-1 text-sm font-semibold text-slate-900">{{ appointment.assigned_to|default:'Sin asignar' }}</dd>
+            </div>
+            <div class="rounded-2xl bg-slate-50 p-4 sm:col-span-2">
+                <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Notas</dt>
+                <dd class="mt-1 text-sm text-slate-700">{{ appointment.notes|default:'Sin notas registradas.' }}</dd>
+            </div>
+        </dl>
+
+        <div class="mt-6 flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-5">
+            <a href="{% url 'portal:detail' appointment.confirmation_token %}" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+                Ver portal del paciente
+            </a>
+
+            <form method="post" action="{% url 'core:dashboard-appointment-action' appointment.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="reject">
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button type="submit" class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100">
+                    Rechazar cita
+                </button>
+            </form>
+
+            <form method="post" action="{% url 'core:dashboard-appointment-action' appointment.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="confirm">
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button type="submit" class="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700">
+                    Confirmar cita
+                </button>
+            </form>
+        </div>
+    </article>
+</section>
+{% endblock %}
