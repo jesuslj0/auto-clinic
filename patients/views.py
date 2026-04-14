@@ -53,7 +53,7 @@ class PatientDetailView(DetailView):
     template_name = 'patients/detail.html'
 
     def get_queryset(self):
-        appointment_queryset = Appointment.objects.select_related('service', 'assigned_to').order_by('-scheduled_at')
+        appointment_queryset = Appointment.objects.select_related('service', 'professional__user').order_by('-scheduled_at')
         return Patient.objects.prefetch_related(Prefetch('appointments', queryset=appointment_queryset))
 
 

@@ -1,10 +1,37 @@
 import uuid
 
+from django.core.exceptions import ValidationError
 from django.db import models
 
 from core.models import Clinic, User
 from patients.models import Patient
 from services.models import Service
+
+
+class Professional(models.Model):
+    class ProfessionalType(models.TextChoices):
+        MEDICO = 'medico', 'Médico'
+        DENTISTA = 'dentista', 'Dentista'
+        PSICOLOGO = 'psicologo', 'Psicólogo'
+        ENFERMERO = 'enfermero', 'Enfermero/a'
+        FISIOTERAPEUTA = 'fisioterapeuta', 'Fisioterapeuta'
+        NUTRICIONISTA = 'nutricionista', 'Nutricionista'
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='professional_profile')
+    clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name='professionals')
+    services = models.ManyToManyField(Service, related_name='professionals', blank=True)
+    professional_type = models.CharField(
+        max_length=30,
+        choices=ProfessionalType.choices,
+        default=ProfessionalType.MEDICO,
+    )
+
+    class Meta:
+        db_table = 'professionals'
+        ordering = ['user__first_name', 'user__last_name', 'user__email']
+
+    def __str__(self):
+        return self.user.get_full_name() or self.user.email
 
 
 class Appointment(models.Model):
@@ -21,7 +48,13 @@ class Appointment(models.Model):
     # Structured relations (may be null for bot-created appointments)
     patient = models.ForeignKey(Patient, on_delete=models.SET_NULL, null=True, blank=True, related_name='appointments')
     service = models.ForeignKey(Service, on_delete=models.SET_NULL, null=True, blank=True, related_name='appointments')
-    assigned_to = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='appointments')
+    professional = models.ForeignKey(
+        Professional,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='appointments',
+    )
 
     # Denormalized fields used by the WhatsApp bot
     patient_phone = models.CharField(max_length=20, blank=True)
@@ -70,3 +103,14 @@ class Appointment(models.Model):
     def __str__(self):
         name = str(self.patient) if self.patient else self.patient_name
         return f'{name} - {self.scheduled_at:%Y-%m-%d %H:%M}'
+
+    def clean(self):
+        super().clean()
+        if not self.professional or not self.service:
+            return
+
+        if self.professional.clinic_id != self.clinic_id:
+            raise ValidationError({'professional': 'The selected professional does not belong to this clinic.'})
+
+        if not self.professional.services.filter(pk=self.service_id).exists():
+            raise ValidationError({'professional': 'The selected professional does not provide the selected service.'})
