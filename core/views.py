@@ -1,8 +1,11 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, LogoutView
+from django.http import HttpResponseBadRequest
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
+from django.views import View
 from django.views.generic import TemplateView, UpdateView
 from rest_framework import viewsets
 from rest_framework.response import Response
@@ -79,6 +82,10 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         today = timezone.localdate()
         appointments = Appointment.objects.select_related('patient', 'service').order_by('scheduled_at')
+        user = self.request.user
+        if not user.is_superuser and user.clinic_id:
+            appointments = appointments.filter(clinic=user.clinic)
+
         today_schedule = appointments.filter(scheduled_at__date=today)
         context.update(
             {
@@ -90,3 +97,28 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             }
         )
         return context
+
+
+class DashboardAppointmentActionView(LoginRequiredMixin, View):
+    def post(self, request, appointment_id):
+        appointment = get_object_or_404(Appointment, pk=appointment_id)
+
+        user = request.user
+        if not user.is_superuser:
+            if not user.clinic_id or appointment.clinic_id != user.clinic_id:
+                messages.error(request, 'No tienes permiso para gestionar esta cita.')
+                return redirect('core:dashboard')
+
+        action = request.POST.get('action')
+        if action == 'confirm':
+            appointment.status = Appointment.Status.CONFIRMED
+            success_message = 'Cita confirmada correctamente.'
+        elif action == 'reject':
+            appointment.status = Appointment.Status.CANCELLED
+            success_message = 'Cita rechazada correctamente.'
+        else:
+            return HttpResponseBadRequest('Acción no soportada.')
+
+        appointment.save(update_fields=['status', 'updated_at'])
+        messages.success(request, success_message)
+        return redirect('core:dashboard')
