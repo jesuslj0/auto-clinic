@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 from appointments.models import Appointment
 from appointments.serializers import AppointmentSerializer
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
+from core.models import Clinic
 from core.permissions import IsStaffOrAdmin
 
 
@@ -48,7 +49,7 @@ class AppointmentViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets
     ordering = ['scheduled_at']
 
     def get_queryset(self):
-        queryset = Appointment.objects.select_related('clinic', 'patient', 'service', 'assigned_to')
+        queryset = Appointment.objects.select_related('clinic', 'patient', 'service', 'professional__user')
         user = self.request.user
         if user.is_superuser or not user.clinic_id:
             return queryset
@@ -164,7 +165,7 @@ class AppointmentCalendarView(TemplateView):
         context = super().get_context_data(**kwargs)
         week_start = self._get_week_start()
         week_days = [week_start + timedelta(days=offset) for offset in range(7)]
-        appointments = Appointment.objects.select_related('patient', 'service', 'assigned_to').filter(
+        appointments = Appointment.objects.select_related('patient', 'service', 'professional__user').filter(
             scheduled_at__date__gte=week_start,
             scheduled_at__date__lte=week_start + timedelta(days=6),
         )
@@ -197,7 +198,7 @@ class AppointmentListView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        appointments = Appointment.objects.select_related('patient', 'service', 'assigned_to')
+        appointments = Appointment.objects.select_related('patient', 'service', 'professional__user')
         selected_date = self.request.GET.get('date')
         selected_status = self.request.GET.get('status', '')
         if selected_date:
