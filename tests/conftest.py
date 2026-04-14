@@ -165,7 +165,7 @@ def service_b(db, clinic_b):
 
 @pytest.fixture
 def appointment_a(db, clinic_a, patient_a, service_a, admin_user):
-    professional = Professional.objects.create(user=admin_user, clinic=clinic_a)
+    professional = admin_user.professional_profile
     professional.services.add(service_a)
     now = timezone.now() + timedelta(hours=25)
     return Appointment.objects.create(

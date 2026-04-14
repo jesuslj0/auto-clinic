@@ -21,6 +21,7 @@ class AppointmentFilter(django_filters.FilterSet):
     status = django_filters.BaseInFilter(field_name='status', lookup_expr='in')
     service = django_filters.NumberFilter(field_name='service_id')
     patient = django_filters.NumberFilter(field_name='patient_id')
+    professional = django_filters.NumberFilter(field_name='professional_id')
     patient_phone = django_filters.CharFilter(field_name='patient__phone', lookup_expr='exact')
     reminder_24h_sent = django_filters.BooleanFilter(field_name='reminder_24h_sent')
     reminder_3h_sent = django_filters.BooleanFilter(field_name='reminder_3h_sent')
@@ -35,7 +36,7 @@ class AppointmentFilter(django_filters.FilterSet):
     class Meta:
         model = Appointment
         fields = [
-            'clinic', 'status', 'service', 'patient', 'patient_phone',
+            'clinic', 'status', 'service', 'patient', 'professional', 'patient_phone',
             'reminder_24h_sent', 'reminder_3h_sent', 'reminder_responded',
         ]
 

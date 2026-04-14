@@ -117,6 +117,7 @@ class TestUserViewSetCreate:
         response = admin_client.post("/api/users/", data)
         assert response.status_code == 201
         assert response.data["email"] == "created@test.com"
+        assert response.data["professional_id"] is not None
 
     def test_staff_cannot_create_user(self, staff_client, clinic_a):
         data = {
@@ -138,6 +139,17 @@ class TestUserViewSetCreate:
         response = admin_client.post("/api/users/", data)
         assert response.status_code == 201
         assert "password" not in response.data
+
+    def test_user_creation_creates_professional_profile(self, admin_client, clinic_a):
+        data = {
+            "email": "profile@test.com",
+            "password": "testpass123",
+            "clinic": clinic_a.pk,
+            "role": "staff",
+        }
+        response = admin_client.post("/api/users/", data)
+        assert response.status_code == 201
+        assert response.data["professional_id"] is not None
 
 
 @pytest.mark.django_db
