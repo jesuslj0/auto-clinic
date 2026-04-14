@@ -8,7 +8,7 @@ import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from appointments.models import Appointment
+from appointments.models import Appointment, Professional
 from billing.models import Subscription
 from core.models import Clinic, User
 from notifications.models import Reminder
