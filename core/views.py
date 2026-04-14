@@ -134,7 +134,7 @@ class DashboardAppointmentManageView(LoginRequiredMixin, TemplateView):
 
     def _get_scoped_appointment(self):
         appointment = get_object_or_404(
-            Appointment.objects.select_related('patient', 'service', 'assigned_to', 'clinic'),
+            Appointment.objects.select_related('patient', 'service', 'professional__user', 'clinic'),
             pk=self.kwargs['appointment_id'],
         )
 
