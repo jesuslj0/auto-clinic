@@ -7,7 +7,7 @@ from rest_framework.authtoken.views import obtain_auth_token
 from rest_framework.routers import DefaultRouter
 
 from agent.views import AgentMemoryViewSet, ConversationSessionViewSet, WorkflowErrorViewSet
-from appointments.views import AppointmentActionByTokenAPIView, AppointmentViewSet
+from appointments.views import AppointmentActionByTokenAPIView, AppointmentViewSet, ProfessionalViewSet
 from billing.views import SubscriptionViewSet
 from core.views import ClinicViewSet, UserViewSet
 from knowledge.views import ClinicInfoCacheViewSet, ClinicInfoQueryViewSet, ClinicKnowledgeBaseViewSet
@@ -25,6 +25,7 @@ router.register(r'users', UserViewSet, basename='user')
 router.register(r'patients', PatientViewSet, basename='patient')
 router.register(r'services', ServiceViewSet, basename='service')
 router.register(r'appointments', AppointmentViewSet, basename='appointment')
+router.register(r'professionals', ProfessionalViewSet, basename='professional')
 router.register(r'reminders', ReminderViewSet, basename='reminder')
 router.register(r'subscriptions', SubscriptionViewSet, basename='subscription')
 

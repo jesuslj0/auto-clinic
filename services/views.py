@@ -34,6 +34,11 @@ class ServiceListView(LoginRequiredMixin, ListView):
     context_object_name = 'services'
     ordering = ['name']
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['section'] = 'services'
+        return context
+
     def get_queryset(self):
         queryset = Service.objects.select_related('clinic').order_by(*self.ordering)
         user = self.request.user
@@ -47,6 +52,11 @@ class ServiceCreateView(LoginRequiredMixin, CreateView):
     form_class = ServiceForm
     template_name = 'services/service_form.html'
     success_url = reverse_lazy('services:list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['section'] = 'services'
+        return context
 
     def dispatch(self, request, *args, **kwargs):
         if request.user.is_authenticated and not request.user.clinic_id:
@@ -65,6 +75,11 @@ class ServiceUpdateView(LoginRequiredMixin, UpdateView):
     form_class = ServiceForm
     template_name = 'services/service_form.html'
     success_url = reverse_lazy('services:list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['section'] = 'services'
+        return context
 
     def get_queryset(self):
         queryset = Service.objects.select_related('clinic')

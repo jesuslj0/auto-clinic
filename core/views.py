@@ -59,6 +59,7 @@ class ClinicInfoView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['clinic_obj'] = self.request.user.clinic
+        context['section'] = 'clinic'
         return context
 
 
@@ -95,6 +96,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 'today_appointments': today_schedule.count(),
                 'pending_appointments': appointments.filter(status=Appointment.Status.PENDING).count(),
                 'cancelled_appointments': appointments.filter(status=Appointment.Status.CANCELLED).count(),
+                'section': 'dashboard',
             }
         )
         return context
@@ -130,6 +132,7 @@ class DashboardAppointmentManageView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['appointment'] = self._get_scoped_appointment()
+        context['section'] = 'dashboard'
         return context
 
     def _get_scoped_appointment(self):

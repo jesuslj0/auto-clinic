@@ -4,36 +4,82 @@
 {% block page_heading %}{% if object %}Editar profesional{% else %}Nuevo profesional{% endif %}{% endblock %}
 
 {% block content %}
-<div class="mx-auto max-w-2xl rounded-3xl bg-white p-8 shadow-soft ring-1 ring-slate-200">
-    <form method="post" class="space-y-6">
-        {% csrf_token %}
+<div class="mx-auto max-w-2xl">
+    <div class="rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
 
-        {% if form.non_field_errors %}
-        <div class="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-red-200">{{ form.non_field_errors|join:', ' }}</div>
-        {% endif %}
-
-        <div>
-            <label for="{{ form.user.id_for_label }}" class="mb-1 block text-sm font-medium text-slate-700">{{ form.user.label }}</label>
-            {{ form.user }}
-            {% if form.user.errors %}<p class="mt-1 text-xs text-red-600">{{ form.user.errors|join:', ' }}</p>{% endif %}
+        <div class="border-b border-slate-200 px-4 py-6 sm:px-8">
+            <h2 class="text-lg font-semibold text-slate-900">Datos del profesional</h2>
+            <p class="mt-1 text-sm text-slate-500">
+                {% if object %}Actualiza la información del profesional.{% else %}Completa la información para añadir un nuevo profesional.{% endif %}
+            </p>
         </div>
 
-        <div>
-            <label for="{{ form.professional_type.id_for_label }}" class="mb-1 block text-sm font-medium text-slate-700">{{ form.professional_type.label }}</label>
-            {{ form.professional_type }}
-            {% if form.professional_type.errors %}<p class="mt-1 text-xs text-red-600">{{ form.professional_type.errors|join:', ' }}</p>{% endif %}
-        </div>
+        <form method="post" novalidate class="space-y-6 px-4 py-7 sm:px-8">
+            {% csrf_token %}
 
-        <div>
-            <label for="{{ form.services.id_for_label }}" class="mb-1 block text-sm font-medium text-slate-700">{{ form.services.label }}</label>
-            {{ form.services }}
-            {% if form.services.errors %}<p class="mt-1 text-xs text-red-600">{{ form.services.errors|join:', ' }}</p>{% endif %}
-        </div>
+            {% if form.non_field_errors %}
+            <div class="rounded-xl bg-red-50 px-4 py-3 ring-1 ring-red-200">
+                {% for error in form.non_field_errors %}
+                <p class="text-sm text-red-700">{{ error }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
 
-        <div class="flex items-center justify-between">
-            <a href="{% url 'appointments:professionals-list' %}" class="rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100">Cancelar</a>
-            <button type="submit" class="rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700">Guardar</button>
-        </div>
-    </form>
+            <div>
+                <label for="{{ form.user.id_for_label }}" class="mb-1.5 block text-sm font-medium text-slate-700">{{ form.user.label }}</label>
+                <select
+                    name="{{ form.user.html_name }}"
+                    id="{{ form.user.id_for_label }}"
+                    class="block w-full rounded-xl border {% if form.user.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                >
+                    <option value="">— Selecciona un usuario —</option>
+                    {% for value, label in form.user.field.choices %}
+                    {% if value %}<option value="{{ value }}" {% if form.user.value|stringformat:"s" == value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>{% endif %}
+                    {% endfor %}
+                </select>
+                {% if form.user.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.user.errors|join:", " }}</p>{% endif %}
+            </div>
+
+            <div>
+                <label for="{{ form.professional_type.id_for_label }}" class="mb-1.5 block text-sm font-medium text-slate-700">{{ form.professional_type.label }}</label>
+                <select
+                    name="{{ form.professional_type.html_name }}"
+                    id="{{ form.professional_type.id_for_label }}"
+                    class="block w-full rounded-xl border {% if form.professional_type.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                >
+                    {% for value, label in form.professional_type.field.choices %}
+                    <option value="{{ value }}" {% if form.professional_type.value == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                {% if form.professional_type.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.professional_type.errors|join:", " }}</p>{% endif %}
+            </div>
+
+            <div>
+                <label for="{{ form.services.id_for_label }}" class="mb-1.5 block text-sm font-medium text-slate-700">{{ form.services.label }}</label>
+                <p class="mb-2 text-xs text-slate-400">Mantén pulsado Ctrl (o Cmd en Mac) para seleccionar varios.</p>
+                <select
+                    name="{{ form.services.html_name }}"
+                    id="{{ form.services.id_for_label }}"
+                    multiple
+                    size="6"
+                    class="block w-full rounded-xl border {% if form.services.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                >
+                    {% for value, label in form.services.field.choices %}
+                    <option value="{{ value }}" {% if value in form.services.value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                {% if form.services.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.services.errors|join:", " }}</p>{% endif %}
+            </div>
+
+            <div class="flex items-center justify-between pt-2">
+                <a href="{% url 'appointments:professionals-list' %}" class="rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+                    Cancelar
+                </a>
+                <button type="submit" class="rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 transition active:scale-[0.98]">
+                    {% if object %}Guardar cambios{% else %}Guardar profesional{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
 </div>
 {% endblock %}

@@ -8,13 +8,13 @@
     <div class="rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
 
         {# Cabecera #}
-        <div class="border-b border-slate-200 px-8 py-6">
+        <div class="border-b border-slate-200 px-4 py-6 sm:px-8">
             <h2 class="text-lg font-semibold text-slate-900">Datos del paciente</h2>
             <p class="mt-1 text-sm text-slate-500">Completa la información para registrar un nuevo paciente.</p>
         </div>
 
         {# Formulario #}
-        <form method="post" novalidate class="px-8 py-7 space-y-6">
+        <form method="post" novalidate class="px-4 py-7 sm:px-8 space-y-6">
             {% csrf_token %}
 
             {# Errores generales #}
@@ -27,7 +27,7 @@
             {% endif %}
 
             {# Nombre y Apellido #}
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                     <label for="{{ form.first_name.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">
                         {{ form.first_name.label }}

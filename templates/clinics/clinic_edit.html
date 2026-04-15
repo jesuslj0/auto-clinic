@@ -7,12 +7,12 @@
 <div class="mx-auto max-w-2xl">
     <div class="rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
 
-        <div class="border-b border-slate-200 px-8 py-6">
+        <div class="border-b border-slate-200 px-4 py-6 sm:px-8">
             <h2 class="text-lg font-semibold text-slate-900">Datos de la clínica</h2>
             <p class="mt-1 text-sm text-slate-500">Actualiza la información de tu clínica.</p>
         </div>
 
-        <form method="post" enctype="multipart/form-data" novalidate class="px-8 py-7 space-y-6">
+        <form method="post" enctype="multipart/form-data" novalidate class="px-4 py-7 sm:px-8 space-y-6">
             {% csrf_token %}
 
             {% if form.non_field_errors %}
@@ -115,7 +115,7 @@
             {# ── Contacto ── #}
             <div class="space-y-4">
                 <h3 class="text-xs font-semibold uppercase tracking-widest text-slate-400">Contacto</h3>
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                         <label for="{{ form.phone.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">{{ form.phone.label }}</label>
                         <input
@@ -157,7 +157,7 @@
                     {% if form.address.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.address.errors|join:", " }}</p>{% endif %}
                 </div>
 
-                <div class="grid grid-cols-3 gap-4">
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <div>
                         <label for="{{ form.city.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">{{ form.city.label }}</label>
                         <input

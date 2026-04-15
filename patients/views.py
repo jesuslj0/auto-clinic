@@ -33,6 +33,11 @@ class PatientListView(ListView):
     template_name = 'patients/list.html'
     context_object_name = 'patients'
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['section'] = 'patients'
+        return context
+
     def get_queryset(self):
         query = self.request.GET.get('q', '').strip()
         queryset = Patient.objects.annotate(appointment_count=Count('appointments')).prefetch_related('appointments')
@@ -52,6 +57,11 @@ class PatientDetailView(DetailView):
     context_object_name = 'patient'
     template_name = 'patients/detail.html'
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['section'] = 'patients'
+        return context
+
     def get_queryset(self):
         appointment_queryset = Appointment.objects.select_related('service', 'professional__user').order_by('-scheduled_at')
         return Patient.objects.prefetch_related(Prefetch('appointments', queryset=appointment_queryset))
@@ -70,6 +80,7 @@ class PatientEditView(UpdateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['form'] = self.form_class(instance=self.object)
+        context['section'] = 'patients'
         return context
     
     def form_valid(self, form):

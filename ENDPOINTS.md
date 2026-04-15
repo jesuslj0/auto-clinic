@@ -39,16 +39,63 @@ Todos los ViewSets de DRF generan automáticamente las rutas estándar:
 |---------|-----------|---------|----------|---------|------------|
 | `PatientViewSet` | `/api/patients/` | `IsStaffOrAdmin` | first_name, last_name, email, phone | clinic, phone | first_name, last_name, email, phone, created_at |
 | `ServiceViewSet` | `/api/services/` | `IsStaffOrAdmin` | name, description | clinic, is_active | name, price, duration_minutes, created_at |
-| `AppointmentViewSet` | `/api/appointments/` | `IsStaffOrAdmin` | patient__first_name, patient__last_name, patient_name, patient_phone, status | clinic, status, service, patient, patient_phone, reminder_24h_sent, reminder_3h_sent, reminder_responded, scheduled_at_gte, scheduled_at_lte | scheduled_at, status, created_at, patient_name |
+| `ProfessionalViewSet` | `/api/professionals/` | `IsStaffOrAdmin` | user__first_name, user__last_name, user__email | clinic, professional_type, service | user__first_name, user__last_name, user__email, professional_type |
+| `AppointmentViewSet` | `/api/appointments/` | `IsStaffOrAdmin` | patient__first_name, patient__last_name, patient_name, patient_phone, status | clinic, status, service, patient, professional, patient_phone, reminder_24h_sent, reminder_3h_sent, reminder_responded, scheduled_at_gte, scheduled_at_lte | scheduled_at, status, created_at, patient_name |
 | `ReminderViewSet` | `/api/reminders/` | `IsStaffOrAdmin` | — | clinic, appointment, reminder_type, success | scheduled_for, sent_at, reminder_type, success |
 
 > `PatientViewSet` y `AppointmentViewSet` soportan **BulkCreate** y **BulkUpdate**.
 
-#### Acción personalizada en AppointmentViewSet
+#### Campos del serializer de Profesional
+
+El recurso `/api/professionals/` devuelve:
+
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| `id` | int | Solo lectura |
+| `user` | int (FK) | ID del usuario vinculado |
+| `user_info` | objeto | `id, first_name, last_name, email, full_name` (solo lectura) |
+| `clinic` | int (FK) | ID de la clínica |
+| `professional_type` | string | `medico`, `dentista`, `psicologo`, `enfermero`, `fisioterapeuta`, `nutricionista` |
+| `professional_type_display` | string | Etiqueta legible (solo lectura) |
+| `services_detail` | array | Servicios que ofrece: `id, name, duration_minutes, price, is_active` (solo lectura) |
+| `service_ids` | array | IDs de servicios para escritura |
+
+#### Campos adicionales del serializer de Cita (AppointmentSerializer)
+
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| `professional_name` | string | Nombre completo del profesional (solo lectura) |
+| `professional_type` | string | Tipo del profesional (`medico`, etc.) (solo lectura) |
+| `professional_type_display` | string | Etiqueta legible del tipo (solo lectura) |
+
+#### Acciones personalizadas en ProfessionalViewSet
+
+| Método | URL | Descripción | Parámetros |
+|--------|-----|-------------|------------|
+| GET | `/api/professionals/{id}/available-slots/` | Slots libres del profesional en una fecha | `date` (req.), `duration`, `start_hour`, `end_hour` |
+| GET | `/api/professionals/{id}/services/` | Servicios que ofrece el profesional | — |
+
+**Ejemplo de respuesta `available-slots`:**
+```json
+{
+  "professional_id": 1,
+  "professional_name": "Dr. García",
+  "date": "2026-04-20",
+  "duration_minutes": 30,
+  "available_slots": ["2026-04-20T08:00:00+02:00", "2026-04-20T08:30:00+02:00"]
+}
+```
+
+#### Acciones personalizadas en AppointmentViewSet
 
 | Método | URL | Descripción |
 |--------|-----|-------------|
 | GET | `/api/appointments/{id}/status/` | Devuelve id, status, patient_name, scheduled_at, confirmation_token |
+| GET | `/api/appointments/available-slots/` | Slots libres de la clínica (`date`, `duration`, `start_hour`, `end_hour`, `clinic`) |
+| GET | `/api/appointments/pending-reminders/` | Citas pendientes de recordatorio (`type=24h\|3h`) |
+| GET | `/api/appointments/export/` | Exportar citas |
+| POST | `/api/appointments/bulk-create/` | Crear múltiples citas |
+| PATCH | `/api/appointments/bulk-update/` | Actualizar múltiples citas |
 
 ### Facturación
 
@@ -114,6 +161,9 @@ Todos los ViewSets de DRF generan automáticamente las rutas estándar:
 |--------|-----|-------|--------|
 | GET | `/appointments/` | `AppointmentCalendarView` | Autenticado |
 | GET | `/appointments/list/` | `AppointmentListView` | Autenticado |
+| GET | `/appointments/professionals/` | `ProfessionalListView` | Autenticado |
+| GET/POST | `/appointments/professionals/crear/` | `ProfessionalCreateView` | Autenticado |
+| GET/POST | `/appointments/professionals/{id}/editar/` | `ProfessionalUpdateView` | Autenticado |
 
 ### Pacientes — `patients/urls.py`
 

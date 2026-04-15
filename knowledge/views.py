@@ -36,6 +36,7 @@ class KnowledgeBaseListView(LoginRequiredMixin, ListView):
             label = KB_TYPE_DISPLAY.get(entry.kb_type, entry.kb_type)
             grouped.setdefault(label, []).append(entry)
         context['grouped_entries'] = grouped
+        context['section'] = 'knowledge'
         return context
 
 
@@ -44,6 +45,11 @@ class KnowledgeBaseCreateView(LoginRequiredMixin, CreateView):
     form_class = KnowledgeBaseForm
     template_name = 'knowledge/knowledge_form.html'
     success_url = reverse_lazy('knowledge:list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['section'] = 'knowledge'
+        return context
 
     def form_valid(self, form):
         form.instance.clinic = self.request.user.clinic
@@ -56,6 +62,11 @@ class KnowledgeBaseEditView(LoginRequiredMixin, UpdateView):
     form_class = KnowledgeBaseForm
     template_name = 'knowledge/knowledge_form.html'
     success_url = reverse_lazy('knowledge:list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['section'] = 'knowledge'
+        return context
 
     def get_queryset(self):
         return ClinicKnowledgeBase.objects.filter(clinic=self.request.user.clinic)
