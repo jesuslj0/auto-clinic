@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from appointments.models import Appointment, Professional
+from appointments.models import Appointment, Professional, ProfessionalSchedule
 from core.models import User
 from services.models import Service
 
@@ -24,6 +24,23 @@ class ServiceMinimalSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class ProfessionalScheduleSerializer(serializers.ModelSerializer):
+    day_of_week_display = serializers.CharField(source='get_day_of_week_display', read_only=True)
+
+    class Meta:
+        model = ProfessionalSchedule
+        fields = ['id', 'professional', 'day_of_week', 'day_of_week_display', 'start_time', 'end_time', 'is_active']
+        read_only_fields = ['id']
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        start = attrs.get('start_time', getattr(self.instance, 'start_time', None))
+        end = attrs.get('end_time', getattr(self.instance, 'end_time', None))
+        if start and end and start >= end:
+            raise serializers.ValidationError({'end_time': 'La hora de fin debe ser posterior a la hora de inicio.'})
+        return attrs
+
+
 class ProfessionalSerializer(serializers.ModelSerializer):
     user_info = UserMinimalSerializer(source='user', read_only=True)
     professional_type_display = serializers.CharField(source='get_professional_type_display', read_only=True)
@@ -35,6 +52,7 @@ class ProfessionalSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False,
     )
+    schedules = ProfessionalScheduleSerializer(many=True, read_only=True)
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
@@ -59,6 +77,7 @@ class ProfessionalSerializer(serializers.ModelSerializer):
             'professional_type_display',
             'services_detail',
             'service_ids',
+            'schedules',
         ]
         read_only_fields = ['id']
 

@@ -14,8 +14,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from appointments.forms import ProfessionalForm
-from appointments.models import Appointment, Professional
-from appointments.serializers import AppointmentSerializer, ProfessionalSerializer
+from appointments.models import Appointment, Professional, ProfessionalSchedule
+from appointments.serializers import AppointmentSerializer, ProfessionalScheduleSerializer, ProfessionalSerializer
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
 from core.models import Clinic
 from core.permissions import IsStaffOrAdmin
@@ -210,20 +210,35 @@ class ProfessionalViewSet(viewsets.ModelViewSet):
 
         try:
             duration = int(request.query_params.get('duration', 30))
-            start_hour = int(request.query_params.get('start_hour', 8))
-            end_hour = int(request.query_params.get('end_hour', 18))
         except ValueError:
             return Response(
-                {'detail': 'Los parámetros duration, start_hour y end_hour deben ser enteros.'},
+                {'detail': 'El parámetro "duration" debe ser un entero.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if duration <= 0 or start_hour < 0 or end_hour > 24 or start_hour >= end_hour:
-            return Response({'detail': 'Parámetros de horario inválidos.'}, status=status.HTTP_400_BAD_REQUEST)
+        if duration <= 0:
+            return Response({'detail': 'El parámetro "duration" debe ser mayor que 0.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Buscar horario del profesional para ese día de la semana (0=lunes … 6=domingo)
+        day_of_week = target_date.weekday()
+        try:
+            schedule = ProfessionalSchedule.objects.get(
+                professional=professional,
+                day_of_week=day_of_week,
+                is_active=True,
+            )
+        except ProfessionalSchedule.DoesNotExist:
+            return Response({
+                'professional_id': professional.pk,
+                'professional_name': str(professional),
+                'date': date_str,
+                'works_this_day': False,
+                'available_slots': [],
+            })
 
         tz = timezone.get_current_timezone()
-        day_start = timezone.make_aware(datetime.combine(target_date, time(start_hour, 0)), tz)
-        day_end = timezone.make_aware(datetime.combine(target_date, time(end_hour, 0)), tz)
+        day_start = timezone.make_aware(datetime.combine(target_date, schedule.start_time), tz)
+        day_end = timezone.make_aware(datetime.combine(target_date, schedule.end_time), tz)
 
         busy_appointments = Appointment.objects.filter(
             professional=professional,
@@ -255,6 +270,11 @@ class ProfessionalViewSet(viewsets.ModelViewSet):
             'professional_id': professional.pk,
             'professional_name': str(professional),
             'date': date_str,
+            'works_this_day': True,
+            'schedule': {
+                'start_time': schedule.start_time.strftime('%H:%M'),
+                'end_time': schedule.end_time.strftime('%H:%M'),
+            },
             'duration_minutes': duration,
             'available_slots': slots,
         })
@@ -267,6 +287,31 @@ class ProfessionalViewSet(viewsets.ModelViewSet):
         return Response({'professional_id': professional.pk, 'services': serializer.data})
 
 
+class ProfessionalScheduleFilter(django_filters.FilterSet):
+    professional = django_filters.NumberFilter(field_name='professional_id')
+    day_of_week = django_filters.NumberFilter(field_name='day_of_week')
+    is_active = django_filters.BooleanFilter(field_name='is_active')
+
+    class Meta:
+        model = ProfessionalSchedule
+        fields = ['professional', 'day_of_week', 'is_active']
+
+
+class ProfessionalScheduleViewSet(viewsets.ModelViewSet):
+    serializer_class = ProfessionalScheduleSerializer
+    permission_classes = [IsStaffOrAdmin]
+    filterset_class = ProfessionalScheduleFilter
+    ordering_fields = ['day_of_week', 'start_time']
+    ordering = ['day_of_week']
+
+    def get_queryset(self):
+        queryset = ProfessionalSchedule.objects.select_related('professional__user', 'professional__clinic')
+        user = self.request.user
+        if user.is_superuser or not user.clinic_id:
+            return queryset
+        return queryset.filter(professional__clinic=user.clinic)
+
+
 class AppointmentCalendarView(TemplateView):
     template_name = 'appointments/calendar.html'
 
@@ -274,22 +319,92 @@ class AppointmentCalendarView(TemplateView):
         context = super().get_context_data(**kwargs)
         week_start = self._get_week_start()
         week_days = [week_start + timedelta(days=offset) for offset in range(7)]
-        appointments = Appointment.objects.select_related('patient', 'service', 'professional__user').filter(
+
+        user = self.request.user
+
+        # Determinar si el usuario tiene perfil de profesional
+        try:
+            professional = user.professional_profile if user.is_authenticated else None
+        except Professional.DoesNotExist:
+            professional = None
+
+        appointments_qs = Appointment.objects.select_related('patient', 'service', 'professional__user').filter(
             scheduled_at__date__gte=week_start,
             scheduled_at__date__lte=week_start + timedelta(days=6),
         )
-        context.update(
-            {
-                'appointments': appointments,
-                'week_start': week_start,
-                'week_end': week_start + timedelta(days=6),
-                'previous_week': week_start - timedelta(days=7),
-                'next_week': week_start + timedelta(days=7),
-                'week_days': week_days,
-                'time_slots': [time(hour=hour) for hour in range(8, 18)],
-                'section': 'calendar',
-            }
-        )
+        schedules_qs = ProfessionalSchedule.objects.filter(is_active=True).select_related('professional__user')
+
+        if professional:
+            # Vista personal: solo sus citas y su horario
+            appointments_qs = appointments_qs.filter(professional=professional)
+            schedules_qs = schedules_qs.filter(professional=professional)
+        elif user.is_authenticated and not user.is_superuser and user.clinic_id:
+            # Admin de clínica: toda la clínica
+            appointments_qs = appointments_qs.filter(clinic=user.clinic)
+            schedules_qs = schedules_qs.filter(professional__clinic=user.clinic)
+
+        appointments = appointments_qs
+
+        # Agrupar por día de la semana
+        schedule_by_dow = {}
+        for s in schedules_qs:
+            schedule_by_dow.setdefault(s.day_of_week, []).append(s)
+
+        has_schedules = bool(schedule_by_dow)
+
+        # Rango global de horas que cubre cualquier horario
+        if has_schedules:
+            global_start = min(s.start_time.hour for sl in schedule_by_dow.values() for s in sl)
+            global_end = max(s.end_time.hour for sl in schedule_by_dow.values() for s in sl)
+        else:
+            global_start, global_end = 8, 18
+
+        time_slots = [time(hour=h) for h in range(global_start, global_end)]
+
+        # Construir info de cada columna del calendario
+        week_days_info = []
+        for day in week_days:
+            dow = day.weekday()
+            sched_list = schedule_by_dow.get(dow, [])
+
+            if has_schedules and sched_list:
+                working_hours = set()
+                for s in sched_list:
+                    working_hours.update(range(s.start_time.hour, s.end_time.hour))
+                min_start = min(s.start_time for s in sched_list)
+                max_end = max(s.end_time for s in sched_list)
+                schedule_label = f'{min_start.strftime("%H:%M")}–{max_end.strftime("%H:%M")}'
+                is_working = True
+            elif has_schedules:
+                working_hours = set()
+                schedule_label = ''
+                is_working = False
+            else:
+                # Sin horarios configurados: comportamiento anterior (todo activo)
+                working_hours = set(range(global_start, global_end))
+                schedule_label = ''
+                is_working = True
+
+            week_days_info.append({
+                'date': day,
+                'dow': dow,
+                'is_working': is_working,
+                'schedule_label': schedule_label,
+                'working_hours': working_hours,
+            })
+
+        context.update({
+            'appointments': appointments,
+            'professional': professional,
+            'week_start': week_start,
+            'week_end': week_start + timedelta(days=6),
+            'previous_week': week_start - timedelta(days=7),
+            'next_week': week_start + timedelta(days=7),
+            'week_days_info': week_days_info,
+            'time_slots': time_slots,
+            'has_schedules': has_schedules,
+            'section': 'calendar',
+        })
         return context
 
     def _get_week_start(self):

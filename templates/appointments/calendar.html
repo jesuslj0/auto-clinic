@@ -7,7 +7,9 @@
 <section class="space-y-6">
     <div class="flex flex-col gap-4 rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:flex-row sm:items-center sm:justify-between">
         <div>
-            <h3 class="text-lg font-semibold text-slate-900">Agenda semanal</h3>
+            <h3 class="text-lg font-semibold text-slate-900">
+                {% if professional %}Mi agenda — {{ professional }}{% else %}Agenda semanal{% endif %}
+            </h3>
             <p class="mt-1 text-sm text-slate-500">{{ week_start|date:"j M"|default:"Esta semana" }}{% if week_end %} – {{ week_end|date:"j M, Y" }}{% endif %}</p>
         </div>
         <div class="flex items-center gap-2">
@@ -16,60 +18,90 @@
         </div>
     </div>
 
+    {% if not has_schedules %}
+    <div class="flex items-center gap-3 rounded-2xl bg-amber-50 px-5 py-4 ring-1 ring-amber-200">
+        <svg class="h-5 w-5 shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+        </svg>
+        <p class="text-sm text-amber-800">
+            No hay horarios configurados. El calendario muestra el rango por defecto (08:00–18:00).
+            <a href="{% url 'appointments:professionals-list' %}" class="font-semibold underline">Configura los horarios de tus profesionales.</a>
+        </p>
+    </div>
+    {% endif %}
+
     <section class="overflow-hidden rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
         <div class="overflow-x-auto">
             <div class="grid min-w-[900px] grid-cols-[80px_repeat(7,minmax(140px,1fr))]">
+
+                {# Cabecera: columna de hora #}
                 <div class="border-b border-r border-slate-200 bg-slate-50 p-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Hora</div>
-                {% for day in week_days %}
-                    <div class="border-b border-r border-slate-200 bg-slate-50 p-4">
-                        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ day|date:"D" }}</p>
-                        <p class="mt-1 text-sm font-semibold text-slate-900">{{ day|date:"j M" }}</p>
+
+                {# Cabecera: columnas de días #}
+                {% for day_info in week_days_info %}
+                    <div class="border-b border-r border-slate-200 p-4
+                        {% if day_info.is_working %}bg-slate-50{% else %}bg-slate-100{% endif %}">
+                        <p class="text-xs font-semibold uppercase tracking-wide
+                            {% if day_info.is_working %}text-slate-500{% else %}text-slate-400{% endif %}">
+                            {{ day_info.date|date:"D" }}
+                        </p>
+                        <p class="mt-1 text-sm font-semibold
+                            {% if day_info.is_working %}text-slate-900{% else %}text-slate-400{% endif %}">
+                            {{ day_info.date|date:"j M" }}
+                        </p>
+                        {% if day_info.schedule_label %}
+                            <p class="mt-1 text-[10px] font-medium text-brand-600">{{ day_info.schedule_label }}</p>
+                        {% elif has_schedules %}
+                            <p class="mt-1 text-[10px] font-medium text-slate-400">No laboral</p>
+                        {% endif %}
                     </div>
                 {% endfor %}
 
+                {# Filas de horas #}
                 {% for slot in time_slots %}
                     <div class="border-r border-slate-200 px-3 py-4 text-xs font-medium text-slate-600">
-                        {{ slot|time:"g:i A"|default:slot }}
+                        {{ slot|time:"H:i" }}
                     </div>
 
-                    {% for day in week_days %}
-                        <div class="relative min-h-28 border-r border-t border-slate-200 bg-white p-2 align-top">
+                    {% for day_info in week_days_info %}
+                        {% if slot.hour in day_info.working_hours %}
+                            <div class="relative min-h-28 border-r border-t border-slate-200 bg-white p-2 align-top">
+                                {% for appointment in appointments %}
+                                    {% if appointment.scheduled_at|date:'Y-m-d' == day_info.date|date:'Y-m-d' and appointment.scheduled_at|time:'H:i' == slot|time:'H:i' %}
+                                        <a href="{% url 'core:dashboard-manage-appointment' appointment.id %}"
+                                            class="absolute inset-2 rounded-2xl border p-3 shadow-sm transition
+                                                    hover:shadow-md hover:scale-[1.01] active:scale-[0.99]
+                                                    {% if appointment.status == 'confirmed' %}border-green-200 bg-green-50
+                                                    {% elif appointment.status == 'cancelled' %}border-red-200 bg-red-50
+                                                    {% else %}border-yellow-200 bg-yellow-50{% endif %}">
 
-                            {% for appointment in appointments %}
-                                {% if appointment.scheduled_at|date:'Y-m-d' == day|date:'Y-m-d' and appointment.scheduled_at|time:'H:i' == slot|time:'H:i' %}
-                                    <a href="{% url 'core:dashboard-manage-appointment' appointment.id %}"
-                                        class="absolute inset-2 rounded-2xl border p-3 shadow-sm transition
-                                                hover:shadow-md hover:scale-[1.01] active:scale-[0.99]">
-
-                                            {# Estado visual #}
                                             <div class="mb-2 flex items-center justify-between">
                                                 <span class="h-2 w-2 rounded-full
                                                     {% if appointment.status == 'confirmed' %}bg-green-500
                                                     {% elif appointment.status == 'cancelled' %}bg-red-500
                                                     {% else %}bg-yellow-400{% endif %}">
                                                 </span>
-
                                                 <span class="text-[10px] text-slate-400 uppercase tracking-wide">
-                                                    {{ appointment.status|default:"pending" }}
+                                                    {{ appointment.status }}
                                                 </span>
                                             </div>
 
-                                            <p class="text-sm font-semibold text-slate-900">
-                                                {{ appointment.patient }}
-                                            </p>
-
-                                            <p class="mt-1 text-xs text-slate-600">
-                                                {{ appointment.service }}
-                                            </p>
-
+                                            <p class="text-sm font-semibold text-slate-900">{{ appointment.patient }}</p>
+                                            <p class="mt-1 text-xs text-slate-600">{{ appointment.service }}</p>
+                                            {% if appointment.professional %}
+                                                <p class="mt-1 text-[10px] text-slate-400">{{ appointment.professional }}</p>
+                                            {% endif %}
                                             <p class="mt-2 text-xs text-slate-400">
-                                                {{ appointment.scheduled_at|date:"g:i A" }} – {{ appointment.end_at|date:"g:i A" }}
+                                                {{ appointment.scheduled_at|date:"H:i" }}{% if appointment.end_at %} – {{ appointment.end_at|date:"H:i" }}{% endif %}
                                             </p>
                                         </a>
-                                {% endif %}
-                            {% endfor %}
-
-                        </div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="min-h-28 border-r border-t border-slate-100 bg-slate-50/70 p-2 align-top">
+                            </div>
+                        {% endif %}
                     {% endfor %}
 
                 {% empty %}
@@ -77,6 +109,7 @@
                         No hay franjas horarias configuradas para esta semana.
                     </div>
                 {% endfor %}
+
             </div>
         </div>
     </section>

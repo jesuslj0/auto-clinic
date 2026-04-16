@@ -1,6 +1,12 @@
 from django.contrib import admin
 
-from appointments.models import Appointment, Professional
+from appointments.models import Appointment, Professional, ProfessionalSchedule
+
+
+class ProfessionalScheduleInline(admin.TabularInline):
+    model = ProfessionalSchedule
+    extra = 0
+    fields = ('day_of_week', 'start_time', 'end_time', 'is_active')
 
 
 @admin.register(Professional)
@@ -9,6 +15,15 @@ class ProfessionalAdmin(admin.ModelAdmin):
     search_fields = ('user__email', 'user__first_name', 'user__last_name', 'clinic__name')
     list_filter = ('clinic', 'professional_type')
     filter_horizontal = ('services',)
+    inlines = [ProfessionalScheduleInline]
+
+
+@admin.register(ProfessionalSchedule)
+class ProfessionalScheduleAdmin(admin.ModelAdmin):
+    list_display = ('professional', 'day_of_week', 'start_time', 'end_time', 'is_active')
+    list_filter = ('day_of_week', 'is_active', 'professional__clinic')
+    search_fields = ('professional__user__first_name', 'professional__user__last_name')
+    ordering = ('professional', 'day_of_week')
 
 
 @admin.register(Appointment)
