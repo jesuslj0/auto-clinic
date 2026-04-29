@@ -4,7 +4,7 @@
 {% block page_heading %}Calendario semanal{% endblock %}
 
 {% block content %}
-<section class="space-y-6">
+<section class="space-y-6" x-data="{ panelOpen: false, panelLoading: false }" @keydown.escape.window="panelOpen = false">
     <div class="flex flex-col gap-4 rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:flex-row sm:items-center sm:justify-between">
         <div>
             <h3 class="text-lg font-semibold text-slate-900">
@@ -68,13 +68,20 @@
                             <div class="relative min-h-28 border-r border-t border-slate-200 bg-white p-2 align-top">
                                 {% for appointment in appointments %}
                                     {% if appointment.scheduled_at|date:'Y-m-d' == day_info.date|date:'Y-m-d' and appointment.scheduled_at|time:'H:i' == slot|time:'H:i' %}
-                                        <a href="{% url 'core:dashboard-manage-appointment' appointment.id %}"
-                                            class="absolute inset-2 rounded-2xl border p-3 shadow-sm transition
+                                        <button
+                                            type="button"
+                                            class="absolute inset-2 rounded-2xl border p-3 shadow-sm transition text-left
                                                     hover:shadow-md hover:scale-[1.01] active:scale-[0.99]
                                                     {% if appointment.status == 'confirmed' %}border-green-200 bg-green-50
                                                     {% elif appointment.status == 'cancelled' %}border-red-200 bg-red-50
-                                                    {% else %}border-yellow-200 bg-yellow-50{% endif %}">
-
+                                                    {% else %}border-yellow-200 bg-yellow-50{% endif %}"
+                                            hx-get="{% url 'core:appointment-quick-detail' appointment.id %}"
+                                            hx-target="#calendar-panel-content"
+                                            hx-swap="innerHTML"
+                                            hx-indicator="#panel-spinner"
+                                            @click="panelOpen = true; panelLoading = true"
+                                            @htmx:after-request="panelLoading = false"
+                                        >
                                             <div class="mb-2 flex items-center justify-between">
                                                 <span class="h-2 w-2 rounded-full
                                                     {% if appointment.status == 'confirmed' %}bg-green-500
@@ -82,7 +89,7 @@
                                                     {% else %}bg-yellow-400{% endif %}">
                                                 </span>
                                                 <span class="text-[10px] text-slate-400 uppercase tracking-wide">
-                                                    {{ appointment.status }}
+                                                    {{ appointment.get_status_display|default:appointment.status }}
                                                 </span>
                                             </div>
 
@@ -94,7 +101,7 @@
                                             <p class="mt-2 text-xs text-slate-400">
                                                 {{ appointment.scheduled_at|date:"H:i" }}{% if appointment.end_at %} – {{ appointment.end_at|date:"H:i" }}{% endif %}
                                             </p>
-                                        </a>
+                                        </button>
                                     {% endif %}
                                 {% endfor %}
                             </div>
@@ -113,5 +120,71 @@
             </div>
         </div>
     </section>
+
+    <!-- x-teleport requiere un único elemento raíz -->
+    <template x-teleport="body">
+        <div>
+            <!-- Backdrop -->
+            <div
+                x-show="panelOpen"
+                x-transition:enter="transition ease-out duration-200"
+                x-transition:enter-start="opacity-0"
+                x-transition:enter-end="opacity-100"
+                x-transition:leave="transition ease-in duration-150"
+                x-transition:leave-start="opacity-100"
+                x-transition:leave-end="opacity-0"
+                @click="panelOpen = false"
+                class="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm"
+                style="display:none"
+                aria-hidden="true"
+            ></div>
+
+            <!-- Panel -->
+            <aside
+                x-show="panelOpen"
+                x-transition:enter="transition ease-out duration-300"
+                x-transition:enter-start="translate-x-full"
+                x-transition:enter-end="translate-x-0"
+                x-transition:leave="transition ease-in duration-200"
+                x-transition:leave-start="translate-x-0"
+                x-transition:leave-end="translate-x-full"
+                class="fixed inset-0 left-auto z-50 flex w-full max-w-sm flex-col bg-white shadow-[-4px_0_32px_rgba(15,23,42,0.12)]"
+                style="display:none"
+                aria-label="Detalle de la cita"
+            >
+                <div class="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+                    <p class="text-sm font-semibold text-slate-700">Cita seleccionada</p>
+                    <button
+                        type="button"
+                        @click="panelOpen = false"
+                        class="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                        aria-label="Cerrar panel"
+                    >
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="flex-1 overflow-y-auto px-6 py-6">
+                    <div id="panel-spinner" class="htmx-indicator flex items-center justify-center py-12">
+                        <svg class="h-6 w-6 animate-spin text-brand-600" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                        </svg>
+                    </div>
+                    <div id="calendar-panel-content"></div>
+                </div>
+            </aside>
+        </div>
+    </template>
 </section>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .htmx-indicator { display: none; }
+    .htmx-request .htmx-indicator { display: flex; }
+    .htmx-request.htmx-indicator { display: flex; }
+</style>
 {% endblock %}

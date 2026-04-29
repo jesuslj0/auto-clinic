@@ -11,7 +11,7 @@ from django.views.generic import TemplateView, UpdateView
 from rest_framework import viewsets
 from rest_framework.response import Response
 
-from appointments.models import Appointment
+from appointments.models import Appointment, AppointmentStatusHistory
 from core.forms import ClinicForm, EmailAuthenticationForm
 from core.mixins import ExportMixin
 from core.models import Clinic, User
@@ -113,16 +113,54 @@ class DashboardAppointmentActionView(LoginRequiredMixin, View):
                 return redirect('core:dashboard')
 
         action = request.POST.get('action')
+        actor_label = user.get_full_name() or user.email
         if action == 'confirm':
+            if appointment.status == Appointment.Status.CANCELLED:
+                messages.error(request, 'Esta cita fue cancelada y no puede confirmarse.')
+                next_url = request.POST.get('next') or 'core:dashboard'
+                return redirect(next_url)
+            if appointment.professional:
+                conflict = Appointment.find_overlap(
+                    appointment.professional,
+                    appointment.scheduled_at,
+                    appointment.get_end_datetime(),
+                    exclude_pk=appointment.pk,
+                )
+                if conflict:
+                    messages.error(
+                        request,
+                        f'No se puede confirmar: {appointment.professional} ya tiene la cita '
+                        f'"{conflict}" a las {conflict.scheduled_at:%H:%M} en ese mismo tramo horario.',
+                    )
+                    next_url = request.POST.get('next') or 'core:dashboard'
+                    return redirect(next_url)
+            prev = appointment.status
             appointment.status = Appointment.Status.CONFIRMED
+            appointment.save(update_fields=['status', 'updated_at'])
+            AppointmentStatusHistory.objects.create(
+                appointment=appointment,
+                from_status=prev,
+                to_status=Appointment.Status.CONFIRMED,
+                actor=AppointmentStatusHistory.Actor.STAFF,
+                actor_label=actor_label,
+            )
             success_message = 'Cita confirmada correctamente.'
         elif action == 'reject':
+            prev = appointment.status
             appointment.status = Appointment.Status.CANCELLED
+            appointment.cancelled_by = Appointment.CancelledBy.STAFF
+            appointment.save(update_fields=['status', 'cancelled_by', 'updated_at'])
+            AppointmentStatusHistory.objects.create(
+                appointment=appointment,
+                from_status=prev,
+                to_status=Appointment.Status.CANCELLED,
+                actor=AppointmentStatusHistory.Actor.STAFF,
+                actor_label=actor_label,
+            )
             success_message = 'Cita rechazada correctamente.'
         else:
             return HttpResponseBadRequest('Acción no soportada.')
 
-        appointment.save(update_fields=['status', 'updated_at'])
         messages.success(request, success_message)
         return redirect('core:dashboard')
 
@@ -137,7 +175,8 @@ class DashboardAppointmentManageView(LoginRequiredMixin, TemplateView):
 
     def _get_scoped_appointment(self):
         appointment = get_object_or_404(
-            Appointment.objects.select_related('patient', 'service', 'professional__user', 'clinic'),
+            Appointment.objects.select_related('patient', 'service', 'professional__user', 'clinic')
+                               .prefetch_related('status_history'),
             pk=self.kwargs['appointment_id'],
         )
 
@@ -146,3 +185,23 @@ class DashboardAppointmentManageView(LoginRequiredMixin, TemplateView):
             raise PermissionDenied('No tienes permiso para gestionar esta cita.')
 
         return appointment
+
+
+class AppointmentQuickDetailView(LoginRequiredMixin, View):
+    """Devuelve un fragmento HTML con el resumen de una cita para el panel lateral del calendario."""
+
+    def get(self, request, appointment_id):
+        from django.template.loader import render_to_string
+        appointment = get_object_or_404(
+            Appointment.objects.select_related('patient', 'service', 'professional__user'),
+            pk=appointment_id,
+        )
+        user = request.user
+        if not user.is_superuser and (not user.clinic_id or appointment.clinic_id != user.clinic_id):
+            raise PermissionDenied
+        from django.http import HttpResponse
+        html = render_to_string(
+            'dashboard/_appointment_quick_detail.html',
+            {'appointment': appointment, 'request': request},
+        )
+        return HttpResponse(html)

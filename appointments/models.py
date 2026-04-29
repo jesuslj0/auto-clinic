@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -91,9 +92,19 @@ class Appointment(models.Model):
     patient_name = models.CharField(max_length=255, blank=True)
     service_name = models.CharField(max_length=255, blank=True)
 
+    class CancelledBy(models.TextChoices):
+        PATIENT = 'patient', 'Paciente'
+        STAFF = 'staff', 'Clínica'
+
     scheduled_at = models.DateTimeField()
     end_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    cancelled_by = models.CharField(
+        max_length=10,
+        choices=CancelledBy.choices,
+        null=True,
+        blank=True,
+    )
     confirmation_token = models.UUIDField(default=uuid.uuid4, unique=True)
 
     # External calendar integration
@@ -134,6 +145,48 @@ class Appointment(models.Model):
         name = str(self.patient) if self.patient else self.patient_name
         return f'{name} - {self.scheduled_at:%Y-%m-%d %H:%M}'
 
+    # ------------------------------------------------------------------
+    # Helpers de tiempo
+    # ------------------------------------------------------------------
+
+    def get_end_datetime(self):
+        """Devuelve la hora de fin real de la cita."""
+        if self.end_at:
+            return self.end_at
+        if self.service_id and self.service:
+            return self.scheduled_at + timedelta(minutes=self.service.duration_minutes)
+        return self.scheduled_at + timedelta(minutes=30)
+
+    @classmethod
+    def find_overlap(cls, professional, start, end, exclude_pk=None):
+        """
+        Devuelve la primera cita activa del profesional que se solapa con
+        el rango [start, end), o None si no existe conflicto.
+
+        Sólo considera citas en estado PENDING o CONFIRMED.
+        """
+        # Candidatas: empiezan antes de que termine la nueva
+        candidates = (
+            cls.objects
+            .filter(
+                professional=professional,
+                status__in=[cls.Status.PENDING, cls.Status.CONFIRMED],
+                scheduled_at__lt=end,
+            )
+            .select_related('service')
+        )
+        if exclude_pk:
+            candidates = candidates.exclude(pk=exclude_pk)
+
+        for appt in candidates:
+            if appt.get_end_datetime() > start:
+                return appt
+        return None
+
+    # ------------------------------------------------------------------
+    # Validación
+    # ------------------------------------------------------------------
+
     def clean(self):
         super().clean()
         if not self.professional or not self.service:
@@ -144,3 +197,41 @@ class Appointment(models.Model):
 
         if not self.professional.services.filter(pk=self.service_id).exists():
             raise ValidationError({'professional': 'The selected professional does not provide the selected service.'})
+
+        if self.scheduled_at and self.status in (self.Status.PENDING, self.Status.CONFIRMED):
+            end = self.get_end_datetime()
+            conflict = self.find_overlap(self.professional, self.scheduled_at, end, exclude_pk=self.pk)
+            if conflict:
+                raise ValidationError({
+                    'scheduled_at': (
+                        f'El profesional ya tiene una cita activa que se solapa: '
+                        f'{conflict} ({conflict.scheduled_at:%H:%M}–{conflict.get_end_datetime():%H:%M}).'
+                    )
+                })
+
+
+class AppointmentStatusHistory(models.Model):
+    """Registro inmutable de cada cambio de estado en una cita."""
+
+    class Actor(models.TextChoices):
+        PATIENT = 'patient', 'Paciente'
+        STAFF = 'staff', 'Clínica'
+        SYSTEM = 'system', 'Sistema'
+
+    appointment = models.ForeignKey(
+        Appointment,
+        on_delete=models.CASCADE,
+        related_name='status_history',
+    )
+    from_status = models.CharField(max_length=20, choices=Appointment.Status.choices, null=True, blank=True)
+    to_status = models.CharField(max_length=20, choices=Appointment.Status.choices)
+    actor = models.CharField(max_length=10, choices=Actor.choices, default=Actor.SYSTEM)
+    actor_label = models.CharField(max_length=150, blank=True)
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'appointment_status_history'
+        ordering = ['changed_at']
+
+    def __str__(self):
+        return f'{self.appointment} | {self.from_status} → {self.to_status} ({self.actor})'

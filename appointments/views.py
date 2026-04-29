@@ -420,8 +420,10 @@ class AppointmentCalendarView(TemplateView):
 
 class AppointmentListView(TemplateView):
     template_name = 'appointments/list.html'
+    paginate_by = 20
 
     def get_context_data(self, **kwargs):
+        from django.core.paginator import Paginator
         context = super().get_context_data(**kwargs)
         appointments = Appointment.objects.select_related('patient', 'service', 'professional__user')
         selected_date = self.request.GET.get('date')
@@ -430,9 +432,17 @@ class AppointmentListView(TemplateView):
             appointments = appointments.filter(scheduled_at__date=selected_date)
         if selected_status:
             appointments = appointments.filter(status=selected_status)
+
+        paginator = Paginator(appointments, self.paginate_by)
+        page_number = self.request.GET.get('page')
+        page_obj = paginator.get_page(page_number)
+
         context.update(
             {
-                'appointments': appointments,
+                'appointments': page_obj,
+                'page_obj': page_obj,
+                'paginator': paginator,
+                'is_paginated': paginator.num_pages > 1,
                 'selected_date': selected_date,
                 'selected_status': selected_status,
                 'status_choices': Appointment.Status.choices,

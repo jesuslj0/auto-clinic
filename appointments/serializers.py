@@ -113,6 +113,33 @@ class AppointmentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {'professional': 'El profesional seleccionado no ofrece el servicio indicado.'}
             )
+
+        # Validación de solapamiento
+        scheduled_at = attrs.get('scheduled_at', getattr(self.instance, 'scheduled_at', None))
+        status = attrs.get('status', getattr(self.instance, 'status', Appointment.Status.PENDING))
+        if (
+            professional
+            and scheduled_at
+            and status in (Appointment.Status.PENDING, Appointment.Status.CONFIRMED)
+        ):
+            # Calcular end_at con la información disponible
+            from datetime import timedelta
+            end_at = attrs.get('end_at', getattr(self.instance, 'end_at', None))
+            if not end_at:
+                svc = service or getattr(self.instance, 'service', None)
+                duration = svc.duration_minutes if svc else 30
+                end_at = scheduled_at + timedelta(minutes=duration)
+
+            exclude_pk = self.instance.pk if self.instance else None
+            conflict = Appointment.find_overlap(professional, scheduled_at, end_at, exclude_pk=exclude_pk)
+            if conflict:
+                raise serializers.ValidationError({
+                    'scheduled_at': (
+                        f'El profesional ya tiene una cita activa que se solapa: '
+                        f'{conflict} ({conflict.scheduled_at:%H:%M}–{conflict.get_end_datetime():%H:%M}).'
+                    )
+                })
+
         return attrs
 
     class Meta:
