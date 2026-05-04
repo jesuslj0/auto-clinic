@@ -8,7 +8,7 @@ from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views import View
 from django.views.generic import TemplateView, UpdateView
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -221,4 +221,19 @@ class AgentConfigView(APIView):
 
     def get(self, request, clinic_id):
         clinic = get_object_or_404(Clinic, clinic_id=clinic_id)
+        return Response(AgentConfigSerializer(clinic).data)
+
+
+class AgentConfigByPhoneView(APIView):
+    permission_classes = [IsAgentMasterKey]
+    authentication_classes = []
+
+    def get(self, request):
+        phone_number_id = request.query_params.get('phone_number_id', '').strip()
+        if not phone_number_id:
+            return Response(
+                {'detail': 'El parámetro phone_number_id es obligatorio.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        clinic = get_object_or_404(Clinic, whatsapp_phone_number_id=phone_number_id)
         return Response(AgentConfigSerializer(clinic).data)

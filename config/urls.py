@@ -9,7 +9,7 @@ from rest_framework.routers import DefaultRouter
 from agent.views import AgentMemoryViewSet, ConversationSessionViewSet, WorkflowErrorViewSet
 from appointments.views import AppointmentActionByTokenAPIView, AppointmentViewSet, ProfessionalScheduleViewSet, ProfessionalViewSet
 from billing.views import SubscriptionViewSet
-from core.views import AgentConfigView, ClinicViewSet, UserViewSet
+from core.views import AgentConfigByPhoneView, AgentConfigView, ClinicViewSet, UserViewSet
 from knowledge.views import ClinicInfoCacheViewSet, ClinicInfoQueryViewSet, ClinicKnowledgeBaseViewSet
 from notifications.views import ReminderViewSet
 from patients.views import PatientViewSet
@@ -54,6 +54,11 @@ urlpatterns = [
     path('knowledge/', include('knowledge.urls')),
 
     # REST API
+    path(
+        'api/clinics/agent-config/',
+        AgentConfigByPhoneView.as_view(),
+        name='clinic-agent-config-by-phone',
+    ),
     path(
         'api/clinics/<str:clinic_id>/agent-config/',
         AgentConfigView.as_view(),

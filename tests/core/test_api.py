@@ -208,3 +208,42 @@ class TestAgentConfigView:
             data={},
         )
         assert response.status_code in (403, 405)
+
+
+@pytest.mark.django_db
+class TestAgentConfigByPhoneView:
+    URL = "/api/clinics/agent-config/"
+
+    @override_settings(**AGENT_CONFIG_SETTINGS)
+    def test_valid_phone_number_id_returns_200_with_correct_clinic(self, api_client, clinic_a):
+        clinic_a.whatsapp_phone_number_id = "12345678901"
+        clinic_a.save(update_fields=["whatsapp_phone_number_id"])
+        response = api_client.get(
+            self.URL,
+            {"phone_number_id": "12345678901"},
+            HTTP_AUTHORIZATION=f"Api-Key {MASTER_KEY}",
+        )
+        assert response.status_code == 200
+        assert response.data["clinic_id"] == clinic_a.clinic_id
+
+    @override_settings(**AGENT_CONFIG_SETTINGS)
+    def test_nonexistent_phone_number_id_returns_404(self, api_client, clinic_a):
+        response = api_client.get(
+            self.URL,
+            {"phone_number_id": "000000000"},
+            HTTP_AUTHORIZATION=f"Api-Key {MASTER_KEY}",
+        )
+        assert response.status_code == 404
+
+    @override_settings(**AGENT_CONFIG_SETTINGS)
+    def test_missing_phone_number_id_returns_400(self, api_client, clinic_a):
+        response = api_client.get(
+            self.URL,
+            HTTP_AUTHORIZATION=f"Api-Key {MASTER_KEY}",
+        )
+        assert response.status_code == 400
+        assert "phone_number_id" in response.data["detail"]
+
+    def test_missing_master_key_returns_403(self, api_client, clinic_a):
+        response = api_client.get(self.URL, {"phone_number_id": "12345678901"})
+        assert response.status_code == 403
