@@ -7,8 +7,16 @@ from core.models import Clinic, User
 class ClinicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Clinic
-        fields = "__all__"
-        read_only_fields = ("created_at", "updated_at")
+        fields = (
+            'clinic_id', 'name', 'nif', 'is_active',
+            'phone', 'email', 'website',
+            'address', 'city', 'province', 'postal_code', 'country',
+            'timezone', 'description', 'logo_url', 'logo',
+            'whatsapp_phone_number_id',
+            'api_type', 'api_url', 'api_key',
+            'calendly_link', 'calendly_token', 'calendly_event_type_uuid',
+            'google_calendar_id',
+        )
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -51,3 +59,18 @@ class UserSerializer(serializers.ModelSerializer):
             user=user,
             defaults={'clinic': user.clinic},
         )
+
+
+class AgentConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Clinic
+        fields = (
+            'clinic_id',
+            'name',
+            'timezone',
+            'whatsapp_phone_number_id',
+            'whatsapp_token',
+            'whatsapp_verify_token',
+            'agent_api_key',
+        )
+        read_only_fields = fields

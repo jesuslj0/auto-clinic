@@ -1,3 +1,5 @@
+import uuid
+
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 
@@ -34,6 +36,24 @@ class Clinic(models.Model):
     logo_url = models.URLField(blank=True)
     logo = models.ImageField(upload_to='clinic_logos/', blank=True)
     whatsapp_phone_number_id = models.CharField(max_length=100, blank=True)
+    whatsapp_token = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        help_text="Token de acceso permanente de la WhatsApp Cloud API",
+    )
+    whatsapp_verify_token = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        help_text="Token de verificación del webhook de Meta",
+    )
+    agent_api_key = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        editable=False,
+        help_text="API Key única que usa n8n para autenticarse con esta clínica",
+    )
 
     # Integración de calendario
     api_type = models.CharField(

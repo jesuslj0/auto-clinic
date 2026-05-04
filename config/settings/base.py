@@ -158,6 +158,8 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
+AGENT_MASTER_API_KEY = config('AGENT_MASTER_API_KEY', default='')
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,

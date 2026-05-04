@@ -10,13 +10,14 @@ from django.views import View
 from django.views.generic import TemplateView, UpdateView
 from rest_framework import viewsets
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from appointments.models import Appointment, AppointmentStatusHistory
 from core.forms import ClinicForm, EmailAuthenticationForm
 from core.mixins import ExportMixin
 from core.models import Clinic, User
-from core.permissions import IsClinicAdminOrReadOnly, IsStaffOrAdmin
-from core.serializers import ClinicSerializer, UserSerializer
+from core.permissions import IsAgentMasterKey, IsClinicAdminOrReadOnly, IsStaffOrAdmin
+from core.serializers import AgentConfigSerializer, ClinicSerializer, UserSerializer
 
 
 class ClinicLoginView(LoginView):
@@ -30,12 +31,19 @@ class ClinicLogoutView(LogoutView):
 
 
 class ClinicViewSet(ExportMixin, viewsets.ModelViewSet):
-    queryset = Clinic.objects.all()
     serializer_class = ClinicSerializer
     permission_classes = [IsClinicAdminOrReadOnly]
     search_fields = ['name', 'clinic_id']
     ordering_fields = ['name', 'clinic_id']
     ordering = ['name']
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            return Clinic.objects.all()
+        if not user.clinic_id:
+            return Clinic.objects.none()
+        return Clinic.objects.filter(clinic_id=user.clinic_id)
 
 
 class UserViewSet(ExportMixin, viewsets.ModelViewSet):
@@ -205,3 +213,12 @@ class AppointmentQuickDetailView(LoginRequiredMixin, View):
             {'appointment': appointment, 'request': request},
         )
         return HttpResponse(html)
+
+
+class AgentConfigView(APIView):
+    permission_classes = [IsAgentMasterKey]
+    authentication_classes = []
+
+    def get(self, request, clinic_id):
+        clinic = get_object_or_404(Clinic, clinic_id=clinic_id)
+        return Response(AgentConfigSerializer(clinic).data)
