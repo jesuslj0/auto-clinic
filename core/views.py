@@ -215,6 +215,24 @@ class AppointmentQuickDetailView(LoginRequiredMixin, View):
         return HttpResponse(html)
 
 
+class AgentConfigDebugView(APIView):
+    """Vista temporal de diagnóstico — ELIMINAR tras resolver el 403."""
+    permission_classes = []
+    authentication_classes = []
+
+    def get(self, request):
+        from django.conf import settings as s
+        master_key = getattr(s, 'AGENT_MASTER_API_KEY', '<NO DEFINIDA>')
+        auth_header = request.META.get('HTTP_AUTHORIZATION', '<AUSENTE>')
+        return Response({
+            'master_key_set': bool(master_key.strip()),
+            'master_key_length': len(master_key.strip()),
+            'master_key_prefix': master_key[:8] + '...' if len(master_key) > 8 else master_key,
+            'auth_header_received': auth_header,
+            'auth_header_parts': auth_header.split(),
+        })
+
+
 class AgentConfigView(APIView):
     permission_classes = [IsAgentMasterKey]
     authentication_classes = []

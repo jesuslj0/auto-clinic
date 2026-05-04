@@ -23,11 +23,11 @@ class IsAgentMasterKey(BasePermission):
     def has_permission(self, request, view):
         if request.method not in SAFE_METHODS:
             return False
-        master_key = getattr(settings, 'AGENT_MASTER_API_KEY', '')
+        master_key = getattr(settings, 'AGENT_MASTER_API_KEY', '').strip()
         if not master_key:
             return False
-        auth = request.META.get('HTTP_AUTHORIZATION', '')
+        auth = request.META.get('HTTP_AUTHORIZATION', '').strip()
         parts = auth.split()
         if len(parts) != 2 or parts[0] != 'Api-Key':
             return False
-        return parts[1] == master_key
+        return parts[1].strip() == master_key
