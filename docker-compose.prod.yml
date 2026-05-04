@@ -44,6 +44,7 @@ services:
       REDIS_URL: ${REDIS_URL}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      AGENT_MASTER_API_KEY: ${AGENT_MASTER_API_KEY}
     volumes:
       - media_files:/app/media
     depends_on:
