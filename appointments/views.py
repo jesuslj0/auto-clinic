@@ -16,9 +16,10 @@ from rest_framework.views import APIView
 from appointments.forms import ProfessionalForm
 from appointments.models import Appointment, Professional, ProfessionalSchedule
 from appointments.serializers import AppointmentSerializer, ProfessionalScheduleSerializer, ProfessionalSerializer
+from core.authentication import ClinicAgent
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
 from core.models import Clinic
-from core.permissions import IsStaffOrAdmin
+from core.permissions import IsAgentClinicKey, IsStaffOrAdmin
 
 
 class AppointmentFilter(django_filters.FilterSet):
@@ -48,7 +49,7 @@ class AppointmentFilter(django_filters.FilterSet):
 
 class AppointmentViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets.ModelViewSet):
     serializer_class = AppointmentSerializer
-    permission_classes = [IsStaffOrAdmin]
+    permission_classes = [IsStaffOrAdmin | IsAgentClinicKey]
     search_fields = ['patient__first_name', 'patient__last_name', 'patient_name', 'patient_phone', 'status']
     filterset_class = AppointmentFilter
     ordering_fields = ['scheduled_at', 'status', 'created_at', 'patient_name']
@@ -57,6 +58,8 @@ class AppointmentViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets
     def get_queryset(self):
         queryset = Appointment.objects.select_related('clinic', 'patient', 'service', 'professional__user')
         user = self.request.user
+        if isinstance(user, ClinicAgent):
+            return queryset.filter(clinic=user.clinic)
         if user.is_superuser or not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)

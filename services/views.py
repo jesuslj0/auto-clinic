@@ -5,8 +5,9 @@ from django.urls import reverse_lazy
 from django.views.generic import CreateView, ListView, UpdateView
 from rest_framework import viewsets
 
+from core.authentication import ClinicAgent
 from core.mixins import ExportMixin
-from core.permissions import IsStaffOrAdmin
+from core.permissions import IsAgentClinicKey, IsStaffOrAdmin
 from services.forms import ServiceForm
 from services.models import Service
 from services.serializers import ServiceSerializer
@@ -14,7 +15,7 @@ from services.serializers import ServiceSerializer
 
 class ServiceViewSet(ExportMixin, viewsets.ModelViewSet):
     serializer_class = ServiceSerializer
-    permission_classes = [IsStaffOrAdmin]
+    permission_classes = [IsStaffOrAdmin | IsAgentClinicKey]
     search_fields = ['name', 'description']
     filterset_fields = ['clinic', 'is_active']
     ordering_fields = ['name', 'price', 'duration_minutes', 'created_at']
@@ -23,6 +24,8 @@ class ServiceViewSet(ExportMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Service.objects.select_related('clinic')
         user = self.request.user
+        if isinstance(user, ClinicAgent):
+            return queryset.filter(clinic=user.clinic)
         if user.is_superuser or not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)

@@ -8,13 +8,14 @@ from agent.serializers import (
     ConversationSessionSerializer,
     WorkflowErrorSerializer,
 )
+from core.authentication import ClinicAgent
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
-from core.permissions import IsClinicAdminOrReadOnly, IsStaffOrAdmin
+from core.permissions import IsAgentClinicKey, IsClinicAdminOrReadOnly, IsStaffOrAdmin
 
 
 class AgentMemoryViewSet(ExportMixin, viewsets.ModelViewSet):
     serializer_class = AgentMemorySerializer
-    permission_classes = [IsStaffOrAdmin]
+    permission_classes = [IsStaffOrAdmin | IsAgentClinicKey]
     filterset_fields = ['session_id']
     search_fields = ['session_id']
     ordering_fields = ['session_id', 'created_at']
@@ -38,7 +39,7 @@ class WorkflowErrorViewSet(ExportMixin, viewsets.ModelViewSet):
 
 class ConversationSessionViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets.ModelViewSet):
     serializer_class = ConversationSessionSerializer
-    permission_classes = [IsStaffOrAdmin]
+    permission_classes = [IsStaffOrAdmin | IsAgentClinicKey]
     filterset_fields = ['clinic', 'phone']
     search_fields = ['phone']
     ordering_fields = ['phone', 'last_interaction', 'updated_at']
@@ -47,6 +48,8 @@ class ConversationSessionViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, 
     def get_queryset(self):
         queryset = ConversationSession.objects.select_related('clinic')
         user = self.request.user
+        if isinstance(user, ClinicAgent):
+            return queryset.filter(clinic=user.clinic)
         if user.is_superuser or not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)

@@ -14,6 +14,17 @@ class IsStaffOrAdmin(BasePermission):
         return request.user and request.user.is_authenticated and request.user.role in {'admin', 'staff'}
 
 
+class IsAgentClinicKey(BasePermission):
+    """
+    Concede acceso cuando request.user es una instancia de ClinicAgent.
+    DELETE no está permitido: el agente sólo necesita GET, POST y PATCH.
+    """
+
+    def has_permission(self, request, view):
+        from core.authentication import ClinicAgent
+        return isinstance(request.user, ClinicAgent) and request.method != 'DELETE'
+
+
 class IsAgentMasterKey(BasePermission):
     """
     Permite acceso GET cuando el header Authorization contiene

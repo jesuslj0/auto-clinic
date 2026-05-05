@@ -7,6 +7,7 @@ from django.views.generic import CreateView, ListView, UpdateView
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
+from core.authentication import ClinicAgent
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
 from core.permissions import IsClinicAdminOrReadOnly, IsStaffOrAdmin
 from knowledge.forms import KB_TYPE_LABELS, KnowledgeBaseForm
@@ -95,6 +96,8 @@ class ClinicKnowledgeBaseViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, 
     def get_queryset(self):
         queryset = ClinicKnowledgeBase.objects.select_related('clinic')
         user = self.request.user
+        if isinstance(user, ClinicAgent):
+            return queryset.filter(clinic=user.clinic)
         if user.is_superuser or not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)

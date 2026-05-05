@@ -9,7 +9,7 @@ from rest_framework.routers import DefaultRouter
 from agent.views import AgentMemoryViewSet, ConversationSessionViewSet, WorkflowErrorViewSet
 from appointments.views import AppointmentActionByTokenAPIView, AppointmentViewSet, ProfessionalScheduleViewSet, ProfessionalViewSet
 from billing.views import SubscriptionViewSet
-from core.views import AgentConfigByPhoneView, AgentConfigDebugView, AgentConfigView, ClinicViewSet, UserViewSet
+from core.views import AgentConfigByPhoneView, AgentConfigView, ClinicViewSet, UserViewSet
 from knowledge.views import ClinicInfoCacheViewSet, ClinicInfoQueryViewSet, ClinicKnowledgeBaseViewSet
 from notifications.views import ReminderViewSet
 from patients.views import PatientViewSet
@@ -53,8 +53,7 @@ urlpatterns = [
     path('portal/', include('portal.urls')),
     path('knowledge/', include('knowledge.urls')),
 
-    # REST API — diagnóstico temporal (eliminar tras resolver el 403)
-    path('api/agent-debug/', AgentConfigDebugView.as_view(), name='agent-debug'),
+    # REST API
     path(
         'api/clinics/agent-config/',
         AgentConfigByPhoneView.as_view(),

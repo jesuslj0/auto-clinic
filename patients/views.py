@@ -4,8 +4,9 @@ from rest_framework import viewsets
 from django.urls import reverse_lazy
 
 from appointments.models import Appointment
+from core.authentication import ClinicAgent
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
-from core.permissions import IsStaffOrAdmin
+from core.permissions import IsAgentClinicKey, IsStaffOrAdmin
 from patients.filters import PatientFilter
 from patients.models import Patient
 from patients.serializers import PatientSerializer
@@ -14,7 +15,7 @@ from patients.forms import PatientForm
 
 class PatientViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets.ModelViewSet):
     serializer_class = PatientSerializer
-    permission_classes = [IsStaffOrAdmin]
+    permission_classes = [IsStaffOrAdmin | IsAgentClinicKey]
     search_fields = ["first_name", "last_name", "email", "phone"]
     filterset_class = PatientFilter
     ordering_fields = ['first_name', 'last_name', 'email', 'phone', 'created_at']
@@ -23,6 +24,8 @@ class PatientViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets.Mod
     def get_queryset(self):
         queryset = Patient.objects.select_related('clinic')
         user = self.request.user
+        if isinstance(user, ClinicAgent):
+            return queryset.filter(clinic=user.clinic)
         if user.is_superuser or not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
