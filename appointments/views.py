@@ -179,7 +179,7 @@ class ProfessionalFilter(django_filters.FilterSet):
 
 class ProfessionalViewSet(viewsets.ModelViewSet):
     serializer_class = ProfessionalSerializer
-    permission_classes = [IsStaffOrAdmin]
+    permission_classes = [IsStaffOrAdmin | IsAgentClinicKey]
     filterset_class = ProfessionalFilter
     search_fields = ['user__first_name', 'user__last_name', 'user__email']
     ordering_fields = ['user__first_name', 'user__last_name', 'user__email', 'professional_type']
@@ -188,6 +188,8 @@ class ProfessionalViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Professional.objects.select_related('user', 'clinic').prefetch_related('services')
         user = self.request.user
+        if isinstance(user, ClinicAgent):
+            return queryset.filter(clinic=user.clinic)
         if user.is_superuser or not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
@@ -302,7 +304,7 @@ class ProfessionalScheduleFilter(django_filters.FilterSet):
 
 class ProfessionalScheduleViewSet(viewsets.ModelViewSet):
     serializer_class = ProfessionalScheduleSerializer
-    permission_classes = [IsStaffOrAdmin]
+    permission_classes = [IsStaffOrAdmin | IsAgentClinicKey]
     filterset_class = ProfessionalScheduleFilter
     ordering_fields = ['day_of_week', 'start_time']
     ordering = ['day_of_week']
@@ -310,6 +312,8 @@ class ProfessionalScheduleViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = ProfessionalSchedule.objects.select_related('professional__user', 'professional__clinic')
         user = self.request.user
+        if isinstance(user, ClinicAgent):
+            return queryset.filter(professional__clinic=user.clinic)
         if user.is_superuser or not user.clinic_id:
             return queryset
         return queryset.filter(professional__clinic=user.clinic)
