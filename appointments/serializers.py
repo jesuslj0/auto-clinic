@@ -1,3 +1,6 @@
+from datetime import timedelta
+
+from django.utils import timezone
 from rest_framework import serializers
 
 from appointments.models import Appointment, Professional, ProfessionalSchedule
@@ -108,22 +111,66 @@ class AppointmentSerializer(serializers.ModelSerializer):
         attrs = super().validate(attrs)
         professional = attrs.get('professional', getattr(self.instance, 'professional', None))
         service = attrs.get('service', getattr(self.instance, 'service', None))
+        clinic = attrs.get('clinic', getattr(self.instance, 'clinic', None))
+        scheduled_at = attrs.get('scheduled_at', getattr(self.instance, 'scheduled_at', None))
+        status = attrs.get('status', getattr(self.instance, 'status', Appointment.Status.PENDING))
+
+        # Bug 4: La cita no puede ser en el pasado
+        if scheduled_at and scheduled_at < timezone.now():
+            raise serializers.ValidationError(
+                {'scheduled_at': 'La cita no puede programarse en el pasado.'}
+            )
+
+        # Bug 2: El servicio debe estar activo
+        if service and not service.is_active:
+            raise serializers.ValidationError(
+                {'service': 'El servicio seleccionado está desactivado.'}
+            )
+
+        # Bug 3: Multi-tenancy — profesional y servicio deben pertenecer a la clínica de la cita
+        if professional and clinic and professional.clinic_id != clinic.pk:
+            raise serializers.ValidationError(
+                {'professional': 'El profesional no pertenece a esta clínica.'}
+            )
+        if service and clinic and service.clinic_id != clinic.pk:
+            raise serializers.ValidationError(
+                {'service': 'El servicio no pertenece a esta clínica.'}
+            )
 
         if professional and service and not professional.services.filter(pk=service.pk).exists():
             raise serializers.ValidationError(
                 {'professional': 'El profesional seleccionado no ofrece el servicio indicado.'}
             )
 
+        # Bug 1: Validar día y rango horario laboral del profesional
+        if professional and scheduled_at:
+            day_names = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
+            day_of_week = scheduled_at.weekday()
+            try:
+                schedule = ProfessionalSchedule.objects.get(
+                    professional=professional,
+                    day_of_week=day_of_week,
+                    is_active=True,
+                )
+            except ProfessionalSchedule.DoesNotExist:
+                raise serializers.ValidationError(
+                    {'scheduled_at': f'El profesional no trabaja los {day_names[day_of_week]}.'}
+                )
+            appt_time = scheduled_at.astimezone(timezone.get_current_timezone()).time()
+            if not (schedule.start_time <= appt_time < schedule.end_time):
+                raise serializers.ValidationError({
+                    'scheduled_at': (
+                        f'La cita debe estar dentro del horario del profesional '
+                        f'({schedule.start_time:%H:%M}–{schedule.end_time:%H:%M}).'
+                    )
+                })
+
         # Validación de solapamiento
-        scheduled_at = attrs.get('scheduled_at', getattr(self.instance, 'scheduled_at', None))
-        status = attrs.get('status', getattr(self.instance, 'status', Appointment.Status.PENDING))
         if (
             professional
             and scheduled_at
             and status in (Appointment.Status.PENDING, Appointment.Status.CONFIRMED)
         ):
-            # Calcular end_at con la información disponible
-            from datetime import timedelta
             end_at = attrs.get('end_at', getattr(self.instance, 'end_at', None))
             if not end_at:
                 svc = service or getattr(self.instance, 'service', None)

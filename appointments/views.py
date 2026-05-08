@@ -22,6 +22,16 @@ from core.models import Clinic
 from core.permissions import IsAgentClinicKey, IsStaffOrAdmin
 
 
+def _build_busy_list(appointments_qs):
+    """Devuelve lista de tuplas (start, end) para cada cita del queryset."""
+    busy = []
+    for appt in appointments_qs:
+        appt_start = appt.scheduled_at
+        appt_end = appt.get_end_datetime()
+        busy.append((appt_start, appt_end))
+    return busy
+
+
 class AppointmentFilter(django_filters.FilterSet):
     clinic = django_filters.CharFilter(field_name='clinic_id')
     status = django_filters.BaseInFilter(field_name='status', lookup_expr='in')
@@ -68,14 +78,22 @@ class AppointmentViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets
     def available_slots(self, request):
         date_str = request.query_params.get('date')
         clinic_param = request.query_params.get('clinic')
+        user = request.user
 
+        # Bug 5: control de acceso — solo superusuario puede consultar cualquier clínica
         if clinic_param:
+            if not user.is_superuser and not isinstance(user, ClinicAgent):
+                user_clinic_id = str(user.clinic_id) if user.clinic_id else None
+                if user_clinic_id != str(clinic_param):
+                    return Response({'detail': 'No tienes permiso para consultar esta clínica.'}, status=status.HTTP_403_FORBIDDEN)
             try:
                 clinic = Clinic.objects.get(pk=clinic_param)
             except Clinic.DoesNotExist:
                 return Response({'detail': 'Clínica no encontrada.'}, status=status.HTTP_400_BAD_REQUEST)
-        elif request.user.clinic_id:
-            clinic = request.user.clinic
+        elif isinstance(user, ClinicAgent):
+            clinic = user.clinic
+        elif user.clinic_id:
+            clinic = user.clinic
         else:
             return Response({'detail': 'El usuario no tiene clínica asignada.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -86,6 +104,10 @@ class AppointmentViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets
             target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
         except ValueError:
             return Response({'detail': 'Formato de fecha inválido. Usa YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Bug 6: no permitir fechas pasadas
+        if target_date < timezone.localdate():
+            return Response({'detail': 'No se pueden consultar slots para fechas pasadas.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             duration = int(request.query_params.get('duration', 30))
@@ -107,16 +129,7 @@ class AppointmentViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets
             status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED],
         ).select_related('service')
 
-        busy = []
-        for appt in queryset:
-            appt_start = appt.scheduled_at
-            if appt.end_at:
-                appt_end = appt.end_at
-            elif appt.service_id and appt.service:
-                appt_end = appt_start + timedelta(minutes=appt.service.duration_minutes)
-            else:
-                appt_end = appt_start + timedelta(minutes=30)
-            busy.append((appt_start, appt_end))
+        busy = _build_busy_list(queryset)
 
         slot_duration = timedelta(minutes=duration)
         slots = []
@@ -251,16 +264,7 @@ class ProfessionalViewSet(viewsets.ModelViewSet):
             status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED],
         ).select_related('service')
 
-        busy = []
-        for appt in busy_appointments:
-            appt_start = appt.scheduled_at
-            if appt.end_at:
-                appt_end = appt.end_at
-            elif appt.service_id and appt.service:
-                appt_end = appt_start + timedelta(minutes=appt.service.duration_minutes)
-            else:
-                appt_end = appt_start + timedelta(minutes=30)
-            busy.append((appt_start, appt_end))
+        busy = _build_busy_list(busy_appointments)
 
         slot_duration = timedelta(minutes=duration)
         slots = []
