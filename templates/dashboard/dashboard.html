@@ -1,29 +1,102 @@
 {% extends 'base.html' %}
+{% load appointment_extras %}
 
 {% block title %}Panel · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
-{% block page_heading %}Resumen del panel{% endblock %}
+{% block page_heading %}Panel de Control{% endblock %}
+{% block page_subheading %}
+<p class="mt-0.5 text-sm text-slate-500">Bienvenido, {{ request.user.get_full_name|default:request.user.email }}. Aquí tienes el resumen de hoy.</p>
+{% endblock %}
 
 {% block content %}
 <section
     x-data="{ modalOpen: false, selectedAppointment: { id: '', patient: '', service: '', time: '' } }"
     class="space-y-6"
 >
-    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <article class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
-            <p class="text-sm font-medium text-slate-500">Citas de hoy</p>
-            <p class="mt-4 text-3xl font-semibold text-slate-900">{{ stats.today|default:today_appointments|default:0 }}</p>
-            <p class="mt-2 text-sm text-slate-500">Visitas programadas para {{ today|date:"l, j \d\e F"|default:"hoy" }}.</p>
-        </article>
-        <article class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
-            <p class="text-sm font-medium text-slate-500">Pendientes</p>
-            <p class="mt-4 text-3xl font-semibold text-amber-500">{{ stats.pending|default:pending_appointments|default:0 }}</p>
-            <p class="mt-2 text-sm text-slate-500">Citas en espera de confirmación.</p>
-        </article>
-        <article class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200 sm:col-span-2 xl:col-span-1">
-            <p class="text-sm font-medium text-slate-500">Canceladas</p>
-            <p class="mt-4 text-3xl font-semibold text-rose-500">{{ stats.cancelled|default:cancelled_appointments|default:0 }}</p>
-            <p class="mt-2 text-sm text-slate-500">Citas canceladas en el periodo actual.</p>
-        </article>
+    <div class="grid gap-4 lg:grid-cols-2">
+        <!-- Columna izquierda: citas -->
+        <div class="grid gap-4">
+            <!-- Citas de hoy (destacada) -->
+            <article class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-slate-500">Citas de hoy</p>
+                        <p class="mt-3 text-4xl font-semibold text-slate-900">{{ stats.today|default:today_appointments|default:0 }}</p>
+                        <p class="mt-2 text-sm text-slate-500">Visitas programadas para {{ today|date:"l, j \d\e F"|default:"hoy" }}.</p>
+                    </div>
+                    <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
+                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                        </svg>
+                    </span>
+                </div>
+            </article>
+            <!-- Pendientes + Canceladas -->
+            <div class="grid gap-4 sm:grid-cols-2">
+                <article class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-slate-500">Pendientes</p>
+                            <p class="mt-3 text-3xl font-semibold text-amber-500">{{ stats.pending|default:pending_appointments|default:0 }}</p>
+                            <p class="mt-2 text-sm text-slate-500">En espera de confirmación.</p>
+                        </div>
+                        <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </span>
+                    </div>
+                </article>
+                <article class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-slate-500">Canceladas</p>
+                            <p class="mt-3 text-3xl font-semibold text-rose-500">{{ stats.cancelled|default:cancelled_appointments|default:0 }}</p>
+                            <p class="mt-2 text-sm text-slate-500">En el periodo actual.</p>
+                        </div>
+                        <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </span>
+                    </div>
+                </article>
+            </div>
+        </div>
+
+        <!-- Columna derecha: métricas del mes -->
+        <div class="grid gap-4">
+            <!-- Nuevos pacientes (este mes) -->
+            <article class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-slate-500">Nuevos pacientes</p>
+                        <p class="mt-3 text-3xl font-semibold text-slate-900">{{ new_patients_month|default:0 }}</p>
+                        <p class="mt-2 text-sm text-slate-500">Registrados en {{ today|date:"F" }}.</p>
+                    </div>
+                    <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
+                        </svg>
+                    </span>
+                </div>
+            </article>
+            <!-- Ingresos del mes (citas completadas) -->
+            <article class="relative overflow-hidden rounded-3xl bg-brand-gradient p-6 text-white shadow-glow">
+                <div aria-hidden="true" class="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/10 blur-2xl"></div>
+                <div class="relative flex items-start justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-white/80">Ingresos del mes</p>
+                        <p class="mt-3 text-3xl font-semibold">{{ revenue_month|floatformat:2 }} €</p>
+                        <p class="mt-2 text-sm text-white/75">Según citas completadas en {{ today|date:"F" }}.</p>
+                    </div>
+                    <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-white/15 text-white backdrop-blur">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </span>
+                </div>
+            </article>
+        </div>
     </div>
 
     <section class="rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
@@ -32,7 +105,7 @@
                 <h3 class="text-lg font-semibold text-slate-900">Citas de hoy</h3>
                 <p class="mt-1 text-sm text-slate-500">Una vista rápida de lo que sigue en agenda.</p>
             </div>
-            <a href="{% url 'appointments:list' %}" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">Ver todo</a>
+            <a href="{% url 'appointments:list' %}" class="btn-secondary">Ver todo</a>
         </div>
         <div class="divide-y divide-slate-100">
             {% for appointment in appointments|default:today_schedule %}
@@ -42,18 +115,12 @@
                         <p class="mt-1 text-sm text-slate-500">{{ appointment.service }} · {{ appointment.scheduled_at|date:"g:i A" }} – {{ appointment.end_at|date:"g:i A" }}</p>
                     </div>
                     <div class="flex items-center gap-3">
-                        <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold {% if appointment.status == 'confirmed' %}bg-emerald-50 text-emerald-700{% elif appointment.status == 'cancelled' %}bg-rose-50 text-rose-700{% else %}bg-amber-50 text-amber-700{% endif %}">
+                        <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold {{ appointment.status|status_badge }}">
                             {{ appointment.get_status_display|default:appointment.status|title }}
                         </span>
-                        {% if appointment.status == 'pending' %}
-                            <a
-                                href="{% url 'core:dashboard-manage-appointment' appointment.id %}"
-                                class="rounded-xl border border-brand-200 px-3 py-1.5 text-sm font-semibold text-brand-700 transition hover:bg-brand-50"
-                            >
-                                Gestionar
-                            </a>
-                        {% endif %}
-                        <a href="{% url 'core:dashboard-manage-appointment' appointment.id %}" class="text-sm font-medium text-brand-600 hover:text-brand-700">Detalles</a>
+                        <a href="{% url 'core:dashboard-manage-appointment' appointment.id %}" class="btn-outlined px-3 py-1.5">
+                            Gestionar
+                        </a>
                     </div>
                 </article>
             {% empty %}

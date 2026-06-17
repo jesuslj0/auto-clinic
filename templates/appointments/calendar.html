@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load appointment_extras %}
 
 {% block title %}Calendario · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
 {% block page_heading %}Calendario semanal{% endblock %}
@@ -13,8 +14,8 @@
             <p class="mt-1 text-sm text-slate-500">{{ week_start|date:"j M"|default:"Esta semana" }}{% if week_end %} – {{ week_end|date:"j M, Y" }}{% endif %}</p>
         </div>
         <div class="flex items-center gap-2">
-            <a href="?week={{ previous_week|date:'Y-m-d' }}" class="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Anterior</a>
-            <a href="?week={{ next_week|date:'Y-m-d' }}" class="rounded-full bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">Siguiente</a>
+            <a href="?week={{ previous_week|date:'Y-m-d' }}" class="btn-secondary">Anterior</a>
+            <a href="?week={{ next_week|date:'Y-m-d' }}" class="btn-primary">Siguiente</a>
         </div>
     </div>
 
@@ -72,9 +73,7 @@
                                             type="button"
                                             class="absolute inset-2 rounded-2xl border p-3 shadow-sm transition text-left
                                                     hover:shadow-md hover:scale-[1.01] active:scale-[0.99]
-                                                    {% if appointment.status == 'confirmed' %}border-green-200 bg-green-50
-                                                    {% elif appointment.status == 'cancelled' %}border-red-200 bg-red-50
-                                                    {% else %}border-yellow-200 bg-yellow-50{% endif %}"
+                                                    {{ appointment.status|status_cell }}"
                                             hx-get="{% url 'core:appointment-quick-detail' appointment.id %}"
                                             hx-target="#calendar-panel-content"
                                             hx-swap="innerHTML"
@@ -83,11 +82,7 @@
                                             @htmx:after-request="panelLoading = false"
                                         >
                                             <div class="mb-2 flex items-center justify-between">
-                                                <span class="h-2 w-2 rounded-full
-                                                    {% if appointment.status == 'confirmed' %}bg-green-500
-                                                    {% elif appointment.status == 'cancelled' %}bg-red-500
-                                                    {% else %}bg-yellow-400{% endif %}">
-                                                </span>
+                                                <span class="h-2 w-2 rounded-full {{ appointment.status|status_dot }}"></span>
                                                 <span class="text-[10px] text-slate-400 uppercase tracking-wide">
                                                     {{ appointment.get_status_display|default:appointment.status }}
                                                 </span>

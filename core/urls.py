@@ -9,12 +9,14 @@ from core.views import (
     DashboardAppointmentActionView,
     DashboardAppointmentManageView,
     DashboardView,
+    SearchView,
 )
 
 app_name = 'core'
 
 urlpatterns = [
     path('', DashboardView.as_view(), name='dashboard'),
+    path('buscar/', SearchView.as_view(), name='search'),
     path('login/', ClinicLoginView.as_view(), name='login'),
     path('logout/', ClinicLogoutView.as_view(), name='logout'),
     path('clinic/info/', ClinicInfoView.as_view(), name='clinic-info'),

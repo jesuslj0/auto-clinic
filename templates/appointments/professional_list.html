@@ -6,7 +6,10 @@
 {% block content %}
 <section class="space-y-6">
     <div class="flex items-center justify-end">
-        <a href="{% url 'appointments:professionals-create' %}" class="inline-flex items-center rounded-2xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700">
+        <a href="{% url 'appointments:professionals-create' %}" class="btn-primary">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
             Nuevo profesional
         </a>
     </div>
@@ -35,7 +38,7 @@
                             {% endfor %}
                         </td>
                         <td class="px-6 py-4">
-                            <a href="{% url 'appointments:professionals-edit' professional.pk %}" class="text-sm font-semibold text-brand-600 hover:text-brand-700">Editar</a>
+                            <a href="{% url 'appointments:professionals-edit' professional.pk %}" class="btn-outlined px-3 py-1.5 text-xs">Editar</a>
                         </td>
                     </tr>
                     {% empty %}

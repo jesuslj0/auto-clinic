@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load appointment_extras %}
 
 {% block title %}{{ patient }} · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
 {% block page_heading %}Perfil del paciente{% endblock %}
@@ -8,8 +9,7 @@
     <aside class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
         <h3 class="text-xl font-semibold text-slate-900 flex items-center justify-between">
             {{ patient }} 
-            <a href="{% url 'patients:edit' patient.pk %}" 
-            class="rounded-full bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">Editar</a>
+            <a href="{% url 'patients:edit' patient.pk %}" class="btn-secondary">Editar</a>
         </h3>
         <dl class="mt-6 space-y-4 text-sm text-slate-600">
             <div>
@@ -43,7 +43,7 @@
                         <p class="text-sm font-semibold text-slate-900">{{ appointment.service }}</p>
                         <p class="mt-1 text-sm text-slate-500">{{ appointment.scheduled_at|date:"j M, Y" }} · {{ appointment.scheduled_at|date:"g:i A" }} – {{ appointment.end_at|date:"g:i A" }}</p>
                     </div>
-                    <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold {% if appointment.status == 'confirmed' %}bg-emerald-50 text-emerald-700{% elif appointment.status == 'cancelled' %}bg-rose-50 text-rose-700{% else %}bg-amber-50 text-amber-700{% endif %}">{{ appointment.get_status_display|default:appointment.status|title }}</span>
+                    <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold {{ appointment.status|status_badge }}">{{ appointment.get_status_display|default:appointment.status|title }}</span>
                 </article>
             {% empty %}
                 <div class="px-6 py-12 text-center text-sm text-slate-500">No hay historial de citas disponible.</div>

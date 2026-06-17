@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
+from django.db.models import Q, Sum
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, LogoutView
 from django.http import HttpResponseBadRequest
@@ -13,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from appointments.models import Appointment, AppointmentStatusHistory
+from patients.models import Patient
 from core.forms import ClinicForm, EmailAuthenticationForm
 from core.mixins import ExportMixin
 from core.models import Clinic, User
@@ -97,6 +99,26 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             appointments = appointments.filter(clinic=user.clinic)
 
         today_schedule = appointments.filter(scheduled_at__date=today)
+        professional = getattr(user, 'professional_profile', None)
+
+        # Inicio del mes actual para métricas mensuales
+        month_start = today.replace(day=1)
+
+        # Nuevos pacientes registrados este mes (scopeados por clínica)
+        patients_qs = Patient.objects.all()
+        if not user.is_superuser and user.clinic_id:
+            patients_qs = patients_qs.filter(clinic=user.clinic)
+        new_patients_month = patients_qs.filter(created_at__date__gte=month_start).count()
+
+        # Ingresos del mes según citas completadas (suma del precio del servicio)
+        revenue_month = (
+            appointments.filter(
+                status=Appointment.Status.COMPLETED,
+                scheduled_at__date__gte=month_start,
+            ).aggregate(total=Sum('service__price'))['total']
+            or 0
+        )
+
         context.update(
             {
                 'today': today,
@@ -104,7 +126,57 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 'today_appointments': today_schedule.count(),
                 'pending_appointments': appointments.filter(status=Appointment.Status.PENDING).count(),
                 'cancelled_appointments': appointments.filter(status=Appointment.Status.CANCELLED).count(),
+                'new_patients_month': new_patients_month,
+                'revenue_month': revenue_month,
+                'professional': professional,
                 'section': 'dashboard',
+            }
+        )
+        return context
+
+
+class SearchView(LoginRequiredMixin, TemplateView):
+    """Búsqueda unificada de pacientes y citas."""
+    template_name = 'search/results.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        query = self.request.GET.get('q', '').strip()
+        user = self.request.user
+
+        patients = Patient.objects.none()
+        appointments = Appointment.objects.none()
+
+        if query:
+            patients = Patient.objects.all()
+            appointments = Appointment.objects.select_related('patient', 'service', 'professional__user')
+
+            if not user.is_superuser and user.clinic_id:
+                patients = patients.filter(clinic=user.clinic)
+                appointments = appointments.filter(clinic=user.clinic)
+
+            patients = patients.filter(
+                Q(first_name__icontains=query)
+                | Q(last_name__icontains=query)
+                | Q(email__icontains=query)
+                | Q(phone__icontains=query)
+            )[:50]
+
+            appointments = appointments.filter(
+                Q(patient__first_name__icontains=query)
+                | Q(patient__last_name__icontains=query)
+                | Q(patient_name__icontains=query)
+                | Q(patient_phone__icontains=query)
+                | Q(service__name__icontains=query)
+                | Q(service_name__icontains=query)
+            ).order_by('-scheduled_at')[:50]
+
+        context.update(
+            {
+                'query': query,
+                'patients': patients,
+                'appointments': appointments,
+                'section': 'search',
             }
         )
         return context
@@ -166,6 +238,38 @@ class DashboardAppointmentActionView(LoginRequiredMixin, View):
                 actor_label=actor_label,
             )
             success_message = 'Cita rechazada correctamente.'
+        elif action == 'complete':
+            if appointment.status in (Appointment.Status.CANCELLED, Appointment.Status.NO_SHOW):
+                messages.error(request, 'Esta cita no puede marcarse como completada.')
+                next_url = request.POST.get('next') or 'core:dashboard'
+                return redirect(next_url)
+            prev = appointment.status
+            appointment.status = Appointment.Status.COMPLETED
+            appointment.save(update_fields=['status', 'updated_at'])
+            AppointmentStatusHistory.objects.create(
+                appointment=appointment,
+                from_status=prev,
+                to_status=Appointment.Status.COMPLETED,
+                actor=AppointmentStatusHistory.Actor.STAFF,
+                actor_label=actor_label,
+            )
+            success_message = 'Cita marcada como completada.'
+        elif action == 'no_show':
+            if appointment.status in (Appointment.Status.CANCELLED, Appointment.Status.COMPLETED):
+                messages.error(request, 'Esta cita no puede marcarse como no presentada.')
+                next_url = request.POST.get('next') or 'core:dashboard'
+                return redirect(next_url)
+            prev = appointment.status
+            appointment.status = Appointment.Status.NO_SHOW
+            appointment.save(update_fields=['status', 'updated_at'])
+            AppointmentStatusHistory.objects.create(
+                appointment=appointment,
+                from_status=prev,
+                to_status=Appointment.Status.NO_SHOW,
+                actor=AppointmentStatusHistory.Actor.STAFF,
+                actor_label=actor_label,
+            )
+            success_message = 'Cita marcada como no presentada.'
         else:
             return HttpResponseBadRequest('Acción no soportada.')
 

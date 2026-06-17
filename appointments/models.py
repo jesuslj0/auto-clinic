@@ -26,6 +26,7 @@ class Professional(models.Model):
         choices=ProfessionalType.choices,
         default=ProfessionalType.MEDICO,
     )
+    photo = models.ImageField(upload_to='professional_photos/', blank=True)
 
     class Meta:
         db_table = 'professionals'
@@ -69,6 +70,7 @@ class Appointment(models.Model):
     class Status(models.TextChoices):
         PENDING = 'pending', 'Pendiente'
         CONFIRMED = 'confirmed', 'Confirmada'
+        COMPLETED = 'completed', 'Completada'
         CANCELLED = 'cancelled', 'Cancelada'
         RESCHEDULED = 'rescheduled', 'Reagendada'
         NO_SHOW = 'no_show', 'No asistió'

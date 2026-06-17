@@ -1,10 +1,13 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="es" class="h-full bg-slate-100">
+<html lang="es" class="h-full bg-[#f6f5fb]">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}{{ clinic.name|default:"Auto Clinic" }}{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
     <script defer src="https://unpkg.com/htmx.org@1.9.12"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -12,18 +15,52 @@
         tailwind.config = {
             theme: {
                 extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                        display: ['"Space Grotesk"', 'Inter', 'ui-sans-serif', 'sans-serif'],
+                    },
                     colors: {
+                        // Marca: violeta moderno
                         brand: {
-                            50: '#eef2ff',
-                            100: '#e0e7ff',
-                            500: '#6366f1',
-                            600: '#4f46e5',
-                            700: '#4338ca',
+                            50: '#f5f3ff',
+                            100: '#ede9fe',
+                            200: '#ddd6fe',
+                            300: '#c4b5fd',
+                            400: '#a78bfa',
+                            500: '#8b5cf6',
+                            600: '#7c3aed',
+                            700: '#6d28d9',
+                            800: '#5b21b6',
+                            900: '#4c1d95',
+                        },
+                        // Secundario / acento: rosa suave (menos potente)
+                        accent: {
+                            50: '#fdf3f8',
+                            100: '#fbe6f0',
+                            400: '#f0a6c8',
+                            500: '#e879a6',
+                            600: '#d4628f',
+                        },
+                        // Terciario: violeta profundo (#4C1D95)
+                        tertiary: {
+                            500: '#5b21b6',
+                            600: '#4c1d95',
+                            700: '#3b1577',
+                        },
+                        // Inverted / tinta oscura para botones
+                        ink: {
+                            700: '#1e293b',
+                            800: '#172033',
+                            900: '#0f172a',
                         },
                     },
                     boxShadow: {
-                        soft: '0 12px 32px rgba(15, 23, 42, 0.08)',
-                        sidebar: '4px 0 24px rgba(15, 23, 42, 0.12)',
+                        soft: '0 12px 32px rgba(76, 29, 149, 0.10)',
+                        sidebar: '4px 0 24px rgba(76, 29, 149, 0.10)',
+                        glow: '0 8px 24px -6px rgba(124, 58, 237, 0.45)',
+                    },
+                    backgroundImage: {
+                        'brand-gradient': 'linear-gradient(135deg, #7c3aed 0%, #e879a6 100%)',
                     },
                     transitionProperty: {
                         sidebar: 'transform, opacity, visibility',
@@ -32,8 +69,43 @@
             },
         };
     </script>
+    <!-- Componentes reutilizables (botones e iconos del sistema de diseño) -->
+    <style type="text/tailwindcss">
+        /* Botones */
+        .btn {
+            @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-2 active:scale-[0.98];
+        }
+        .btn-primary {
+            @apply btn bg-brand-600 text-white shadow-sm hover:bg-brand-700 focus:ring-brand-500;
+        }
+        .btn-gradient {
+            @apply btn bg-brand-gradient text-white shadow-glow hover:opacity-95 focus:ring-brand-500;
+        }
+        .btn-secondary {
+            @apply btn bg-white text-slate-700 ring-1 ring-inset ring-slate-200 hover:bg-slate-50 focus:ring-brand-500;
+        }
+        .btn-inverted {
+            @apply btn bg-ink-700 text-white hover:bg-ink-800 focus:ring-ink-700;
+        }
+        .btn-outlined {
+            @apply btn border border-brand-300 bg-transparent text-brand-700 hover:bg-brand-50 focus:ring-brand-500;
+        }
+
+        /* Botones de icono (circulares) */
+        .icon-btn {
+            @apply inline-flex h-10 w-10 items-center justify-center rounded-full transition focus:outline-none focus:ring-2 focus:ring-offset-2 active:scale-95;
+        }
+        .icon-btn-primary { @apply icon-btn bg-brand-600 text-white hover:bg-brand-700 focus:ring-brand-500; }
+        .icon-btn-ghost   { @apply icon-btn text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus:ring-slate-300; }
+        .icon-btn-accent  { @apply icon-btn bg-accent-500 text-white hover:bg-accent-600 focus:ring-accent-500; }
+        .icon-btn-tertiary{ @apply icon-btn bg-tertiary-600 text-white hover:bg-tertiary-700 focus:ring-tertiary-600; }
+        .icon-btn-danger  { @apply icon-btn bg-rose-500 text-white hover:bg-rose-600 focus:ring-rose-500; }
+    </style>
     <style>
         [x-cloak] { display: none !important; }
+
+        /* Títulos con la tipografía display de la marca */
+        h1, h2, h3, h4 { font-family: '"Space Grotesk"', 'Space Grotesk', 'Inter', sans-serif; }
 
         .sidebar-enter {
             transform: translateX(-100%);
@@ -98,10 +170,10 @@
                     {% if request.user.clinic.logo %}
                     <img src="{{ request.user.clinic.logo.url }}" alt="Logo de la clínica" class="h-11 w-11 rounded-2xl">
                     {% else %}
-                    <span class="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-600 text-lg font-semibold text-white">AC</span>
+                    <span class="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-gradient text-lg font-semibold text-white shadow-glow">AC</span>
                     {% endif %}
                     <div>
-                        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">Sistema Clínica</p>
+                        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">Auto Clinic</p>
                         <h1 class="text-lg font-semibold text-slate-900">{{ request.user.clinic.name|default:"Auto Clinic" }}</h1>
                     </div>
                 </a>
@@ -119,68 +191,13 @@
         </div>
 
         <nav class="flex-1 space-y-1 overflow-y-auto px-4 py-6 text-sm font-medium">
-            <a href="{% url 'core:dashboard' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'dashboard' %}bg-brand-50 text-brand-700 border-l-2 border-brand-600 pl-[14px]{% endif %}">
-                <!-- Home icon -->
-                <svg class="h-5 w-5 flex-shrink-0 {% if section == 'dashboard' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12L11.204 3.045a1.125 1.125 0 011.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
-                </svg>
-                <span>Panel</span>
-            </a>
-            <a href="{% url 'appointments:list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'appointments' %}bg-brand-50 text-brand-700 border-l-2 border-brand-600 pl-[14px]{% endif %}">
-                <!-- Calendar icon -->
-                <svg class="h-5 w-5 flex-shrink-0 {% if section == 'appointments' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-                </svg>
-                <span>Citas</span>
-            </a>
-            <a href="{% url 'patients:list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'patients' %}bg-brand-50 text-brand-700 border-l-2 border-brand-600 pl-[14px]{% endif %}">
-                <!-- Users icon -->
-                <svg class="h-5 w-5 flex-shrink-0 {% if section == 'patients' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-                </svg>
-                <span>Pacientes</span>
-            </a>
-            <a href="{% url 'appointments:calendar' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'calendar' %}bg-brand-50 text-brand-700 border-l-2 border-brand-600 pl-[14px]{% endif %}">
-                <!-- Clock icon -->
-                <svg class="h-5 w-5 flex-shrink-0 {% if section == 'calendar' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>Agenda</span>
-            </a>
-            <a href="{% url 'services:list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'services' %}bg-brand-50 text-brand-700 border-l-2 border-brand-600 pl-[14px]{% endif %}">
-                <!-- Wrench/Services icon -->
-                <svg class="h-5 w-5 flex-shrink-0 {% if section == 'services' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
-                </svg>
-                <span>Servicios</span>
-            </a>
-            <a href="{% url 'appointments:professionals-list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'professionals' %}bg-brand-50 text-brand-700 border-l-2 border-brand-600 pl-[14px]{% endif %}">
-                <!-- Users icon -->
-                <svg class="h-5 w-5 flex-shrink-0 {% if section == 'professionals' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-                </svg>
-                <span>Profesionales</span>
-            </a>
-            <a href="{% url 'core:clinic-info' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'clinic' %}bg-brand-50 text-brand-700 border-l-2 border-brand-600 pl-[14px]{% endif %}">
-                <svg class="h-5 w-5 flex-shrink-0 {% if section == 'clinic' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" />
-                </svg>
-                <span>Clínica</span>
-            </a>
-            <a href="{% url 'knowledge:list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'knowledge' %}bg-brand-50 text-brand-700 border-l-2 border-brand-600 pl-[14px]{% endif %}">
-                <svg class="h-5 w-5 flex-shrink-0 {% if section == 'knowledge' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-                </svg>
-                <span>Base de conocimiento</span>
-            </a>
+            {% include "partials/_sidebar_nav.html" %}
         </nav>
 
-        <div class="border-t border-slate-200 px-6 py-5">
-            <p class="text-sm font-medium text-slate-900">{{ request.user.get_full_name|default:request.user.email }}</p>
-            <p class="mt-1 text-xs text-slate-500">{{ request.user.get_role_display|default:"Personal" }}</p>
-            <form method="post" action="{% url 'core:logout' %}" class="mt-3">
+        <div class="border-t border-slate-200 px-4 py-4">
+            <form method="post" action="{% url 'core:logout' %}">
                 {% csrf_token %}
-                <button type="submit" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition">
+                <button type="submit" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition">
                     <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
                     </svg>
@@ -200,65 +217,17 @@
                     {% if request.user.clinic.logo %}
                     <img src="{{ request.user.clinic.logo.url }}" alt="Logo de la clínica" class="h-11 w-11 rounded-2xl">
                     {% else %}
-                    <span class="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-600 text-lg font-semibold text-white">AC</span>
+                    <span class="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-gradient text-lg font-semibold text-white shadow-glow">AC</span>
                     {% endif %}
                     <div>
-                        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">Sistema Clínica</p>
+                        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">Auto Clinic</p>
                         <h1 class="text-lg font-semibold text-slate-900">{{ request.user.clinic.name|default:"Auto Clinic" }}</h1>
                     </div>
                 </a>
             </div>
             <nav class="flex-1 space-y-1 px-4 py-6 text-sm font-medium">
-                <a href="{% url 'core:dashboard' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'dashboard' %}bg-brand-50 text-brand-700 border-l-2 border-brand-600 pl-[14px]{% endif %}">
-                    <svg class="h-5 w-5 flex-shrink-0 {% if section == 'dashboard' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12L11.204 3.045a1.125 1.125 0 011.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
-                    </svg>
-                    <span>Panel</span>
-                </a>
-                <a href="{% url 'appointments:list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'appointments' %}bg-brand-50 text-brand-700 border-l-2 border-brand-600 pl-[14px]{% endif %}">
-                    <svg class="h-5 w-5 flex-shrink-0 {% if section == 'appointments' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-                    </svg>
-                    <span>Citas</span>
-                </a>
-                <a href="{% url 'patients:list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'patients' %}bg-brand-50 text-brand-700 border-l-2 border-brand-600 pl-[14px]{% endif %}">
-                    <svg class="h-5 w-5 flex-shrink-0 {% if section == 'patients' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-                    </svg>
-                    <span>Pacientes</span>
-                </a>
-                <a href="{% url 'appointments:calendar' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'calendar' %}bg-brand-50 text-brand-700 border-l-2 border-brand-600 pl-[14px]{% endif %}">
-                    <svg class="h-5 w-5 flex-shrink-0 {% if section == 'calendar' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>Agenda</span>
-                </a>
-                <a href="{% url 'services:list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'services' %}bg-brand-50 text-brand-700 border-l-2 border-brand-600 pl-[14px]{% endif %}">
-                    <svg class="h-5 w-5 flex-shrink-0 {% if section == 'services' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
-                    </svg>
-                    <span>Servicios</span>
-                </a>
-                <a href="{% url 'appointments:professionals-list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'professionals' %}bg-brand-50 text-brand-700 border-l-2 border-brand-600 pl-[14px]{% endif %}">
-                    <!-- Users icon -->
-                    <svg class="h-5 w-5 flex-shrink-0 {% if section == 'professionals' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-                    </svg>
-                    <span>Profesionales</span>
-                </a>
-                <a href="{% url 'core:clinic-info' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'clinic' %}bg-brand-50 text-brand-700 border-l-2 border-brand-600 pl-[14px]{% endif %}">
-                    <svg class="h-5 w-5 flex-shrink-0 {% if section == 'clinic' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" />
-                    </svg>
-                    <span>Clínica</span>
-                </a>
-                <a href="{% url 'knowledge:list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 {% if section == 'knowledge' %}bg-brand-50 text-brand-700 border-l-2 border-brand-600 pl-[14px]{% endif %}">
-                    <svg class="h-5 w-5 flex-shrink-0 {% if section == 'knowledge' %}text-brand-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0118 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-                    </svg>
-                    <span>Base de conocimiento</span>
-                </a>
-            </nav>
+            {% include "partials/_sidebar_nav.html" %}
+        </nav>
             <div class="border-t border-slate-200 px-6 py-5">
                 <p class="text-sm font-medium text-slate-900">{{ request.user.get_full_name|default:request.user.email }}</p>
                 <p class="mt-1 text-xs text-slate-500">{{ request.user.get_role_display|default:"Personal" }}</p>
@@ -276,6 +245,7 @@
         {% endif %}
 
         <div class="flex min-h-screen flex-1 flex-col">
+            {% block topbar %}{% if request.user.is_authenticated %}{% include 'partials/_topbar.html' %}{% endif %}{% endblock %}
             <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
                 <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
                     <div class="flex items-center gap-3">
@@ -295,8 +265,8 @@
                         </button>
                         {% endif %}
                         <div>
-                            <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">{{ clinic.name|default:"Auto Clinic" }}</p>
                             <h2 class="text-xl font-semibold text-slate-900">{% block page_heading %}Panel de la clínica{% endblock %}</h2>
+                            {% block page_subheading %}{% endblock %}
                         </div>
                     </div>
                 </div>
