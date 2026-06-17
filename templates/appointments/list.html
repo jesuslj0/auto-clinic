@@ -4,6 +4,15 @@
 {% block title %}Citas · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
 {% block page_heading %}Citas{% endblock %}
 
+{% block page_actions %}
+<a href="{% url 'appointments:create' %}" class="btn-primary max-sm:px-3" aria-label="Nueva cita">
+    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+    </svg>
+    <span class="hidden sm:inline">Nueva cita</span>
+</a>
+{% endblock %}
+
 {% block content %}
 <section class="space-y-6">
     <form method="get" class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200">
@@ -21,15 +30,42 @@
                     {% endfor %}
                 </select>
             </label>
-            <div class="flex items-end gap-3">
-                <button type="submit" class="btn-primary w-full md:w-auto">Aplicar filtros</button>
-                <a href="{% url 'appointments:list' %}" class="btn-secondary">Restablecer</a>
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-end md:col-span-1">
+                <button type="submit" class="btn-primary w-full sm:w-auto">Aplicar filtros</button>
+                <a href="{% url 'appointments:list' %}" class="btn-secondary w-full justify-center sm:w-auto">Restablecer</a>
             </div>
         </div>
     </form>
 
     <section class="overflow-hidden rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
-        <div class="overflow-x-auto">
+        <!-- Móvil: tarjetas -->
+        <div class="divide-y divide-slate-100 md:hidden">
+            {% for appointment in appointments %}
+            <a href="{% url 'core:dashboard-manage-appointment' appointment.id %}" class="block px-5 py-4 transition active:bg-slate-50">
+                <div class="flex items-start justify-between gap-3">
+                    <p class="min-w-0 truncate text-sm font-semibold text-slate-900">{{ appointment.patient }}</p>
+                    <span class="inline-flex flex-shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold {{ appointment.status|status_badge }}">
+                        {{ appointment.get_status_display|default:appointment.status|title }}
+                    </span>
+                </div>
+                <p class="mt-1 text-sm text-slate-600">{{ appointment.service }}</p>
+                <div class="mt-2 flex items-center gap-2 text-xs text-slate-500">
+                    <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                    </svg>
+                    <span>{{ appointment.scheduled_at|date:"j M Y" }} · {{ appointment.scheduled_at|date:"g:i A" }} – {{ appointment.end_at|date:"g:i A" }}</span>
+                </div>
+                <p class="mt-1.5 text-xs text-slate-500">
+                    {% if appointment.professional %}{{ appointment.professional.user.get_full_name|default:appointment.professional.user.email }}{% else %}Sin asignar{% endif %}
+                </p>
+            </a>
+            {% empty %}
+            <p class="px-5 py-12 text-center text-sm text-slate-500">No hay citas que coincidan con los filtros seleccionados.</p>
+            {% endfor %}
+        </div>
+
+        <!-- Escritorio: tabla -->
+        <div class="hidden overflow-x-auto md:block">
             <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
                 <thead class="bg-slate-50 text-slate-500">
                     <tr>
@@ -67,7 +103,7 @@
                     </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="5" class="px-6 py-12 text-center text-sm text-slate-500">No hay citas que coincidan con los filtros seleccionados.</td>
+                            <td colspan="6" class="px-6 py-12 text-center text-sm text-slate-500">No hay citas que coincidan con los filtros seleccionados.</td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -76,11 +112,11 @@
     </section>
 
     {% if is_paginated %}
-    <nav class="flex items-center justify-between rounded-3xl bg-white px-5 py-4 shadow-soft ring-1 ring-slate-200" aria-label="Paginación">
-        <p class="text-sm text-slate-500">
+    <nav class="flex flex-col items-center justify-between gap-3 rounded-3xl bg-white px-5 py-4 shadow-soft ring-1 ring-slate-200 sm:flex-row" aria-label="Paginación">
+        <p class="text-center text-xs text-slate-500 sm:text-left sm:text-sm">
             Mostrando <span class="font-semibold text-slate-700">{{ page_obj.start_index }}–{{ page_obj.end_index }}</span> de <span class="font-semibold text-slate-700">{{ paginator.count }}</span> citas
         </p>
-        <div class="flex items-center gap-1">
+        <div class="flex flex-wrap items-center justify-center gap-1">
             {% if page_obj.has_previous %}
                 <a href="?page={{ page_obj.previous_page_number }}{% if selected_date %}&date={{ selected_date }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}"
                    class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50">

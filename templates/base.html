@@ -168,13 +168,13 @@
             <div class="flex items-center justify-between">
                 <a href="/" class="flex items-center gap-3">
                     {% if request.user.clinic.logo %}
-                    <img src="{{ request.user.clinic.logo.url }}" alt="Logo de la clínica" class="h-11 w-11 rounded-2xl">
+                    <img src="{{ request.user.clinic.logo.url }}" alt="Logo de la clínica" class="h-11 w-11 flex-shrink-0 rounded-2xl object-cover ring-1 ring-slate-200">
                     {% else %}
-                    <span class="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-gradient text-lg font-semibold text-white shadow-glow">AC</span>
+                    <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-gradient text-lg font-semibold text-white shadow-glow">{{ request.user.clinic.name|default:"Auto Clinic"|slice:":1"|upper }}</span>
                     {% endif %}
                     <div>
-                        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">Auto Clinic</p>
-                        <h1 class="text-lg font-semibold text-slate-900">{{ request.user.clinic.name|default:"Auto Clinic" }}</h1>
+                        <h1 class="text-lg font-semibold leading-tight text-slate-900 break-words">{{ request.user.clinic.name|default:"Auto Clinic" }}</h1>
+                        <p class="text-[10px] font-medium uppercase tracking-[0.22em] text-slate-400">Auto Clinic</p>
                     </div>
                 </a>
                 <button
@@ -215,13 +215,13 @@
             <div class="border-b border-slate-200 px-6 py-6">
                 <a href="/" class="flex items-center gap-3">
                     {% if request.user.clinic.logo %}
-                    <img src="{{ request.user.clinic.logo.url }}" alt="Logo de la clínica" class="h-11 w-11 rounded-2xl">
+                    <img src="{{ request.user.clinic.logo.url }}" alt="Logo de la clínica" class="h-11 w-11 flex-shrink-0 rounded-2xl object-cover ring-1 ring-slate-200">
                     {% else %}
-                    <span class="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-gradient text-lg font-semibold text-white shadow-glow">AC</span>
+                    <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-gradient text-lg font-semibold text-white shadow-glow">{{ request.user.clinic.name|default:"Auto Clinic"|slice:":1"|upper }}</span>
                     {% endif %}
                     <div>
-                        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-600">Auto Clinic</p>
-                        <h1 class="text-lg font-semibold text-slate-900">{{ request.user.clinic.name|default:"Auto Clinic" }}</h1>
+                        <h1 class="text-lg font-semibold leading-tight text-slate-900 break-words">{{ request.user.clinic.name|default:"Auto Clinic" }}</h1>
+                        <p class="text-[10px] font-medium uppercase tracking-[0.22em] text-slate-400">Auto Clinic</p>
                     </div>
                 </a>
             </div>
@@ -247,8 +247,8 @@
         <div class="flex min-h-screen flex-1 flex-col">
             {% block topbar %}{% if request.user.is_authenticated %}{% include 'partials/_topbar.html' %}{% endif %}{% endblock %}
             <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
-                <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-                    <div class="flex items-center gap-3">
+                <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4 lg:px-8">
+                    <div class="flex min-w-0 items-center gap-2 sm:gap-3">
                         {% if request.user.is_authenticated %}
                         <!-- Hamburger button (mobile only) -->
                         <button
@@ -264,10 +264,13 @@
                             </svg>
                         </button>
                         {% endif %}
-                        <div>
-                            <h2 class="text-xl font-semibold text-slate-900">{% block page_heading %}Panel de la clínica{% endblock %}</h2>
+                        <div class="min-w-0">
+                            <h2 class="truncate text-lg font-semibold text-slate-900 sm:text-xl">{% block page_heading %}Panel de la clínica{% endblock %}</h2>
                             {% block page_subheading %}{% endblock %}
                         </div>
+                    </div>
+                    <div class="flex flex-shrink-0 items-center gap-2">
+                        {% block page_actions %}{% endblock %}
                     </div>
                 </div>
             </header>

@@ -1,6 +1,20 @@
 import re
 
 
+def create_patient(*, clinic, phone, **fields):
+    """
+    Punto único de alta de pacientes: lo comparten el PatientSerializer
+    (API REST) y el PatientCreateView (panel web).
+
+    Normaliza el teléfono a E.164 antes de guardar. Lanza ValueError si el
+    número no es válido.
+    """
+    from patients.models import Patient
+
+    normalized = normalize_phone(phone)
+    return Patient.objects.create(clinic=clinic, phone=normalized, **fields)
+
+
 def normalize_phone(phone: str) -> str:
     """
     Normaliza un número de teléfono al formato E.164 (+XXXXXXXXXXX).

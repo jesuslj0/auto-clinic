@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+
+{% block title %}Mi perfil · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Mi perfil{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-2xl">
+    <div class="rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
+
+        <div class="border-b border-slate-200 px-4 py-6 sm:px-8">
+            <h2 class="text-lg font-semibold text-slate-900">Datos del profesional</h2>
+            <p class="mt-1 text-sm text-slate-500">Actualiza tu foto, tus datos y los servicios que ofreces.</p>
+        </div>
+
+        <form method="post" enctype="multipart/form-data" novalidate class="space-y-6 px-4 py-7 sm:px-8"
+              x-data="{ preview: '{% if professional.photo %}{{ professional.photo.url }}{% endif %}' }">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="rounded-xl bg-red-50 px-4 py-3 ring-1 ring-red-200">
+                {% for error in form.non_field_errors %}
+                <p class="text-sm text-red-700">{{ error }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {# Foto de perfil #}
+            <div class="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
+                <template x-if="preview">
+                    <img :src="preview" alt="Foto de perfil" class="h-20 w-20 flex-shrink-0 rounded-2xl object-cover ring-2 ring-brand-100">
+                </template>
+                <template x-if="!preview">
+                    <span class="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-gradient text-2xl font-semibold text-white shadow-glow">
+                        {{ request.user.get_full_name|default:request.user.email|make_list|first|upper }}
+                    </span>
+                </template>
+                <div class="flex-1">
+                    <label for="{{ form.photo.id_for_label }}" class="mb-1.5 block text-sm font-medium text-slate-700">{{ form.photo.label }}</label>
+                    <input
+                        type="file"
+                        name="{{ form.photo.html_name }}"
+                        id="{{ form.photo.id_for_label }}"
+                        accept="image/*"
+                        @change="const f = $event.target.files[0]; if (f) preview = URL.createObjectURL(f)"
+                        class="block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-brand-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-100"
+                    >
+                    {% if form.photo.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.photo.errors|join:", " }}</p>{% endif %}
+                    <p class="mt-1 text-xs text-slate-400">JPG o PNG. Se mostrará en el calendario y el menú superior.</p>
+                </div>
+            </div>
+
+            {# Nombre y apellidos #}
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                    <label for="{{ form.first_name.id_for_label }}" class="mb-1.5 block text-sm font-medium text-slate-700">{{ form.first_name.label }}</label>
+                    <input type="text" name="{{ form.first_name.html_name }}" id="{{ form.first_name.id_for_label }}" value="{{ form.first_name.value|default:'' }}" placeholder="Ej. Lucía"
+                        class="block w-full rounded-xl border {% if form.first_name.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                    {% if form.first_name.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.first_name.errors|join:", " }}</p>{% endif %}
+                </div>
+                <div>
+                    <label for="{{ form.last_name.id_for_label }}" class="mb-1.5 block text-sm font-medium text-slate-700">{{ form.last_name.label }}</label>
+                    <input type="text" name="{{ form.last_name.html_name }}" id="{{ form.last_name.id_for_label }}" value="{{ form.last_name.value|default:'' }}" placeholder="Ej. Martín"
+                        class="block w-full rounded-xl border {% if form.last_name.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                    {% if form.last_name.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.last_name.errors|join:", " }}</p>{% endif %}
+                </div>
+            </div>
+
+            {# Email (solo lectura) #}
+            <div>
+                <label class="mb-1.5 block text-sm font-medium text-slate-700">Correo electrónico</label>
+                <input type="email" value="{{ request.user.email }}" disabled
+                    class="block w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-500">
+                <p class="mt-1 text-xs text-slate-400">El correo es tu identificador de acceso y no puede cambiarse aquí.</p>
+            </div>
+
+            {# Tipo de profesional #}
+            <div>
+                <label for="{{ form.professional_type.id_for_label }}" class="mb-1.5 block text-sm font-medium text-slate-700">{{ form.professional_type.label }}</label>
+                <select name="{{ form.professional_type.html_name }}" id="{{ form.professional_type.id_for_label }}"
+                    class="block w-full rounded-xl border {% if form.professional_type.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                    {% for value, label in form.professional_type.field.choices %}
+                    <option value="{{ value }}" {% if form.professional_type.value == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                {% if form.professional_type.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.professional_type.errors|join:", " }}</p>{% endif %}
+            </div>
+
+            {# Servicios #}
+            <div>
+                <label for="{{ form.services.id_for_label }}" class="mb-1.5 block text-sm font-medium text-slate-700">{{ form.services.label }}</label>
+                <p class="mb-2 text-xs text-slate-400">Mantén pulsado Ctrl (o Cmd en Mac) para seleccionar varios.</p>
+                <select name="{{ form.services.html_name }}" id="{{ form.services.id_for_label }}" multiple size="6"
+                    class="block w-full rounded-xl border {% if form.services.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                    {% for value, label in form.services.field.choices %}
+                    <option value="{{ value }}" {% if value in form.services.value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                {% if form.services.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.services.errors|join:", " }}</p>{% endif %}
+            </div>
+
+            <div class="flex items-center justify-between pt-2">
+                <a href="{% url 'core:dashboard' %}" class="btn-secondary">Cancelar</a>
+                <button type="submit" class="btn-primary">Guardar cambios</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

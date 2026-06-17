@@ -1,4 +1,5 @@
 from django import template
+from django.utils import timezone
 
 register = template.Library()
 
@@ -49,3 +50,21 @@ def status_dot(status):
 def status_cell(status):
     """Devuelve las clases borde+fondo para una celda de calendario."""
     return STATUS_CELL_CLASSES.get(status, 'border-amber-200 bg-amber-50')
+
+
+@register.filter
+def local_minute(dt):
+    """Minuto de inicio (0-59) en la zona horaria activa, para posicionar la tarjeta."""
+    if not dt:
+        return 0
+    return timezone.localtime(dt).minute
+
+
+@register.filter
+def duration_minutes(appointment):
+    """Duración de la cita en minutos (mínimo 5 para que la tarjeta sea visible)."""
+    try:
+        delta = appointment.get_end_datetime() - appointment.scheduled_at
+        return max(int(delta.total_seconds() // 60), 5)
+    except Exception:
+        return 30

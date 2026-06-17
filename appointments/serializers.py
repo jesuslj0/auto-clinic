@@ -189,6 +189,12 @@ class AppointmentSerializer(serializers.ModelSerializer):
 
         return attrs
 
+    def create(self, validated_data):
+        # La creación real (cálculo de end_at, status inicial e historial)
+        # vive en el service compartido por API y panel web.
+        from appointments.services import create_appointment
+        return create_appointment(**validated_data)
+
     class Meta:
         model = Appointment
         fields = '__all__'

@@ -1,4 +1,6 @@
 from datetime import datetime, time, timedelta
+from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 import django_filters
 from django.contrib import messages
@@ -6,15 +8,16 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
-from django.views.generic import CreateView, ListView, TemplateView, UpdateView
+from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from appointments.forms import ProfessionalForm
-from appointments.models import Appointment, Professional, ProfessionalSchedule
+from appointments.forms import AppointmentForm, ProfessionalForm, ProfessionalProfileForm
+from appointments.models import Appointment, AppointmentStatusHistory, Professional, ProfessionalSchedule
+from appointments.services import create_appointment
 from appointments.serializers import AppointmentSerializer, ProfessionalScheduleSerializer, ProfessionalSerializer
 from core.authentication import ClinicAgent
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
@@ -464,6 +467,91 @@ class AppointmentListView(TemplateView):
         return context
 
 
+class AppointmentCreateView(LoginRequiredMixin, FormView):
+    """Alta manual de citas desde el panel (staff/admin).
+
+    Acepta valores iniciales por query string (scheduled_at o date+time,
+    patient, service) para que el calendario pueda enlazar aquí con la
+    fecha/hora prerrellenadas.
+    """
+
+    template_name = 'appointments/appointment_form.html'
+    form_class = AppointmentForm
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated and not request.user.clinic_id:
+            messages.error(request, 'Tu usuario no tiene una clínica asignada.')
+            return redirect('appointments:calendar')
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['clinic'] = self.request.user.clinic
+        return kwargs
+
+    def get_initial(self):
+        initial = super().get_initial()
+        params = self.request.GET
+
+        # scheduled_at ISO tiene prioridad; si no, date + time sueltos.
+        scheduled_at = params.get('scheduled_at')
+        if scheduled_at:
+            parsed = timezone.datetime.fromisoformat(scheduled_at)
+            if timezone.is_aware(parsed):
+                tz = ZoneInfo(self.request.user.clinic.timezone)
+                parsed = parsed.astimezone(tz)
+            initial['date'] = parsed.date()
+            initial['time'] = parsed.time().replace(second=0, microsecond=0)
+        else:
+            if params.get('date'):
+                initial['date'] = params['date']
+            if params.get('time'):
+                initial['time'] = params['time']
+
+        if params.get('patient'):
+            initial['patient'] = params['patient']
+        if params.get('service'):
+            initial['service'] = params['service']
+
+        # Profesional por defecto: el propio usuario si tiene perfil profesional
+        # (salvo que venga otro indicado por query string).
+        if params.get('professional'):
+            initial['professional'] = params['professional']
+        else:
+            try:
+                initial['professional'] = self.request.user.professional_profile.pk
+            except Professional.DoesNotExist:
+                pass
+        return initial
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['section'] = 'appointments'
+        # Enlace de alta rápida de paciente que vuelve a este mismo form.
+        new_patient_next = self.request.get_full_path()
+        context['new_patient_url'] = f"{reverse_lazy('patients:create')}?{urlencode({'next': new_patient_next})}"
+        return context
+
+    def form_valid(self, form):
+        data = form.cleaned_data
+        actor_label = self.request.user.get_full_name() or self.request.user.email
+        self.appointment = create_appointment(
+            clinic=self.request.user.clinic,
+            patient=data['patient'],
+            service=data['service'],
+            professional=data.get('professional'),
+            scheduled_at=data['scheduled_at'],
+            notes=data.get('notes', ''),
+            actor=AppointmentStatusHistory.Actor.STAFF,
+            actor_label=actor_label,
+        )
+        messages.success(self.request, 'Cita creada correctamente.')
+        return redirect(self.get_success_url())
+
+    def get_success_url(self):
+        return reverse_lazy('appointments:calendar')
+
+
 class AppointmentActionByTokenAPIView(APIView):
     permission_classes = [AllowAny]
 
@@ -526,6 +614,37 @@ class ProfessionalCreateView(LoginRequiredMixin, CreateView):
         else:
             form.instance.clinic = self.request.user.clinic
         messages.success(self.request, 'Profesional creado correctamente.')
+        return super().form_valid(form)
+
+
+class ProfessionalProfileView(LoginRequiredMixin, UpdateView):
+    """Perfil del propio profesional autenticado (foto y datos)."""
+
+    form_class = ProfessionalProfileForm
+    template_name = 'appointments/profile.html'
+    success_url = reverse_lazy('appointments:profile')
+    context_object_name = 'professional'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.profile = None
+        if request.user.is_authenticated:
+            try:
+                self.profile = request.user.professional_profile
+            except Professional.DoesNotExist:
+                messages.info(request, 'Tu usuario no tiene un perfil de profesional asociado.')
+                return redirect('core:dashboard')
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_object(self, queryset=None):
+        return self.profile
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['section'] = 'profile'
+        return context
+
+    def form_valid(self, form):
+        messages.success(self.request, 'Perfil actualizado correctamente.')
         return super().form_valid(form)
 
 

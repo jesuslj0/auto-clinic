@@ -22,7 +22,9 @@
         <div class="h-8 w-px flex-shrink-0 bg-slate-200" aria-hidden="true"></div>
 
         <!-- Perfil del profesional -->
-        <div class="flex flex-shrink-0 items-center gap-3">
+        <a href="{% if professional %}{% url 'appointments:profile' %}{% else %}#{% endif %}"
+           class="flex flex-shrink-0 items-center gap-3 rounded-xl transition {% if professional %}hover:opacity-80{% else %}pointer-events-none{% endif %}"
+           {% if professional %}title="Ver mi perfil"{% endif %}>
             {% if professional.photo %}
                 <img src="{{ professional.photo.url }}" alt="Foto de perfil" class="h-9 w-9 flex-shrink-0 rounded-xl object-cover ring-2 ring-brand-100">
             {% else %}
@@ -38,7 +40,7 @@
                     <p class="truncate text-xs text-slate-500">{{ request.user.get_role_display|default:"Personal" }}</p>
                 {% endif %}
             </div>
-        </div>
+        </a>
     </div>
 </div>
 {% endwith %}

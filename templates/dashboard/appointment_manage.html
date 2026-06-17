@@ -26,7 +26,25 @@
         </span>
     </div>
 
-    <article class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
+    <!-- Portal del paciente (separado del flujo de gestión interno) -->
+    <article class="flex flex-col gap-4 rounded-3xl bg-indigo-50/60 p-5 ring-1 ring-indigo-100 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex items-start gap-3">
+            <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-white text-indigo-600 ring-1 ring-indigo-100">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                </svg>
+            </span>
+            <div>
+                <h2 class="text-sm font-semibold text-slate-900">Portal del paciente</h2>
+                <p class="mt-0.5 text-sm text-slate-500">Vista pública que ve el paciente para confirmar o cancelar su cita.</p>
+            </div>
+        </div>
+        <a href="{% url 'portal:detail' appointment.confirmation_token %}" class="btn-secondary w-full justify-center sm:w-auto">
+            Ver portal del paciente
+        </a>
+    </article>
+
+    <article class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6">
         <h2 class="text-lg font-semibold text-slate-900">Detalle de la cita</h2>
         <p class="mt-1 text-sm text-slate-500">Gestiona esta cita desde el equipo clínico, sin salir del dashboard.</p>
 
@@ -72,53 +90,56 @@
             </div>
             <p class="mt-1 pl-8 text-xs text-rose-500">No es posible confirmar una cita cancelada.</p>
         </div>
-        <div class="mt-4 flex justify-end">
-            <a href="{% url 'portal:detail' appointment.confirmation_token %}" class="btn-secondary">
-                Ver portal del paciente
-            </a>
-        </div>
         {% else %}
-        <div class="mt-6 flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-5">
-            <a href="{% url 'portal:detail' appointment.confirmation_token %}" class="btn-secondary">
-                Ver portal del paciente
-            </a>
+        <div class="mt-6 flex flex-col gap-4 border-t border-slate-100 pt-5 sm:flex-row sm:items-end sm:justify-between">
+            <!-- Acciones negativas -->
+            <div class="flex flex-col gap-2">
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">No realizada</p>
+                <div class="flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        @click="open('reject')"
+                        class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+                    >
+                        Rechazar cita
+                    </button>
+                    {% if appointment.status != 'completed' %}
+                    <button
+                        type="button"
+                        @click="open('no_show')"
+                        class="rounded-xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+                    >
+                        No se presentó
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
 
-            <button
-                type="button"
-                @click="open('reject')"
-                class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
-            >
-                Rechazar cita
-            </button>
-
-            {% if appointment.status != 'completed' %}
-            <button
-                type="button"
-                @click="open('no_show')"
-                class="rounded-xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
-            >
-                No se presentó
-            </button>
-            {% endif %}
-
-            {% if appointment.status == 'pending' %}
-            <button
-                type="button"
-                @click="open('confirm')"
-                class="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
-            >
-                Confirmar cita
-            </button>
-            {% endif %}
-
-            {% if appointment.status != 'completed' and appointment.status != 'no_show' %}
-            <button
-                type="button"
-                @click="open('complete')"
-                class="btn-primary"
-            >
-                Marcar completada
-            </button>
+            <!-- Acciones positivas -->
+            {% if appointment.status == 'pending' or appointment.status != 'completed' and appointment.status != 'no_show' %}
+            <div class="flex flex-col gap-2 sm:items-end">
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-right">Avanzar cita</p>
+                <div class="flex flex-wrap gap-2 sm:justify-end">
+                    {% if appointment.status == 'pending' %}
+                    <button
+                        type="button"
+                        @click="open('confirm')"
+                        class="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                    >
+                        Confirmar cita
+                    </button>
+                    {% endif %}
+                    {% if appointment.status != 'completed' and appointment.status != 'no_show' %}
+                    <button
+                        type="button"
+                        @click="open('complete')"
+                        class="btn-primary"
+                    >
+                        Marcar completada
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
             {% endif %}
         </div>
         {% endif %}
@@ -148,7 +169,7 @@
 
     {% with history=appointment.status_history.all %}
     {% if history %}
-    <article class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
+    <article class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6">
         <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500">Historial de estado</h2>
         <ol class="mt-4 space-y-0">
             {% for entry in history %}
@@ -230,7 +251,7 @@
         x-transition:leave="transition ease-in duration-150"
         x-transition:leave-start="opacity-100 scale-100"
         x-transition:leave-end="opacity-0 scale-95"
-        class="relative w-full max-w-sm rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200"
+        class="relative w-full max-w-sm rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6"
     >
         <div class="flex items-start gap-4">
             <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-emerald-50">
@@ -294,7 +315,7 @@
         x-transition:leave="transition ease-in duration-150"
         x-transition:leave-start="opacity-100 scale-100"
         x-transition:leave-end="opacity-0 scale-95"
-        class="relative w-full max-w-sm rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200"
+        class="relative w-full max-w-sm rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6"
     >
         <div class="flex items-start gap-4">
             <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-rose-50">
@@ -332,7 +353,7 @@
     <div x-show="modal === 'complete'" x-transition.opacity @click="close()" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
     <div x-show="modal === 'complete'"
          x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
-         class="relative w-full max-w-sm rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
+         class="relative w-full max-w-sm rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6">
         <div class="flex items-start gap-4">
             <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-50">
                 <svg class="h-5 w-5 text-brand-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -362,7 +383,7 @@
     <div x-show="modal === 'no_show'" x-transition.opacity @click="close()" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
     <div x-show="modal === 'no_show'"
          x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
-         class="relative w-full max-w-sm rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
+         class="relative w-full max-w-sm rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6">
         <div class="flex items-start gap-4">
             <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-slate-100">
                 <svg class="h-5 w-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">

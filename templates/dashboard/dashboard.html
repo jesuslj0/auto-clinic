@@ -4,7 +4,22 @@
 {% block title %}Panel · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
 {% block page_heading %}Panel de Control{% endblock %}
 {% block page_subheading %}
-<p class="mt-0.5 text-sm text-slate-500">Bienvenido, {{ request.user.get_full_name|default:request.user.email }}. Aquí tienes el resumen de hoy.</p>
+<p class="mt-0.5 hidden text-sm text-slate-500 sm:block">Bienvenido, {{ request.user.get_full_name|default:request.user.email }}. Aquí tienes el resumen de hoy.</p>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'appointments:create' %}" class="btn-primary max-sm:px-3" aria-label="Nueva cita">
+    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+    </svg>
+    <span class="hidden sm:inline">Nueva cita</span>
+</a>
+<a href="{% url 'patients:create' %}" class="btn-secondary max-sm:px-3" aria-label="Nuevo paciente">
+    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
+    </svg>
+    <span class="hidden sm:inline">Nuevo paciente</span>
+</a>
 {% endblock %}
 
 {% block content %}
@@ -16,12 +31,20 @@
         <!-- Columna izquierda: citas -->
         <div class="grid gap-4">
             <!-- Citas de hoy (destacada) -->
-            <article class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
+            <article class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6">
                 <div class="flex items-start justify-between">
                     <div>
-                        <p class="text-sm font-medium text-slate-500">Citas de hoy</p>
-                        <p class="mt-3 text-4xl font-semibold text-slate-900">{{ stats.today|default:today_appointments|default:0 }}</p>
-                        <p class="mt-2 text-sm text-slate-500">Visitas programadas para {{ today|date:"l, j \d\e F"|default:"hoy" }}.</p>
+                        <div class="flex items-center gap-2">
+                            <p class="text-sm font-medium text-slate-500">Citas de hoy</p>
+                            <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                </svg>
+                                {{ today_completed_pct|default:0 }}%
+                            </span>
+                        </div>
+                        <p class="mt-3 text-3xl font-semibold text-slate-900 sm:text-4xl">{{ stats.today|default:today_appointments|default:0 }}</p>
+                        <p class="mt-2 text-sm text-slate-500">{{ today_completed|default:0 }} completada{{ today_completed|pluralize }} de {{ today_appointments|default:0 }} programada{{ today_appointments|pluralize }} hoy.</p>
                     </div>
                     <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
                         <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
@@ -31,12 +54,12 @@
                 </div>
             </article>
             <!-- Pendientes + Canceladas -->
-            <div class="grid gap-4 sm:grid-cols-2">
-                <article class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
+            <div class="grid grid-cols-2 gap-4">
+                <article class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6">
                     <div class="flex items-start justify-between">
                         <div>
                             <p class="text-sm font-medium text-slate-500">Pendientes</p>
-                            <p class="mt-3 text-3xl font-semibold text-amber-500">{{ stats.pending|default:pending_appointments|default:0 }}</p>
+                            <p class="mt-3 text-2xl font-semibold sm:text-3xl text-amber-500">{{ stats.pending|default:pending_appointments|default:0 }}</p>
                             <p class="mt-2 text-sm text-slate-500">En espera de confirmación.</p>
                         </div>
                         <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
@@ -46,11 +69,11 @@
                         </span>
                     </div>
                 </article>
-                <article class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
+                <article class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6">
                     <div class="flex items-start justify-between">
                         <div>
                             <p class="text-sm font-medium text-slate-500">Canceladas</p>
-                            <p class="mt-3 text-3xl font-semibold text-rose-500">{{ stats.cancelled|default:cancelled_appointments|default:0 }}</p>
+                            <p class="mt-3 text-2xl font-semibold sm:text-3xl text-rose-500">{{ stats.cancelled|default:cancelled_appointments|default:0 }}</p>
                             <p class="mt-2 text-sm text-slate-500">En el periodo actual.</p>
                         </div>
                         <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
@@ -66,11 +89,11 @@
         <!-- Columna derecha: métricas del mes -->
         <div class="grid gap-4">
             <!-- Nuevos pacientes (este mes) -->
-            <article class="rounded-3xl bg-white p-6 shadow-soft ring-1 ring-slate-200">
+            <article class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6">
                 <div class="flex items-start justify-between">
                     <div>
                         <p class="text-sm font-medium text-slate-500">Nuevos pacientes</p>
-                        <p class="mt-3 text-3xl font-semibold text-slate-900">{{ new_patients_month|default:0 }}</p>
+                        <p class="mt-3 text-2xl font-semibold sm:text-3xl text-slate-900">{{ new_patients_month|default:0 }}</p>
                         <p class="mt-2 text-sm text-slate-500">Registrados en {{ today|date:"F" }}.</p>
                     </div>
                     <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
@@ -81,12 +104,12 @@
                 </div>
             </article>
             <!-- Ingresos del mes (citas completadas) -->
-            <article class="relative overflow-hidden rounded-3xl bg-brand-gradient p-6 text-white shadow-glow">
+            <article class="relative overflow-hidden rounded-3xl bg-brand-gradient p-5 text-white shadow-glow sm:p-6">
                 <div aria-hidden="true" class="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/10 blur-2xl"></div>
                 <div class="relative flex items-start justify-between">
                     <div>
                         <p class="text-sm font-medium text-white/80">Ingresos del mes</p>
-                        <p class="mt-3 text-3xl font-semibold">{{ revenue_month|floatformat:2 }} €</p>
+                        <p class="mt-3 text-2xl font-semibold sm:text-3xl">{{ revenue_month|floatformat:2 }} €</p>
                         <p class="mt-2 text-sm text-white/75">Según citas completadas en {{ today|date:"F" }}.</p>
                     </div>
                     <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-white/15 text-white backdrop-blur">
@@ -100,16 +123,16 @@
     </div>
 
     <section class="rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
-        <div class="flex items-center justify-between border-b border-slate-200 px-6 py-5">
-            <div>
-                <h3 class="text-lg font-semibold text-slate-900">Citas de hoy</h3>
-                <p class="mt-1 text-sm text-slate-500">Una vista rápida de lo que sigue en agenda.</p>
+        <div class="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4 sm:px-6 sm:py-5">
+            <div class="min-w-0">
+                <h3 class="text-base font-semibold text-slate-900 sm:text-lg">Citas de hoy</h3>
+                <p class="mt-1 hidden text-sm text-slate-500 sm:block">Una vista rápida de lo que sigue en agenda.</p>
             </div>
-            <a href="{% url 'appointments:list' %}" class="btn-secondary">Ver todo</a>
+            <a href="{% url 'appointments:list' %}" class="btn-secondary flex-shrink-0 max-sm:px-3 max-sm:text-xs">Ver todo</a>
         </div>
         <div class="divide-y divide-slate-100">
             {% for appointment in appointments|default:today_schedule %}
-                <article class="flex flex-col gap-4 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+                <article class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-5">
                     <div>
                         <p class="text-base font-semibold text-slate-900">{{ appointment.patient }}</p>
                         <p class="mt-1 text-sm text-slate-500">{{ appointment.service }} · {{ appointment.scheduled_at|date:"g:i A" }} – {{ appointment.end_at|date:"g:i A" }}</p>

@@ -1,5 +1,10 @@
+from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
+
+from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, Prefetch, Q
-from django.views.generic import DetailView, ListView, UpdateView
+from django.shortcuts import redirect
+from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from rest_framework import viewsets
 from django.urls import reverse_lazy
 
@@ -11,6 +16,7 @@ from patients.filters import PatientFilter
 from patients.models import Patient
 from patients.serializers import PatientSerializer
 from patients.forms import PatientForm
+from patients.services import create_patient
 
 
 class PatientViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets.ModelViewSet):
@@ -68,6 +74,44 @@ class PatientDetailView(DetailView):
     def get_queryset(self):
         appointment_queryset = Appointment.objects.select_related('service', 'professional__user').order_by('-scheduled_at')
         return Patient.objects.prefetch_related(Prefetch('appointments', queryset=appointment_queryset))
+
+
+class PatientCreateView(LoginRequiredMixin, CreateView):
+    model = Patient
+    form_class = PatientForm
+    template_name = 'patients/patient_form.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated and not request.user.is_superuser and not request.user.clinic_id:
+            messages.error(request, 'Tu usuario no tiene una clínica asignada.')
+            return redirect('patients:list')
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['section'] = 'patients'
+        context['next_url'] = self.request.GET.get('next', '')
+        return context
+
+    def form_valid(self, form):
+        try:
+            self.object = create_patient(clinic=self.request.user.clinic, **form.cleaned_data)
+        except ValueError as exc:
+            form.add_error('phone', str(exc))
+            return self.form_invalid(form)
+        messages.success(self.request, 'Paciente creado correctamente.')
+        return redirect(self.get_success_url())
+
+    def get_success_url(self):
+        # Si venimos del alta de cita, volvemos a ese formulario con el
+        # paciente recién creado preseleccionado por query string.
+        next_url = self.request.POST.get('next') or self.request.GET.get('next')
+        if next_url:
+            parts = urlparse(next_url)
+            query = dict(parse_qsl(parts.query))
+            query['patient'] = self.object.pk
+            return urlunparse(parts._replace(query=urlencode(query)))
+        return reverse_lazy('patients:detail', kwargs={'id': self.object.pk})
 
 
 class PatientEditView(UpdateView):

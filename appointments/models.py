@@ -160,19 +160,24 @@ class Appointment(models.Model):
         return self.scheduled_at + timedelta(minutes=30)
 
     @classmethod
-    def find_overlap(cls, professional, start, end, exclude_pk=None):
+    def find_overlap(cls, professional, start, end, exclude_pk=None, statuses=None):
         """
-        Devuelve la primera cita activa del profesional que se solapa con
-        el rango [start, end), o None si no existe conflicto.
+        Devuelve la primera cita del profesional que se solapa con el rango
+        [start, end), o None si no existe conflicto.
 
-        Sólo considera citas en estado PENDING o CONFIRMED.
+        Por defecto considera citas en estado PENDING o CONFIRMED. Se puede
+        acotar con `statuses` (p. ej. solo CONFIRMED al confirmar una cita,
+        para permitir varias pendientes en el mismo tramo).
         """
+        if statuses is None:
+            statuses = [cls.Status.PENDING, cls.Status.CONFIRMED]
+
         # Candidatas: empiezan antes de que termine la nueva
         candidates = (
             cls.objects
             .filter(
                 professional=professional,
-                status__in=[cls.Status.PENDING, cls.Status.CONFIRMED],
+                status__in=statuses,
                 scheduled_at__lt=end,
             )
             .select_related('service')

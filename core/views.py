@@ -99,6 +99,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             appointments = appointments.filter(clinic=user.clinic)
 
         today_schedule = appointments.filter(scheduled_at__date=today)
+        today_count = today_schedule.count()
+        today_completed = today_schedule.filter(status=Appointment.Status.COMPLETED).count()
+        today_completed_pct = round(today_completed / today_count * 100) if today_count else 0
         professional = getattr(user, 'professional_profile', None)
 
         # Inicio del mes actual para métricas mensuales
@@ -123,7 +126,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             {
                 'today': today,
                 'today_schedule': today_schedule,
-                'today_appointments': today_schedule.count(),
+                'today_appointments': today_count,
+                'today_completed': today_completed,
+                'today_completed_pct': today_completed_pct,
                 'pending_appointments': appointments.filter(status=Appointment.Status.PENDING).count(),
                 'cancelled_appointments': appointments.filter(status=Appointment.Status.CANCELLED).count(),
                 'new_patients_month': new_patients_month,
@@ -200,11 +205,14 @@ class DashboardAppointmentActionView(LoginRequiredMixin, View):
                 next_url = request.POST.get('next') or 'core:dashboard'
                 return redirect(next_url)
             if appointment.professional:
+                # Solo bloquea si ya hay otra cita CONFIRMADA solapada; varias
+                # pendientes en el mismo tramo pueden coexistir hasta confirmar.
                 conflict = Appointment.find_overlap(
                     appointment.professional,
                     appointment.scheduled_at,
                     appointment.get_end_datetime(),
                     exclude_pk=appointment.pk,
+                    statuses=[Appointment.Status.CONFIRMED],
                 )
                 if conflict:
                     messages.error(
