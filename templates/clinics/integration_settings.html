@@ -10,8 +10,8 @@
     <div class="flex flex-col gap-4 rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:flex-row sm:items-center sm:justify-between sm:p-6">
         <div class="flex items-start gap-4">
             <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
-                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+                <svg class="h-6 w-6" fill="currentColor" viewBox="0 0 448 512" aria-hidden="true">
+                    <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.2-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z" />
                 </svg>
             </span>
             <div>
@@ -37,6 +37,7 @@
     {# ═══════════ PASO 1 ═══════════ #}
     <form method="post"
           x-data="{
+              open: false,
               showToken: {{ has_token|yesno:'false,true' }},
               genVerify() {
                   const v = 'vk_' + Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2,'0')).join('');
@@ -53,12 +54,20 @@
         {# Contenido #}
         <div class="flex-1 pb-8">
             <div class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6">
-                <h3 class="text-base font-semibold text-slate-900">Credenciales de WhatsApp Cloud API</h3>
-                <p class="mt-1 text-sm text-slate-500">
-                    Copia estos datos desde
-                    <span class="font-medium text-slate-700">Meta for Developers → tu app → WhatsApp → API Setup</span>.
-                </p>
+                <button type="button" @click="open = !open" class="flex w-full items-center justify-between gap-3 text-left">
+                    <div>
+                        <h3 class="text-base font-semibold text-slate-900">Credenciales de WhatsApp Cloud API</h3>
+                        <p class="mt-1 text-sm text-slate-500">
+                            Copia estos datos desde
+                            <span class="font-medium text-slate-700">Meta for Developers → tu app → WhatsApp → API Setup</span>.
+                        </p>
+                    </div>
+                    <svg class="h-5 w-5 flex-shrink-0 text-slate-400 transition-transform duration-200" :class="open && 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </button>
 
+                <div x-show="open" x-collapse>
                 {% if form.non_field_errors %}
                 <div class="mt-4 rounded-xl bg-rose-50 px-4 py-3 ring-1 ring-rose-200">
                     {% for error in form.non_field_errors %}<p class="text-sm text-rose-700">{{ error }}</p>{% endfor %}
@@ -127,6 +136,7 @@
                 <div class="mt-6 flex justify-end">
                     <button type="submit" class="btn-primary">Guardar credenciales</button>
                 </div>
+                </div>{# /x-collapse #}
             </div>
         </div>
     </form>
@@ -138,13 +148,21 @@
             <span class="mt-1 w-px flex-1 bg-slate-200" aria-hidden="true"></span>
         </div>
         <div class="flex-1 pb-8">
-            <div class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6">
-                <h3 class="text-base font-semibold text-slate-900">Configura el webhook en Meta</h3>
-                <p class="mt-1 text-sm text-slate-500">
-                    En <span class="font-medium text-slate-700">WhatsApp → Configuration → Webhook</span>, pega estos dos valores y
-                    suscríbete al campo <span class="font-medium text-slate-700">messages</span>.
-                </p>
+            <div class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6" x-data="{ open: false }">
+                <button type="button" @click="open = !open" class="flex w-full items-center justify-between gap-3 text-left">
+                    <div>
+                        <h3 class="text-base font-semibold text-slate-900">Configura el webhook en Meta</h3>
+                        <p class="mt-1 text-sm text-slate-500">
+                            En <span class="font-medium text-slate-700">WhatsApp → Configuration → Webhook</span>, pega estos dos valores y
+                            suscríbete al campo <span class="font-medium text-slate-700">messages</span>.
+                        </p>
+                    </div>
+                    <svg class="h-5 w-5 flex-shrink-0 text-slate-400 transition-transform duration-200" :class="open && 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </button>
 
+                <div x-show="open" x-collapse>
                 <div class="mt-5 space-y-4">
                     {# Callback URL #}
                     <div>
@@ -178,6 +196,7 @@
                         {% endif %}
                     </div>
                 </div>
+                </div>{# /x-collapse #}
             </div>
         </div>
     </div>
@@ -188,12 +207,20 @@
             <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-brand-gradient text-sm font-semibold text-white shadow-sm">3</span>
         </div>
         <div class="flex-1">
-            <div class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6">
-                <h3 class="text-base font-semibold text-slate-900">Clave del agente (n8n)</h3>
-                <p class="mt-1 text-sm text-slate-500">
-                    n8n usa esta clave para operar de forma segura sobre los datos de tu clínica. Trátala como una contraseña.
-                </p>
+            <div class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6" x-data="{ open: false }">
+                <button type="button" @click="open = !open" class="flex w-full items-center justify-between gap-3 text-left">
+                    <div>
+                        <h3 class="text-base font-semibold text-slate-900">Clave del agente (n8n)</h3>
+                        <p class="mt-1 text-sm text-slate-500">
+                            n8n usa esta clave para operar de forma segura sobre los datos de tu clínica. Trátala como una contraseña.
+                        </p>
+                    </div>
+                    <svg class="h-5 w-5 flex-shrink-0 text-slate-400 transition-transform duration-200" :class="open && 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </button>
 
+                <div x-show="open" x-collapse>
                 <div class="mt-5">
                     <span class="block text-sm font-medium text-slate-700 mb-1.5">Agent API Key</span>
                     <div class="flex gap-2">
@@ -230,6 +257,7 @@
                         </template>
                     </form>
                 </div>
+                </div>{# /x-collapse #}
             </div>
         </div>
     </div>
@@ -271,8 +299,8 @@
             {# Cabecera del chat #}
             <div class="flex items-center gap-3 border-b border-slate-100 px-5 py-4">
                 <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
-                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+                    <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 448 512" aria-hidden="true">
+                        <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.2-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z" />
                     </svg>
                 </span>
                 <div class="min-w-0 flex-1">
