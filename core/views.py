@@ -1,10 +1,13 @@
+import uuid
+
+from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q, Sum
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, LogoutView
 from django.http import HttpResponseBadRequest
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views import View
@@ -15,7 +18,7 @@ from rest_framework.views import APIView
 
 from appointments.models import Appointment, AppointmentStatusHistory
 from patients.models import Patient
-from core.forms import ClinicForm, EmailAuthenticationForm
+from core.forms import ClinicForm, EmailAuthenticationForm, WhatsAppIntegrationForm
 from core.mixins import ExportMixin
 from core.models import Clinic, User
 from core.permissions import IsAgentMasterKey, IsClinicAdminOrReadOnly, IsStaffOrAdmin
@@ -85,6 +88,146 @@ class ClinicEditView(LoginRequiredMixin, UpdateView):
     def form_valid(self, form):
         messages.success(self.request, 'Información de la clínica actualizada correctamente.')
         return super().form_valid(form)
+
+
+class ClinicAdminRequiredMixin(LoginRequiredMixin):
+    """Restringe el acceso a administradores de la clínica (o superusuarios)."""
+
+    def dispatch(self, request, *args, **kwargs):
+        user = request.user
+        if user.is_authenticated and not (user.is_superuser or getattr(user, 'role', None) == 'admin'):
+            raise PermissionDenied('Solo los administradores pueden gestionar esta configuración.')
+        return super().dispatch(request, *args, **kwargs)
+
+
+class WhatsAppIntegrationView(ClinicAdminRequiredMixin, View):
+    """Onboarding guiado para conectar el agente de WhatsApp de la clínica."""
+
+    template_name = 'clinics/integration_settings.html'
+
+    def get(self, request):
+        clinic = request.user.clinic
+        if clinic is None:
+            messages.error(request, 'Tu usuario no está asociado a ninguna clínica.')
+            return redirect('core:dashboard')
+        return self._render(request, clinic, WhatsAppIntegrationForm(instance=clinic))
+
+    def post(self, request):
+        clinic = request.user.clinic
+        if clinic is None:
+            messages.error(request, 'Tu usuario no está asociado a ninguna clínica.')
+            return redirect('core:dashboard')
+
+        if request.POST.get('action') == 'rotate_api_key':
+            clinic.agent_api_key = uuid.uuid4()
+            clinic.save(update_fields=['agent_api_key'])
+            messages.success(
+                request,
+                'Se ha generado una nueva clave del agente. Actualízala en n8n para no perder la conexión.',
+            )
+            return redirect('core:clinic-integrations')
+
+        form = WhatsAppIntegrationForm(request.POST, instance=clinic)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Configuración del agente de WhatsApp guardada correctamente.')
+            return redirect('core:clinic-integrations')
+        return self._render(request, clinic, form)
+
+    def _render(self, request, clinic, form):
+        is_connected = bool(
+            clinic.whatsapp_phone_number_id
+            and clinic.whatsapp_token
+            and clinic.whatsapp_verify_token
+        )
+        context = {
+            'clinic_obj': clinic,
+            'form': form,
+            'section': 'integrations',
+            'webhook_url': settings.WHATSAPP_WEBHOOK_URL,
+            'has_token': bool(clinic.whatsapp_token),
+            'is_connected': is_connected,
+        }
+        return render(request, self.template_name, context)
+
+
+class AgentTestMessageView(ClinicAdminRequiredMixin, View):
+    """Proxy hacia el webhook de prueba de n8n.
+
+    Recibe un mensaje del panel, lo reenvía a n8n con las credenciales del
+    lado servidor (nunca se exponen en el navegador) y devuelve la respuesta
+    del agente como JSON.
+    """
+
+    def post(self, request):
+        import json
+        import urllib.error
+        import urllib.request
+        from django.http import JsonResponse
+
+        clinic = request.user.clinic
+        if clinic is None:
+            return JsonResponse({'error': 'Tu usuario no está asociado a ninguna clínica.'}, status=400)
+
+        try:
+            body = json.loads(request.body or '{}')
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Petición no válida.'}, status=400)
+
+        message = (body.get('message') or '').strip()
+        if not message:
+            return JsonResponse({'error': 'El mensaje no puede estar vacío.'}, status=400)
+
+        # Modo eco temporal: responde sin llamar a n8n (validación de la UI).
+        if settings.WHATSAPP_TEST_ECHO_MODE:
+            return JsonResponse({
+                'reply': f'🤖 (modo eco de prueba) Recibí: “{message}”. '
+                         'El agente real responderá cuando conectes el webhook de n8n.',
+            })
+
+        payload = json.dumps({
+            'clinic_id': clinic.clinic_id,
+            'phone': 'panel-test',
+            'message': message,
+        }).encode('utf-8')
+
+        req = urllib.request.Request(
+            settings.WHATSAPP_TEST_WEBHOOK_URL,
+            data=payload,
+            method='POST',
+            headers={
+                'Content-Type': 'application/json',
+                'Authorization': f'Api-Key {clinic.agent_api_key}',
+            },
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                raw = resp.read().decode('utf-8', errors='replace')
+        except urllib.error.HTTPError as exc:
+            return JsonResponse(
+                {'error': f'n8n respondió {exc.code}. Revisa que el webhook de prueba esté activo.'},
+                status=502,
+            )
+        except urllib.error.URLError:
+            return JsonResponse(
+                {'error': 'No se pudo contactar con n8n. Comprueba la URL del webhook de prueba.'},
+                status=502,
+            )
+
+        # n8n puede devolver texto plano o JSON con distintas claves.
+        reply = raw
+        try:
+            data = json.loads(raw)
+            if isinstance(data, list) and data:
+                data = data[0]
+            if isinstance(data, dict):
+                reply = data.get('reply') or data.get('text') or data.get('message') or data.get('output') or raw
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        reply = (reply or '').strip() or 'El agente no devolvió ninguna respuesta.'
+        return JsonResponse({'reply': reply})
 
 
 class DashboardView(LoginRequiredMixin, TemplateView):

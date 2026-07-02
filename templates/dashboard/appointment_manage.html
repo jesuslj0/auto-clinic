@@ -26,24 +26,6 @@
         </span>
     </div>
 
-    <!-- Portal del paciente (separado del flujo de gestión interno) -->
-    <article class="flex flex-col gap-4 rounded-3xl bg-indigo-50/60 p-5 ring-1 ring-indigo-100 sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex items-start gap-3">
-            <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-white text-indigo-600 ring-1 ring-indigo-100">
-                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                </svg>
-            </span>
-            <div>
-                <h2 class="text-sm font-semibold text-slate-900">Portal del paciente</h2>
-                <p class="mt-0.5 text-sm text-slate-500">Vista pública que ve el paciente para confirmar o cancelar su cita.</p>
-            </div>
-        </div>
-        <a href="{% url 'portal:detail' appointment.confirmation_token %}" class="btn-secondary w-full justify-center sm:w-auto">
-            Ver portal del paciente
-        </a>
-    </article>
-
     <article class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6">
         <h2 class="text-lg font-semibold text-slate-900">Detalle de la cita</h2>
         <p class="mt-1 text-sm text-slate-500">Gestiona esta cita desde el equipo clínico, sin salir del dashboard.</p>
@@ -143,6 +125,24 @@
             {% endif %}
         </div>
         {% endif %}
+    </article>
+
+    <!-- Portal del paciente (separado del flujo de gestión interno) -->
+    <article class="flex flex-col gap-4 rounded-3xl bg-indigo-50/60 p-5 ring-1 ring-indigo-100 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex items-start gap-3">
+            <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-white text-indigo-600 ring-1 ring-indigo-100">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                </svg>
+            </span>
+            <div>
+                <h2 class="text-sm font-semibold text-slate-900">Portal del paciente</h2>
+                <p class="mt-0.5 text-sm text-slate-500">Vista pública que ve el paciente para confirmar o cancelar su cita.</p>
+            </div>
+        </div>
+        <a href="{% url 'portal:detail' appointment.confirmation_token %}" class="btn-secondary w-full justify-center sm:w-auto">
+            Ver portal del paciente
+        </a>
     </article>
 
     <!-- Forms ocultos que se envían desde los modales -->

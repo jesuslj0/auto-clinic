@@ -66,7 +66,7 @@ class AppointmentViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets
     search_fields = ['patient__first_name', 'patient__last_name', 'patient_name', 'patient_phone', 'status']
     filterset_class = AppointmentFilter
     ordering_fields = ['scheduled_at', 'status', 'created_at', 'patient_name']
-    ordering = ['scheduled_at']
+    ordering = ['-scheduled_at']
 
     def get_queryset(self):
         queryset = Appointment.objects.select_related('clinic', 'patient', 'service', 'professional__user')

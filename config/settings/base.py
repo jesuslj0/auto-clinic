@@ -161,6 +161,25 @@ CELERY_BEAT_SCHEDULE = {
 
 AGENT_MASTER_API_KEY = config('AGENT_MASTER_API_KEY', default='')
 
+# URL del webhook de n8n donde Meta entrega los mensajes entrantes de WhatsApp.
+# Es única y global: n8n resuelve la clínica por el phone_number_id del mensaje.
+WHATSAPP_WEBHOOK_URL = config(
+    'WHATSAPP_WEBHOOK_URL',
+    default='https://n8n.alt4ir.online/webhook/whatsapp-inbound',
+)
+
+# Webhook de n8n para probar el agente desde el panel. Recibe {clinic_id, message}
+# y responde de forma síncrona con el texto del agente. Separado del flujo real.
+WHATSAPP_TEST_WEBHOOK_URL = config(
+    'WHATSAPP_TEST_WEBHOOK_URL',
+    default='https://n8n.alt4ir.online/webhook/whatsapp-test',
+)
+
+# Modo eco temporal: el chat de prueba responde localmente sin llamar a n8n.
+# Útil para validar la UI mientras se monta el webhook. Poner en False (o
+# WHATSAPP_TEST_ECHO_MODE=False en el .env) cuando n8n esté listo.
+WHATSAPP_TEST_ECHO_MODE = config('WHATSAPP_TEST_ECHO_MODE', default=True, cast=bool)
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
