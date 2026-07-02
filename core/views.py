@@ -178,26 +178,21 @@ class AgentTestMessageView(ClinicAdminRequiredMixin, View):
         if not message:
             return JsonResponse({'error': 'El mensaje no puede estar vacío.'}, status=400)
 
-        # Modo eco temporal: responde sin llamar a n8n (validación de la UI).
-        if settings.WHATSAPP_TEST_ECHO_MODE:
-            return JsonResponse({
-                'reply': f'🤖 (modo eco de prueba) Recibí: “{message}”. '
-                         'El agente real responderá cuando conectes el webhook de n8n.',
-            })
-
         payload = json.dumps({
             'clinic_id': clinic.clinic_id,
             'phone': 'panel-test',
             'message': message,
         }).encode('utf-8')
 
+        # El webhook de test autentica al backend con la master key; la clínica
+        # se identifica por clinic_id en el body (mismo modelo que AgentConfigView).
         req = urllib.request.Request(
             settings.WHATSAPP_TEST_WEBHOOK_URL,
             data=payload,
             method='POST',
             headers={
                 'Content-Type': 'application/json',
-                'Authorization': f'Api-Key {clinic.agent_api_key}',
+                'Authorization': f'Api-Key {settings.AGENT_MASTER_API_KEY}',
             },
         )
 
@@ -205,10 +200,13 @@ class AgentTestMessageView(ClinicAdminRequiredMixin, View):
             with urllib.request.urlopen(req, timeout=30) as resp:
                 raw = resp.read().decode('utf-8', errors='replace')
         except urllib.error.HTTPError as exc:
-            return JsonResponse(
-                {'error': f'n8n respondió {exc.code}. Revisa que el webhook de prueba esté activo.'},
-                status=502,
-            )
+            if exc.code in (401, 403):
+                error = 'n8n rechazó la clave del agente de esta clínica (no autorizada).'
+            elif exc.code == 404:
+                error = 'El webhook de prueba no existe en n8n. Comprueba que esté activo.'
+            else:
+                error = f'n8n respondió {exc.code}. Revisa el webhook de prueba.'
+            return JsonResponse({'error': error}, status=502)
         except urllib.error.URLError:
             return JsonResponse(
                 {'error': 'No se pudo contactar con n8n. Comprueba la URL del webhook de prueba.'},
