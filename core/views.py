@@ -184,15 +184,15 @@ class AgentTestMessageView(ClinicAdminRequiredMixin, View):
             'message': message,
         }).encode('utf-8')
 
-        # El webhook de test autentica al backend con la master key; la clínica
-        # se identifica por clinic_id en el body (mismo modelo que AgentConfigView).
+        # n8n autentica con la agent_api_key de la clínica (mismo esquema que
+        # AgentClinicKeyAuthentication); el clinic_id viaja también en el body.
         req = urllib.request.Request(
             settings.WHATSAPP_TEST_WEBHOOK_URL,
             data=payload,
             method='POST',
             headers={
                 'Content-Type': 'application/json',
-                'Authorization': f'Api-Key {settings.AGENT_MASTER_API_KEY}',
+                'Authorization': f'Api-Key {clinic.agent_api_key}',
             },
         )
 
