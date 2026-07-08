@@ -110,9 +110,6 @@
             x-transition:enter-end="opacity-100 scale-100"
             class="group relative flex flex-col overflow-hidden rounded-3xl bg-white shadow-soft ring-1 ring-slate-200 transition hover:shadow-md hover:ring-brand-200"
         >
-            {# Indicador lateral de estado #}
-            <div class="absolute inset-y-0 left-0 w-1 rounded-l-3xl {% if service.is_active %}bg-emerald-400{% else %}bg-slate-200{% endif %}"></div>
-
             <div class="flex flex-1 flex-col gap-3 px-6 py-5 pl-8">
 
                 {# Nombre + badge de estado #}

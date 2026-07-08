@@ -439,7 +439,7 @@ class AppointmentListView(TemplateView):
     def get_context_data(self, **kwargs):
         from django.core.paginator import Paginator
         context = super().get_context_data(**kwargs)
-        appointments = Appointment.objects.select_related('patient', 'service', 'professional__user')
+        appointments = Appointment.objects.select_related('patient', 'service', 'professional__user').order_by('-scheduled_at')
         selected_date = self.request.GET.get('date')
         selected_status = self.request.GET.get('status', '')
         if selected_date:

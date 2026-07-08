@@ -178,9 +178,14 @@ class AgentTestMessageView(ClinicAdminRequiredMixin, View):
         if not message:
             return JsonResponse({'error': 'El mensaje no puede estar vacío.'}, status=400)
 
+        # Simula ser el paciente de prueba de la clínica: usamos su teléfono para
+        # que el agente lo reconozca. Si no hay uno configurado, cae a 'panel-test'.
+        test_patient = clinic.test_patient
+        phone = (test_patient.phone if test_patient and test_patient.phone else '') or 'panel-test'
+
         payload = json.dumps({
             'clinic_id': clinic.clinic_id,
-            'phone': 'panel-test',
+            'phone': phone,
             'message': message,
         }).encode('utf-8')
 

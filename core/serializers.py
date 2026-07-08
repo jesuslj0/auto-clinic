@@ -16,6 +16,7 @@ class ClinicSerializer(serializers.ModelSerializer):
             'api_type', 'api_url', 'api_key',
             'calendly_link', 'calendly_token', 'calendly_event_type_uuid',
             'google_calendar_id',
+            'test_patient',
         )
 
 

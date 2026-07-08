@@ -1,6 +1,7 @@
 import uuid
 
 from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -76,8 +77,25 @@ class Clinic(models.Model):
     # Google Calendar
     google_calendar_id = models.CharField(max_length=255, blank=True)
 
+    # Pruebas del agente
+    test_patient = models.ForeignKey(
+        'patients.Patient',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+        help_text="Paciente de prueba para testear el agente desde el panel",
+    )
+
     class Meta:
         db_table = "clinics"
+
+    def clean(self):
+        super().clean()
+        if self.test_patient and self.test_patient.clinic_id != self.clinic_id:
+            raise ValidationError(
+                {'test_patient': 'El paciente de prueba debe pertenecer a esta misma clínica.'}
+            )
 
     def __str__(self):
         return self.name

@@ -8,6 +8,7 @@ from core.models import Clinic, User
 class ClinicAdmin(admin.ModelAdmin):
     list_display = ('clinic_id', 'name', 'timezone', 'whatsapp_phone_number_id')
     search_fields = ('clinic_id', 'name')
+    raw_id_fields = ('test_patient',)
 
 
 @admin.register(User)
