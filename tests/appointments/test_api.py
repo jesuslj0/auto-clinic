@@ -37,12 +37,13 @@ class TestAppointmentViewSet:
         ids = [a["id"] for a in response.data["results"]]
         assert appointment_a.pk not in ids
 
-    def test_create_appointment(self, admin_client, clinic_a, patient_a, service_a):
+    def test_create_appointment(self, admin_client, clinic_a, patient_a, service_a, professional_a):
         now = timezone.now() + timedelta(hours=3)
         data = {
             "clinic": clinic_a.pk,
             "patient": patient_a.pk,
             "service": service_a.pk,
+            "professional": professional_a.pk,
             "scheduled_at": now.isoformat(),
             "end_at": (now + timedelta(minutes=30)).isoformat(),
             "status": "pending",
@@ -51,12 +52,15 @@ class TestAppointmentViewSet:
         assert response.status_code == 201
         assert "confirmation_token" in response.data
 
-    def test_staff_can_create_appointment(self, staff_client, clinic_a, patient_a, service_a):
+    def test_staff_can_create_appointment(
+        self, staff_client, clinic_a, patient_a, service_a, professional_a
+    ):
         now = timezone.now() + timedelta(hours=4)
         data = {
             "clinic": clinic_a.pk,
             "patient": patient_a.pk,
             "service": service_a.pk,
+            "professional": professional_a.pk,
             "scheduled_at": now.isoformat(),
             "end_at": (now + timedelta(minutes=30)).isoformat(),
         }

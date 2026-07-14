@@ -64,4 +64,7 @@ class TestProfessionalModel:
 
     def test_professional_type_choices(self):
         choices = {choice for choice, _ in Professional.ProfessionalType.choices}
-        assert {'medico', 'dentista', 'psicologo', 'enfermero', 'fisioterapeuta', 'nutricionista'} == choices
+        assert {
+            'medico', 'dentista', 'psicologo', 'enfermero',
+            'fisioterapeuta', 'nutricionista', 'podologo',
+        } == choices

@@ -49,12 +49,13 @@ class TestAppointmentViewSetList:
 
 @pytest.mark.django_db
 class TestAppointmentViewSetCreate:
-    def test_admin_can_create(self, admin_client, clinic_a, patient_a, service_a):
+    def test_admin_can_create(self, admin_client, clinic_a, patient_a, service_a, professional_a):
         now = timezone.now() + timedelta(hours=5)
         data = {
             "clinic": clinic_a.pk,
             "patient": patient_a.pk,
             "service": service_a.pk,
+            "professional": professional_a.pk,
             "scheduled_at": now.isoformat(),
             "end_at": (now + timedelta(minutes=30)).isoformat(),
             "status": "pending",
@@ -63,12 +64,13 @@ class TestAppointmentViewSetCreate:
         assert response.status_code == 201
         assert "confirmation_token" in response.data
 
-    def test_staff_can_create(self, staff_client, clinic_a, patient_a, service_a):
+    def test_staff_can_create(self, staff_client, clinic_a, patient_a, service_a, professional_a):
         now = timezone.now() + timedelta(hours=6)
         data = {
             "clinic": clinic_a.pk,
             "patient": patient_a.pk,
             "service": service_a.pk,
+            "professional": professional_a.pk,
             "scheduled_at": now.isoformat(),
         }
         response = staff_client.post("/api/appointments/", data)
@@ -78,10 +80,30 @@ class TestAppointmentViewSetCreate:
         response = admin_client.post("/api/appointments/", {})
         assert response.status_code == 400
 
-    def test_confirmation_token_auto_generated(self, admin_client, clinic_a, patient_a, service_a):
+    def test_create_without_professional_autoassigns(
+        self, admin_client, clinic_a, patient_a, service_a, professional_a
+    ):
+        """Sin `professional` en el payload, Django lo auto-asigna. Nunca queda None."""
+        now = timezone.now() + timedelta(hours=5)
+        data = {
+            "clinic": clinic_a.pk,
+            "patient": patient_a.pk,
+            "service": service_a.pk,
+            "scheduled_at": now.isoformat(),
+        }
+        response = admin_client.post("/api/appointments/", data)
+        assert response.status_code == 201
+        assert response.data["professional"] == professional_a.pk
+
+    def test_confirmation_token_auto_generated(
+        self, admin_client, clinic_a, patient_a, service_a, professional_a
+    ):
         now = timezone.now() + timedelta(hours=7)
         data = {
             "clinic": clinic_a.pk,
+            "patient": patient_a.pk,
+            "service": service_a.pk,
+            "professional": professional_a.pk,
             "scheduled_at": now.isoformat(),
         }
         response = admin_client.post("/api/appointments/", data)
@@ -158,13 +180,16 @@ class TestAppointmentViewSetExport:
 
 @pytest.mark.django_db
 class TestAppointmentBulkCreate:
-    def test_bulk_create_appointments(self, admin_client, clinic_a, patient_a, service_a):
+    def test_bulk_create_appointments(
+        self, admin_client, clinic_a, patient_a, service_a, professional_a
+    ):
         now = timezone.now() + timedelta(hours=10)
         payload = [
             {
                 "clinic": clinic_a.pk,
                 "patient": patient_a.pk,
                 "service": service_a.pk,
+                "professional": professional_a.pk,
                 "scheduled_at": (now + timedelta(hours=i)).isoformat(),
             }
             for i in range(3)

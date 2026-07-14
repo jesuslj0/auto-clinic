@@ -2,13 +2,13 @@
 Root conftest.py: shared fixtures and factories for the entire test suite.
 """
 import uuid
-from datetime import timedelta
+from datetime import time, timedelta
 
 import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from appointments.models import Appointment, Professional
+from appointments.models import Appointment, Professional, ProfessionalSchedule
 from billing.models import Subscription
 from core.models import Clinic, User
 from notifications.models import Reminder
@@ -161,6 +161,34 @@ def service_b(db, clinic_b):
         price="80.00",
         is_active=True,
     )
+
+
+@pytest.fixture
+def admin_site_client(client, superuser):
+    """Cliente autenticado contra el admin de Django (/admin/)."""
+    client.force_login(superuser)
+    return client
+
+
+@pytest.fixture
+def professional_a(db, admin_user, service_a):
+    """Profesional de clinic_a disponible a cualquier hora de cualquier día.
+
+    Toda cita nace ligada a un profesional, y el serializer exige que la hora
+    caiga dentro de su horario. Esta fixture da horario completo para que los
+    tests que no van sobre disponibilidad no tengan que montarlo.
+    """
+    professional = admin_user.professional_profile
+    professional.services.add(service_a)
+    for day in range(7):
+        ProfessionalSchedule.objects.create(
+            professional=professional,
+            day_of_week=day,
+            start_time=time(0, 0),
+            end_time=time(23, 59),
+            is_active=True,
+        )
+    return professional
 
 
 @pytest.fixture

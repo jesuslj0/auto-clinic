@@ -123,8 +123,7 @@ class AppointmentForm(forms.Form):
     professional = forms.ModelChoiceField(
         queryset=Professional.objects.none(),
         label='Profesional',
-        required=False,
-        empty_label='— Sin asignar —',
+        empty_label='— Selecciona un profesional —',
     )
     date = forms.DateField(
         label='Fecha',
@@ -154,7 +153,7 @@ class AppointmentForm(forms.Form):
             clinic=clinic, is_active=True
         ).order_by('name')
         self.fields['professional'].queryset = Professional.objects.filter(
-            clinic=clinic
+            clinic=clinic, is_active=True
         ).select_related('user').order_by('user__first_name', 'user__last_name')
 
     def clean(self):

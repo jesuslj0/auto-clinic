@@ -8,6 +8,9 @@ from core.models import Clinic, User
 from patients.models import Patient
 from services.models import Service
 
+# Duración de una cita cuando no hay servicio asociado (citas creadas por el bot).
+DEFAULT_DURATION_MINUTES = 30
+
 
 class Professional(models.Model):
     class ProfessionalType(models.TextChoices):
@@ -17,6 +20,7 @@ class Professional(models.Model):
         ENFERMERO = 'enfermero', 'Enfermero/a'
         FISIOTERAPEUTA = 'fisioterapeuta', 'Fisioterapeuta'
         NUTRICIONISTA = 'nutricionista', 'Nutricionista'
+        PODOLOGO = 'podologo', 'Podólogo'
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='professional_profile')
     clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name='professionals')
@@ -28,6 +32,11 @@ class Professional(models.Model):
     )
     photo = models.ImageField(upload_to='professional_photos/', blank=True)
 
+    is_active = models.BooleanField(default=True, db_index=True)
+    accepts_online_booking = models.BooleanField(default=True)
+    buffer_minutes = models.PositiveSmallIntegerField(default=0)
+    slot_granularity_minutes = models.PositiveSmallIntegerField(default=15)
+
     class Meta:
         db_table = 'professionals'
         ordering = ['user__first_name', 'user__last_name', 'user__email']
@@ -37,6 +46,17 @@ class Professional(models.Model):
 
 
 class ProfessionalSchedule(models.Model):
+    """Horario recurrente semanal de un profesional.
+
+    IMPORTANTE: `start_time` y `end_time` son hora LOCAL de la clínica, no UTC.
+    Un horario recurrente no tiene UTC: el mismo "9:00" cae en +01:00 o +02:00
+    según el horario de verano. La conversión a UTC ocurre en `services.py`, al
+    materializar los slots de una fecha concreta con el timezone de la clínica.
+
+    Un profesional puede tener VARIOS tramos el mismo día (jornada partida:
+    9:00–14:00 + 16:00–20:00).
+    """
+
     class DayOfWeek(models.IntegerChoices):
         MONDAY = 0, 'Lunes'
         TUESDAY = 1, 'Martes'
@@ -54,8 +74,13 @@ class ProfessionalSchedule(models.Model):
 
     class Meta:
         db_table = 'professional_schedules'
-        unique_together = [('professional', 'day_of_week')]
         ordering = ['day_of_week', 'start_time']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['professional', 'day_of_week', 'start_time'],
+                name='uniq_prof_day_start',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.professional} — {self.get_day_of_week_display()} {self.start_time:%H:%M}–{self.end_time:%H:%M}'
@@ -64,6 +89,66 @@ class ProfessionalSchedule(models.Model):
         super().clean()
         if self.start_time and self.end_time and self.start_time >= self.end_time:
             raise ValidationError({'end_time': 'La hora de fin debe ser posterior a la hora de inicio.'})
+
+        if not (self.is_active and self.professional_id and self.start_time and self.end_time):
+            return
+
+        overlapping = ProfessionalSchedule.objects.filter(
+            professional_id=self.professional_id,
+            day_of_week=self.day_of_week,
+            is_active=True,
+            start_time__lt=self.end_time,
+            end_time__gt=self.start_time,
+        ).exclude(pk=self.pk)
+
+        conflict = overlapping.first()
+        if conflict:
+            raise ValidationError({
+                'start_time': (
+                    f'Este tramo se solapa con otro ya existente: '
+                    f'{conflict.start_time:%H:%M}–{conflict.end_time:%H:%M}.'
+                )
+            })
+
+
+class ProfessionalTimeOff(models.Model):
+    """Excepciones puntuales al horario recurrente: vacaciones, bajas, reuniones.
+
+    A diferencia de `ProfessionalSchedule`, aquí sí hay instantes concretos, así
+    que los campos son `DateTimeField` en UTC. Al ser datetimes y no fechas,
+    cubre tanto "toda la semana de vacaciones" como "el martes de 11 a 13 tengo
+    una reunión".
+    """
+
+    class Reason(models.TextChoices):
+        VACATION = 'vacation', 'Vacaciones'
+        SICK_LEAVE = 'sick_leave', 'Baja'
+        TRAINING = 'training', 'Formación'
+        OTHER = 'other', 'Otro'
+
+    professional = models.ForeignKey(
+        Professional, on_delete=models.CASCADE, related_name='time_off'
+    )
+    starts_at = models.DateTimeField()
+    ends_at = models.DateTimeField()
+    reason = models.CharField(max_length=20, choices=Reason.choices, default=Reason.OTHER)
+    note = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        db_table = 'professional_time_off'
+        ordering = ['starts_at']
+        indexes = [models.Index(fields=['professional', 'starts_at', 'ends_at'])]
+
+    def __str__(self):
+        return (
+            f'{self.professional} — {self.get_reason_display()} '
+            f'{self.starts_at:%Y-%m-%d %H:%M}–{self.ends_at:%Y-%m-%d %H:%M}'
+        )
+
+    def clean(self):
+        super().clean()
+        if self.starts_at and self.ends_at and self.ends_at <= self.starts_at:
+            raise ValidationError({'ends_at': 'La fecha de fin debe ser posterior a la de inicio.'})
 
 
 class Appointment(models.Model):
@@ -81,6 +166,10 @@ class Appointment(models.Model):
     # Structured relations (may be null for bot-created appointments)
     patient = models.ForeignKey(Patient, on_delete=models.SET_NULL, null=True, blank=True, related_name='appointments')
     service = models.ForeignKey(Service, on_delete=models.SET_NULL, null=True, blank=True, related_name='appointments')
+    # Toda cita nace ligada a un profesional, pero el campo es opcional en la
+    # capa de entrada: si el cliente no lo manda (el agente de WhatsApp no lo
+    # hace), `services.create_appointment()` lo auto-asigna. Nullable en BD por
+    # el SET_NULL: borrar un profesional no debe borrar su historial de citas.
     professional = models.ForeignKey(
         Professional,
         on_delete=models.SET_NULL,
@@ -157,7 +246,7 @@ class Appointment(models.Model):
             return self.end_at
         if self.service_id and self.service:
             return self.scheduled_at + timedelta(minutes=self.service.duration_minutes)
-        return self.scheduled_at + timedelta(minutes=30)
+        return self.scheduled_at + timedelta(minutes=DEFAULT_DURATION_MINUTES)
 
     @classmethod
     def find_overlap(cls, professional, start, end, exclude_pk=None, statuses=None):
@@ -165,12 +254,13 @@ class Appointment(models.Model):
         Devuelve la primera cita del profesional que se solapa con el rango
         [start, end), o None si no existe conflicto.
 
-        Por defecto considera citas en estado PENDING o CONFIRMED. Se puede
-        acotar con `statuses` (p. ej. solo CONFIRMED al confirmar una cita,
-        para permitir varias pendientes en el mismo tramo).
+        Qué estados ocupan un hueco lo decide `BLOCKING_STATUSES`, la misma
+        constante que lee el motor de disponibilidad: si aquí se bloqueara por
+        estados distintos, la API rechazaría huecos que ella misma acaba de
+        ofrecer. Se puede acotar con `statuses` cuando haga falta otra regla.
         """
         if statuses is None:
-            statuses = [cls.Status.PENDING, cls.Status.CONFIRMED]
+            statuses = BLOCKING_STATUSES
 
         # Candidatas: empiezan antes de que termine la nueva
         candidates = (
@@ -211,10 +301,20 @@ class Appointment(models.Model):
             if conflict:
                 raise ValidationError({
                     'scheduled_at': (
-                        f'El profesional ya tiene una cita activa que se solapa: '
+                        f'El profesional ya tiene una cita confirmada que se solapa: '
                         f'{conflict} ({conflict.scheduled_at:%H:%M}–{conflict.get_end_datetime():%H:%M}).'
                     )
                 })
+
+
+# Estados que ocupan de verdad un hueco en la agenda. Una cita 'pending' es una
+# solicitud, no una reserva en firme: varias pueden convivir en el mismo tramo.
+#
+# Fuente de verdad ÚNICA de la regla de bloqueo: la leen tanto `find_overlap()`
+# como el motor de disponibilidad (`services.py` la reexporta). Vive aquí, y no
+# en services.py, porque models.py no puede importar de services.py sin crear un
+# ciclo. Léela, no la redefinas.
+BLOCKING_STATUSES = [Appointment.Status.CONFIRMED]
 
 
 class AppointmentStatusHistory(models.Model):

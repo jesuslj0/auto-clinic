@@ -175,12 +175,15 @@ def superuser_client(db, superuser):
 
 @pytest.mark.django_db
 class TestScheduledAtInPast:
-    def test_past_scheduled_at_returns_400(self, admin_client, clinic_a, patient_a, service_a):
+    def test_past_scheduled_at_returns_400(
+        self, admin_client, clinic_a, patient_a, service_a, professional
+    ):
         past = timezone.now() - timedelta(hours=1)
         data = {
             "clinic": clinic_a.pk,
             "patient": patient_a.pk,
             "service": service_a.pk,
+            "professional": professional.pk,
             "scheduled_at": past.isoformat(),
             "status": "pending",
         }
@@ -219,12 +222,15 @@ class TestScheduledAtInPast:
 
 @pytest.mark.django_db
 class TestInactiveService:
-    def test_inactive_service_returns_400(self, admin_client, clinic_a, patient_a, inactive_service):
+    def test_inactive_service_returns_400(
+        self, admin_client, clinic_a, patient_a, inactive_service, professional
+    ):
         future = timezone.now() + timedelta(hours=3)
         data = {
             "clinic": clinic_a.pk,
             "patient": patient_a.pk,
             "service": inactive_service.pk,
+            "professional": professional.pk,
             "scheduled_at": future.isoformat(),
             "status": "pending",
         }
@@ -301,7 +307,7 @@ class TestProfessionalClinicMismatch:
 @pytest.mark.django_db
 class TestServiceClinicMismatch:
     def test_service_from_other_clinic_returns_400(
-        self, admin_client, clinic_a, patient_a, service_b
+        self, admin_client, clinic_a, patient_a, service_b, professional
     ):
         """service_b belongs to clinic_b; appointment is for clinic_a → 400."""
         future = timezone.now() + timedelta(hours=3)
@@ -309,6 +315,7 @@ class TestServiceClinicMismatch:
             "clinic": clinic_a.pk,
             "patient": patient_a.pk,
             "service": service_b.pk,
+            "professional": professional.pk,
             "scheduled_at": future.isoformat(),
             "status": "pending",
         }
@@ -700,7 +707,8 @@ class TestProfessionalAvailableSlots:
         appt_start = timezone.make_aware(datetime.combine(next_monday, time(9, 0)), tz)
         appt_end = appt_start + timedelta(minutes=30)
 
-        # Create the blocking appointment directly (bypass serializer validations)
+        # Create the blocking appointment directly (bypass serializer validations).
+        # Debe estar CONFIRMADA: una cita 'pending' no cierra el hueco.
         Appointment.objects.create(
             clinic=clinic_a,
             patient=patient_a,
@@ -708,7 +716,7 @@ class TestProfessionalAvailableSlots:
             professional=professional,
             scheduled_at=appt_start,
             end_at=appt_end,
-            status=Appointment.Status.PENDING,
+            status=Appointment.Status.CONFIRMED,
         )
 
         url = (
@@ -807,7 +815,34 @@ class TestProfessionalAvailableSlots:
     def test_total_slots_match_schedule_window(
         self, db, admin_client, professional
     ):
-        """09:00–11:00 with 30-min duration = exactly 4 slots with no appointments."""
+        """09:00–11:00, cita de 30 min, granularidad de 15 min → 7 slots.
+
+        El paso del generador es `professional.slot_granularity_minutes` (15 por
+        defecto), no la duración de la cita: se ofrece 09:00, 09:15, 09:30… El
+        último es 10:30, porque 10:45 + 30 min se saldría del tramo.
+        """
+        ProfessionalSchedule.objects.create(
+            professional=professional,
+            day_of_week=0,
+            start_time=time(9, 0),
+            end_time=time(11, 0),
+            is_active=True,
+        )
+        next_monday = _next_weekday(0)
+        url = (
+            f"/api/professionals/{professional.pk}/available-slots/"
+            f"?date={next_monday.isoformat()}&duration=30"
+        )
+        response = admin_client.get(url)
+        assert response.status_code == 200
+        assert len(response.data["available_slots"]) == 7
+
+    def test_slot_granularity_is_configurable(
+        self, db, admin_client, professional
+    ):
+        """Con granularidad de 30 min, el mismo tramo ofrece 4 slots."""
+        professional.slot_granularity_minutes = 30
+        professional.save(update_fields=['slot_granularity_minutes'])
         ProfessionalSchedule.objects.create(
             professional=professional,
             day_of_week=0,

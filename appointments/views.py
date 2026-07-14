@@ -6,7 +6,7 @@ import django_filters
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
 from rest_framework import status, viewsets
@@ -17,22 +17,19 @@ from rest_framework.views import APIView
 
 from appointments.forms import AppointmentForm, ProfessionalForm, ProfessionalProfileForm
 from appointments.models import Appointment, AppointmentStatusHistory, Professional, ProfessionalSchedule
-from appointments.services import create_appointment
+from appointments.services import (
+    AppointmentDomainError,
+    create_appointment,
+    get_clinic_available_slots,
+    get_professional_availability,
+)
 from appointments.serializers import AppointmentSerializer, ProfessionalScheduleSerializer, ProfessionalSerializer
 from core.authentication import ClinicAgent
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
 from core.models import Clinic
 from core.permissions import IsAgentClinicKey, IsStaffOrAdmin
-
-
-def _build_busy_list(appointments_qs):
-    """Devuelve lista de tuplas (start, end) para cada cita del queryset."""
-    busy = []
-    for appt in appointments_qs:
-        appt_start = appt.scheduled_at
-        appt_end = appt.get_end_datetime()
-        busy.append((appt_start, appt_end))
-    return busy
+from patients.models import Patient
+from services.models import Service
 
 
 class AppointmentFilter(django_filters.FilterSet):
@@ -122,28 +119,19 @@ class AppointmentViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets
         if duration <= 0 or start_hour < 0 or end_hour > 24 or start_hour >= end_hour:
             return Response({'detail': 'Parámetros de horario inválidos.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        tz = timezone.get_current_timezone()
-        day_start = timezone.make_aware(datetime.combine(target_date, time(start_hour, 0)), tz)
-        day_end = timezone.make_aware(datetime.combine(target_date, time(end_hour, 0)), tz)
+        slots = get_clinic_available_slots(
+            clinic,
+            target_date,
+            duration_minutes=duration,
+            start_hour=start_hour,
+            end_hour=end_hour,
+        )
 
-        queryset = Appointment.objects.filter(
-            clinic=clinic,
-            scheduled_at__date=target_date,
-            status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED],
-        ).select_related('service')
-
-        busy = _build_busy_list(queryset)
-
-        slot_duration = timedelta(minutes=duration)
-        slots = []
-        current = day_start
-        while current + slot_duration <= day_end:
-            slot_end = current + slot_duration
-            if not any(current < b_end and slot_end > b_start for b_start, b_end in busy):
-                slots.append(current.isoformat())
-            current += slot_duration
-
-        return Response({'date': date_str, 'duration_minutes': duration, 'available_slots': slots})
+        return Response({
+            'date': date_str,
+            'duration_minutes': duration,
+            'available_slots': [slot.isoformat() for slot in slots],
+        })
 
     @action(detail=True, methods=['get'], url_path='status')
     def get_status(self, request, pk=None):
@@ -187,10 +175,12 @@ class ProfessionalFilter(django_filters.FilterSet):
     clinic = django_filters.CharFilter(field_name='clinic_id')
     professional_type = django_filters.CharFilter(field_name='professional_type')
     service = django_filters.NumberFilter(field_name='services', lookup_expr='exact')
+    is_active = django_filters.BooleanFilter(field_name='is_active')
+    accepts_online_booking = django_filters.BooleanFilter(field_name='accepts_online_booking')
 
     class Meta:
         model = Professional
-        fields = ['clinic', 'professional_type', 'service']
+        fields = ['clinic', 'professional_type', 'service', 'is_active', 'accepts_online_booking']
 
 
 class ProfessionalViewSet(viewsets.ModelViewSet):
@@ -240,15 +230,26 @@ class ProfessionalViewSet(viewsets.ModelViewSet):
         if duration <= 0:
             return Response({'detail': 'El parámetro "duration" debe ser mayor que 0.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Buscar horario del profesional para ese día de la semana (0=lunes … 6=domingo)
-        day_of_week = target_date.weekday()
         try:
-            schedule = ProfessionalSchedule.objects.get(
-                professional=professional,
-                day_of_week=day_of_week,
-                is_active=True,
+            start_hour = request.query_params.get('start_hour')
+            end_hour = request.query_params.get('end_hour')
+            start_hour = int(start_hour) if start_hour is not None else None
+            end_hour = int(end_hour) if end_hour is not None else None
+        except ValueError:
+            return Response(
+                {'detail': 'Los parámetros start_hour y end_hour deben ser enteros.'},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        except ProfessionalSchedule.DoesNotExist:
+
+        availability = get_professional_availability(
+            professional,
+            target_date,
+            duration_minutes=duration,
+            start_hour=start_hour,
+            end_hour=end_hour,
+        )
+
+        if not availability.works_this_day:
             return Response({
                 'professional_id': professional.pk,
                 'professional_name': str(professional),
@@ -257,38 +258,17 @@ class ProfessionalViewSet(viewsets.ModelViewSet):
                 'available_slots': [],
             })
 
-        tz = timezone.get_current_timezone()
-        day_start = timezone.make_aware(datetime.combine(target_date, schedule.start_time), tz)
-        day_end = timezone.make_aware(datetime.combine(target_date, schedule.end_time), tz)
-
-        busy_appointments = Appointment.objects.filter(
-            professional=professional,
-            scheduled_at__date=target_date,
-            status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED],
-        ).select_related('service')
-
-        busy = _build_busy_list(busy_appointments)
-
-        slot_duration = timedelta(minutes=duration)
-        slots = []
-        current = day_start
-        while current + slot_duration <= day_end:
-            slot_end = current + slot_duration
-            if not any(current < b_end and slot_end > b_start for b_start, b_end in busy):
-                slots.append(current.isoformat())
-            current += slot_duration
-
         return Response({
             'professional_id': professional.pk,
             'professional_name': str(professional),
             'date': date_str,
             'works_this_day': True,
             'schedule': {
-                'start_time': schedule.start_time.strftime('%H:%M'),
-                'end_time': schedule.end_time.strftime('%H:%M'),
+                'start_time': availability.schedule_start.strftime('%H:%M'),
+                'end_time': availability.schedule_end.strftime('%H:%M'),
             },
             'duration_minutes': duration,
-            'available_slots': slots,
+            'available_slots': [slot.isoformat() for slot in availability.slots],
         })
 
     @action(detail=True, methods=['get'], url_path='services')
@@ -345,7 +325,7 @@ class AppointmentCalendarView(TemplateView):
         appointments_qs = Appointment.objects.select_related('patient', 'service', 'professional__user').filter(
             scheduled_at__date__gte=week_start,
             scheduled_at__date__lte=week_start + timedelta(days=6),
-        )
+        ).exclude(status=Appointment.Status.CANCELLED)
         schedules_qs = ProfessionalSchedule.objects.filter(is_active=True).select_related('professional__user')
 
         if professional:
@@ -439,13 +419,27 @@ class AppointmentListView(TemplateView):
     def get_context_data(self, **kwargs):
         from django.core.paginator import Paginator
         context = super().get_context_data(**kwargs)
-        appointments = Appointment.objects.select_related('patient', 'service', 'professional__user').order_by('-scheduled_at')
-        selected_date = self.request.GET.get('date')
+        appointments = Appointment.objects.select_related('patient', 'service', 'professional__user')
+
+        # Por defecto (sin `date` en la query string) mostramos las citas de
+        # hoy. Si el usuario limpia el campo de fecha a propósito, `date`
+        # llega vacío en el GET y respetamos ese "todas las fechas".
+        if 'date' in self.request.GET:
+            selected_date = self.request.GET.get('date', '')
+        else:
+            selected_date = timezone.localdate().isoformat()
+
         selected_status = self.request.GET.get('status', '')
+        sort_dir = self.request.GET.get('sort', 'asc')
+        if sort_dir not in ('asc', 'desc'):
+            sort_dir = 'asc'
+
         if selected_date:
             appointments = appointments.filter(scheduled_at__date=selected_date)
         if selected_status:
             appointments = appointments.filter(status=selected_status)
+
+        appointments = appointments.order_by('scheduled_at' if sort_dir == 'asc' else '-scheduled_at')
 
         paginator = Paginator(appointments, self.paginate_by)
         page_number = self.request.GET.get('page')
@@ -459,6 +453,7 @@ class AppointmentListView(TemplateView):
                 'is_paginated': paginator.num_pages > 1,
                 'selected_date': selected_date,
                 'selected_status': selected_status,
+                'sort_dir': sort_dir,
                 'status_choices': Appointment.Status.choices,
                 'appointments_list_url': 'appointments:list',
                 'section': 'appointments',
@@ -530,21 +525,57 @@ class AppointmentCreateView(LoginRequiredMixin, FormView):
         # Enlace de alta rápida de paciente que vuelve a este mismo form.
         new_patient_next = self.request.get_full_path()
         context['new_patient_url'] = f"{reverse_lazy('patients:create')}?{urlencode({'next': new_patient_next})}"
+
+        # URLs de búsqueda para los combobox dinámicos de paciente/servicio.
+        context['patients_search_url'] = reverse('patient-list')
+        context['services_search_url'] = reverse('service-list')
+
+        # Texto a mostrar en el combobox al cargar: si venimos de un POST
+        # inválido usamos lo que el usuario había tecleado; si no, resolvemos
+        # el paciente/servicio inicial (p. ej. prerrellenado desde el calendario).
+        if self.request.method == 'POST':
+            context['initial_patient_label'] = self.request.POST.get('patient_search', '')
+            context['initial_service_label'] = self.request.POST.get('service_search', '')
+        else:
+            context['initial_patient_label'] = self._initial_label(
+                Patient.objects.filter(clinic=self.request.user.clinic), self.request.GET.get('patient')
+            )
+            context['initial_service_label'] = self._initial_label(
+                Service.objects.filter(clinic=self.request.user.clinic), self.request.GET.get('service')
+            )
         return context
+
+    @staticmethod
+    def _initial_label(queryset, pk):
+        if not pk:
+            return ''
+        obj = queryset.filter(pk=pk).first()
+        return str(obj) if obj else ''
 
     def form_valid(self, form):
         data = form.cleaned_data
         actor_label = self.request.user.get_full_name() or self.request.user.email
-        self.appointment = create_appointment(
-            clinic=self.request.user.clinic,
-            patient=data['patient'],
-            service=data['service'],
-            professional=data.get('professional'),
-            scheduled_at=data['scheduled_at'],
-            notes=data.get('notes', ''),
-            actor=AppointmentStatusHistory.Actor.STAFF,
-            actor_label=actor_label,
-        )
+        try:
+            self.appointment = create_appointment(
+                clinic=self.request.user.clinic,
+                patient=data['patient'],
+                service=data['service'],
+                professional=data.get('professional'),
+                scheduled_at=data['scheduled_at'],
+                notes=data.get('notes', ''),
+                actor=AppointmentStatusHistory.Actor.STAFF,
+                actor_label=actor_label,
+                # Alta desde el panel: el staff sí puede asignar citas a un
+                # profesional que no acepta reservas online. Todo lo demás
+                # (horario, ausencias, solapamientos) se sigue validando igual.
+                require_online_booking=False,
+            )
+        except AppointmentDomainError as error:
+            # El profesional elegido no puede atender la cita (horario, ausencia,
+            # solapamiento…). El motivo viene del service; se muestra en el form.
+            form.add_error('professional', error.detail['message'])
+            return self.form_invalid(form)
+
         messages.success(self.request, 'Cita creada correctamente.')
         return redirect(self.get_success_url())
 

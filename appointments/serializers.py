@@ -4,6 +4,11 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from appointments.models import Appointment, Professional, ProfessionalSchedule
+from appointments.services import (
+    AppointmentDomainError,
+    create_appointment,
+    validate_appointment_update,
+)
 from core.models import User
 from services.models import Service
 
@@ -81,6 +86,10 @@ class ProfessionalSerializer(serializers.ModelSerializer):
             'services_detail',
             'service_ids',
             'schedules',
+            'is_active',
+            'accepts_online_booking',
+            'buffer_minutes',
+            'slot_granularity_minutes',
         ]
         read_only_fields = ['id']
 
@@ -113,7 +122,6 @@ class AppointmentSerializer(serializers.ModelSerializer):
         service = attrs.get('service', getattr(self.instance, 'service', None))
         clinic = attrs.get('clinic', getattr(self.instance, 'clinic', None))
         scheduled_at = attrs.get('scheduled_at', getattr(self.instance, 'scheduled_at', None))
-        status = attrs.get('status', getattr(self.instance, 'status', Appointment.Status.PENDING))
 
         # Bug 4: La cita no puede ser en el pasado
         if scheduled_at and scheduled_at < timezone.now():
@@ -127,73 +135,37 @@ class AppointmentSerializer(serializers.ModelSerializer):
                 {'service': 'El servicio seleccionado está desactivado.'}
             )
 
-        # Bug 3: Multi-tenancy — profesional y servicio deben pertenecer a la clínica de la cita
-        if professional and clinic and professional.clinic_id != clinic.pk:
-            raise serializers.ValidationError(
-                {'professional': 'El profesional no pertenece a esta clínica.'}
-            )
+        # Bug 3: Multi-tenancy — el servicio debe pertenecer a la clínica de la cita
         if service and clinic and service.clinic_id != clinic.pk:
             raise serializers.ValidationError(
                 {'service': 'El servicio no pertenece a esta clínica.'}
             )
 
-        if professional and service and not professional.services.filter(pk=service.pk).exists():
-            raise serializers.ValidationError(
-                {'professional': 'El profesional seleccionado no ofrece el servicio indicado.'}
-            )
-
-        # Bug 1: Validar día y rango horario laboral del profesional
-        if professional and scheduled_at:
-            day_names = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
-            day_of_week = scheduled_at.weekday()
+        # La elegibilidad del profesional (clínica, servicio que presta, horario,
+        # ausencias, solapamiento) NO se decide aquí: es regla de negocio y vive
+        # en services.py. El alta la aplica `create_appointment()`; la edición,
+        # `validate_appointment_update()`. Este serializer solo orquesta.
+        #
+        # La API es vía online, así que `accepts_online_booking` sí se exige (con
+        # o sin `professional` explícito en el payload).
+        if self.instance:
             try:
-                schedule = ProfessionalSchedule.objects.get(
-                    professional=professional,
-                    day_of_week=day_of_week,
-                    is_active=True,
-                )
-            except ProfessionalSchedule.DoesNotExist:
-                raise serializers.ValidationError(
-                    {'scheduled_at': f'El profesional no trabaja los {day_names[day_of_week]}.'}
-                )
-            appt_time = scheduled_at.astimezone(timezone.get_current_timezone()).time()
-            if not (schedule.start_time <= appt_time < schedule.end_time):
-                raise serializers.ValidationError({
-                    'scheduled_at': (
-                        f'La cita debe estar dentro del horario del profesional '
-                        f'({schedule.start_time:%H:%M}–{schedule.end_time:%H:%M}).'
+                attrs.update(
+                    validate_appointment_update(
+                        self.instance, attrs, require_online_booking=True
                     )
-                })
-
-        # Validación de solapamiento
-        if (
-            professional
-            and scheduled_at
-            and status in (Appointment.Status.PENDING, Appointment.Status.CONFIRMED)
-        ):
-            end_at = attrs.get('end_at', getattr(self.instance, 'end_at', None))
-            if not end_at:
-                svc = service or getattr(self.instance, 'service', None)
-                duration = svc.duration_minutes if svc else 30
-                end_at = scheduled_at + timedelta(minutes=duration)
-
-            exclude_pk = self.instance.pk if self.instance else None
-            conflict = Appointment.find_overlap(professional, scheduled_at, end_at, exclude_pk=exclude_pk)
-            if conflict:
-                raise serializers.ValidationError({
-                    'scheduled_at': (
-                        f'El profesional ya tiene una cita activa que se solapa: '
-                        f'{conflict} ({conflict.scheduled_at:%H:%M}–{conflict.get_end_datetime():%H:%M}).'
-                    )
-                })
+                )
+            except AppointmentDomainError as error:
+                # Como ValidationError, para que `bulk-update` pueda recogerlo
+                # por cita en vez de abortar el lote entero.
+                raise serializers.ValidationError({'professional': error.detail['message']})
 
         return attrs
 
     def create(self, validated_data):
-        # La creación real (cálculo de end_at, status inicial e historial)
-        # vive en el service compartido por API y panel web.
-        from appointments.services import create_appointment
-        return create_appointment(**validated_data)
+        # La creación real (cálculo de end_at, status inicial, auto-asignación de
+        # profesional e historial) vive en el service compartido por API y panel.
+        return create_appointment(require_online_booking=True, **validated_data)
 
     class Meta:
         model = Appointment
