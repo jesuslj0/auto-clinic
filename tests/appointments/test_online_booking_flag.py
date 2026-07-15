@@ -26,6 +26,7 @@ from appointments.models import Appointment, ProfessionalSchedule
 from appointments.services import (
     NoProfessionalAvailable,
     ProfessionalUnavailable,
+    SlotUnavailable,
     create_appointment,
 )
 from core.models import User
@@ -92,7 +93,7 @@ class TestOnlineVia:
         with pytest.raises(NoProfessionalAvailable):
             create_appointment(
                 clinic=clinic_a, patient=patient_a, service=service_a,
-                scheduled_at=lunes_10h, require_online_booking=True,
+                scheduled_at=lunes_10h, require_online_booking=True, source=Appointment.Source.AGENT,
             )
 
     def test_explicit_offline_professional_is_rejected(
@@ -161,7 +162,7 @@ class TestStaffVia:
         cita = create_appointment(
             clinic=clinic_a, patient=patient_a, service=service_a,
             professional=offline_prof, scheduled_at=lunes_10h,
-            require_online_booking=False,
+            require_online_booking=False, source=Appointment.Source.STAFF,
         )
         assert cita.professional == offline_prof
 
@@ -171,7 +172,7 @@ class TestStaffVia:
         """Sin profesional explícito por vía staff, el flag tampoco descarta."""
         cita = create_appointment(
             clinic=clinic_a, patient=patient_a, service=service_a,
-            scheduled_at=lunes_10h, require_online_booking=False,
+            scheduled_at=lunes_10h, require_online_booking=False, source=Appointment.Source.STAFF,
         )
         assert cita.professional == offline_prof
 
@@ -240,13 +241,14 @@ class TestOnlyThatFlagIsRelaxed:
             end_at=lunes_10h + timedelta(minutes=30),
             status=Appointment.Status.CONFIRMED,
         )
-        with pytest.raises(ProfessionalUnavailable) as exc:
+        with pytest.raises(SlotUnavailable) as exc:
             create_appointment(
                 clinic=clinic_a, patient=patient_a, service=service_a,
                 professional=offline_prof, scheduled_at=lunes_10h,
-                require_online_booking=False,
+                require_online_booking=False, source=Appointment.Source.STAFF,
             )
-        assert 'se solapa' in exc.value.detail['message']
+        assert exc.value.detail['code'] == 'slot_unavailable'
+
 
     def test_staff_cannot_book_outside_schedule(
         self, clinic_a, patient_a, service_a, offline_prof, lunes, madrid
@@ -257,6 +259,6 @@ class TestOnlyThatFlagIsRelaxed:
             create_appointment(
                 clinic=clinic_a, patient=patient_a, service=service_a,
                 professional=offline_prof, scheduled_at=fuera,
-                require_online_booking=False,
+                require_online_booking=False, source=Appointment.Source.STAFF,
             )
         assert 'horario del profesional' in exc.value.detail['message']

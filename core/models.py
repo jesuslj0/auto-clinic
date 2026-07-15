@@ -33,6 +33,14 @@ class Clinic(models.Model):
 
     # Configuración
     timezone = models.CharField(max_length=50, default="Europe/Madrid")
+    hold_ttl_minutes = models.PositiveIntegerField(
+        default=1440,
+        help_text=(
+            "Minutos que una cita creada por el agente o la reserva pública queda "
+            "reservada esperando validación del staff. Pasado ese plazo se cancela "
+            "y el hueco se libera. 0 = sin caducidad."
+        ),
+    )
     description = models.TextField(blank=True)
     logo_url = models.URLField(blank=True)
     logo = models.ImageField(upload_to='clinic_logos/', blank=True)

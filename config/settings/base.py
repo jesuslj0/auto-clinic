@@ -158,6 +158,14 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'notifications.tasks.dispatch_2h_reminders',
         'schedule': 900.0,
     },
+    # Libera los huecos de las citas que el staff no validó dentro del plazo.
+    # Es lo que impide que una reserva del agente que nadie mira bloquee el hueco
+    # para siempre. Requiere un `celery beat` corriendo (hoy compose solo levanta
+    # el worker); mientras no lo haya, `python manage.py expire_appointment_holds`.
+    'expire-appointment-holds': {
+        'task': 'appointments.tasks.expire_appointment_holds',
+        'schedule': 600.0,
+    },
 }
 
 AGENT_MASTER_API_KEY = config('AGENT_MASTER_API_KEY', default='')

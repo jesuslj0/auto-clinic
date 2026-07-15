@@ -330,10 +330,14 @@ class TestBufferMinutes:
         )
         assert '10:30' in horas
 
-    def test_pending_appointment_does_not_block(
+    def test_pending_appointment_blocks(
         self, professional, clinic_a, patient_a, service_a, madrid
     ):
-        """Una cita 'pending' es una solicitud, no una reserva: no cierra el hueco."""
+        """Una cita 'pending' YA ocupa el hueco: reservar cierra el slot al instante.
+
+        Lo que impide que lo ocupe indefinidamente sin que nadie la valide es el
+        hold, no que el hueco siga ofreciéndose a otros pacientes.
+        """
         professional.services.add(service_a)
         ProfessionalSchedule.objects.create(
             professional=professional, day_of_week=0,
@@ -350,7 +354,7 @@ class TestBufferMinutes:
         horas = _slot_times(
             get_professional_availability(professional, lunes, duration_minutes=30), madrid
         )
-        assert '09:00' in horas
+        assert '09:00' not in horas
 
     def test_confirmed_appointment_blocks(
         self, professional, clinic_a, patient_a, service_a, madrid

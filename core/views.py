@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from appointments.models import Appointment, AppointmentStatusHistory
+from appointments.services import AppointmentDomainError, cancel_appointment, confirm_by_clinic
 from patients.models import Patient
 from core.forms import ClinicForm, EmailAuthenticationForm, WhatsAppIntegrationForm
 from core.mixins import ExportMixin
@@ -346,50 +347,22 @@ class DashboardAppointmentActionView(LoginRequiredMixin, View):
         action = request.POST.get('action')
         actor_label = user.get_full_name() or user.email
         if action == 'confirm':
-            if appointment.status == Appointment.Status.CANCELLED:
-                messages.error(request, 'Esta cita fue cancelada y no puede confirmarse.')
+            # La transición (y su guardia de solapamiento, y el historial) vive
+            # en el service: es la MISMA que aplica POST /api/appointments/{id}/confirm/.
+            # Esta view solo traduce el error de dominio a un mensaje del panel.
+            try:
+                confirm_by_clinic(appointment, user=user)
+            except AppointmentDomainError as error:
+                messages.error(request, error.detail['message'])
                 next_url = request.POST.get('next') or 'core:dashboard'
                 return redirect(next_url)
-            if appointment.professional:
-                # Solo bloquea si ya hay otra cita CONFIRMADA solapada; varias
-                # pendientes en el mismo tramo pueden coexistir hasta confirmar.
-                conflict = Appointment.find_overlap(
-                    appointment.professional,
-                    appointment.scheduled_at,
-                    appointment.get_end_datetime(),
-                    exclude_pk=appointment.pk,
-                    statuses=[Appointment.Status.CONFIRMED],
-                )
-                if conflict:
-                    messages.error(
-                        request,
-                        f'No se puede confirmar: {appointment.professional} ya tiene la cita '
-                        f'"{conflict}" a las {conflict.scheduled_at:%H:%M} en ese mismo tramo horario.',
-                    )
-                    next_url = request.POST.get('next') or 'core:dashboard'
-                    return redirect(next_url)
-            prev = appointment.status
-            appointment.status = Appointment.Status.CONFIRMED
-            appointment.save(update_fields=['status', 'updated_at'])
-            AppointmentStatusHistory.objects.create(
-                appointment=appointment,
-                from_status=prev,
-                to_status=Appointment.Status.CONFIRMED,
-                actor=AppointmentStatusHistory.Actor.STAFF,
-                actor_label=actor_label,
-            )
             success_message = 'Cita confirmada correctamente.'
         elif action == 'reject':
-            prev = appointment.status
-            appointment.status = Appointment.Status.CANCELLED
-            appointment.cancelled_by = Appointment.CancelledBy.STAFF
-            appointment.save(update_fields=['status', 'cancelled_by', 'updated_at'])
-            AppointmentStatusHistory.objects.create(
-                appointment=appointment,
-                from_status=prev,
-                to_status=Appointment.Status.CANCELLED,
+            cancel_appointment(
+                appointment,
                 actor=AppointmentStatusHistory.Actor.STAFF,
                 actor_label=actor_label,
+                cancelled_by=Appointment.CancelledBy.STAFF,
             )
             success_message = 'Cita rechazada correctamente.'
         elif action == 'complete':

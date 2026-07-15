@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -7,6 +8,7 @@ from appointments.models import Appointment, Professional, ProfessionalSchedule
 from appointments.services import (
     AppointmentDomainError,
     create_appointment,
+    lock_agenda,
     validate_appointment_update,
 )
 from core.models import User
@@ -162,12 +164,41 @@ class AppointmentSerializer(serializers.ModelSerializer):
 
         return attrs
 
+    def update(self, instance, validated_data):
+        # Mover una cita a un hueco libre es una carrera igual que crearla: entre
+        # el `validate()` de arriba y esta escritura, otro POST puede haberse
+        # llevado el hueco. Se revalida con el recurso bloqueado.
+        with transaction.atomic():
+            lock_agenda(
+                clinic=validated_data.get('clinic', instance.clinic),
+                service=validated_data.get('service', instance.service),
+                professional=validated_data.get('professional', instance.professional),
+            )
+            try:
+                validate_appointment_update(
+                    instance, validated_data, require_online_booking=True
+                )
+            except AppointmentDomainError as error:
+                raise serializers.ValidationError({'professional': error.detail['message']})
+            return super().update(instance, validated_data)
+
     def create(self, validated_data):
         # La creación real (cálculo de end_at, status inicial, auto-asignación de
-        # profesional e historial) vive en el service compartido por API y panel.
-        return create_appointment(require_online_booking=True, **validated_data)
+        # profesional, hold e historial) vive en el service compartido por API y
+        # panel. `source` lo fija esta capa: el service no sabe de dónde viene la
+        # petición, y no debe adivinarlo.
+        return create_appointment(
+            require_online_booking=True,
+            source=Appointment.Source.AGENT,
+            **validated_data,
+        )
 
     class Meta:
         model = Appointment
-        fields = '__all__'
+        # `source`, `patient_confirmed_at` y `hold_expires_at` quedan FUERA del
+        # contrato a propósito. Dos razones: n8n consume estas respuestas y no
+        # debe ver campos nuevos, y con `__all__` serían además escribibles — el
+        # agente podría mandar `hold_expires_at: null` en el POST y eximirse de
+        # la caducidad. Son estado interno: los escriben los services.
+        exclude = ('source', 'patient_confirmed_at', 'hold_expires_at')
         read_only_fields = ('created_at', 'updated_at', 'confirmation_token')

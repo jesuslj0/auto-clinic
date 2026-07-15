@@ -63,7 +63,7 @@ def prof_2(db, clinic_a, service_a):
 def cita(db, clinic_a, patient_a, service_a, prof_1, lunes_10h):
     return create_appointment(
         clinic=clinic_a, patient=patient_a, service=service_a,
-        professional=prof_1, scheduled_at=lunes_10h, require_online_booking=True,
+        professional=prof_1, scheduled_at=lunes_10h, require_online_booking=True, source=Appointment.Source.AGENT,
     )
 
 

@@ -16,6 +16,7 @@ from appointments.models import Appointment, Professional, ProfessionalSchedule,
 from appointments.services import (
     NoProfessionalAvailable,
     ProfessionalUnavailable,
+    SlotUnavailable,
     create_appointment,
     select_professional_for_appointment,
 )
@@ -104,7 +105,7 @@ class TestAutoAssign:
     ):
         cita = create_appointment(
             clinic=clinic_a, patient=patient_a, service=service_a, scheduled_at=lunes_10h,
-            require_online_booking=True,
+            require_online_booking=True, source=Appointment.Source.AGENT,
         )
         assert cita.professional == prof_1
 
@@ -115,7 +116,7 @@ class TestAutoAssign:
         with pytest.raises(NoProfessionalAvailable) as exc:
             create_appointment(
                 clinic=clinic_a, patient=patient_a, service=service_a, scheduled_at=lunes_10h,
-                require_online_booking=True,
+                require_online_booking=True, source=Appointment.Source.AGENT,
             )
         assert exc.value.detail['code'] == 'no_professional_available'
         assert Appointment.objects.count() == 0
@@ -149,7 +150,7 @@ class TestAutoAssign:
         with pytest.raises(NoProfessionalAvailable):
             create_appointment(
                 clinic=clinic_a, patient=patient_a, service=service_a, scheduled_at=lunes_10h,
-                require_online_booking=True,
+                require_online_booking=True, source=Appointment.Source.AGENT,
             )
 
     def test_inactive_professional_is_skipped(
@@ -159,7 +160,7 @@ class TestAutoAssign:
         with pytest.raises(NoProfessionalAvailable):
             create_appointment(
                 clinic=clinic_a, patient=patient_a, service=service_a, scheduled_at=lunes_10h,
-                require_online_booking=True,
+                require_online_booking=True, source=Appointment.Source.AGENT,
             )
 
     def test_professional_not_accepting_online_booking_is_skipped(
@@ -169,7 +170,7 @@ class TestAutoAssign:
         with pytest.raises(NoProfessionalAvailable):
             create_appointment(
                 clinic=clinic_a, patient=patient_a, service=service_a, scheduled_at=lunes_10h,
-                require_online_booking=True,
+                require_online_booking=True, source=Appointment.Source.AGENT,
             )
 
     def test_professional_without_schedule_that_day_is_skipped(
@@ -179,7 +180,7 @@ class TestAutoAssign:
         with pytest.raises(NoProfessionalAvailable):
             create_appointment(
                 clinic=clinic_a, patient=patient_a, service=service_a, scheduled_at=lunes_10h,
-                require_online_booking=True,
+                require_online_booking=True, source=Appointment.Source.AGENT,
             )
 
     def test_professional_on_time_off_is_skipped(
@@ -194,37 +195,42 @@ class TestAutoAssign:
         with pytest.raises(NoProfessionalAvailable):
             create_appointment(
                 clinic=clinic_a, patient=patient_a, service=service_a, scheduled_at=lunes_10h,
-                require_online_booking=True,
+                require_online_booking=True, source=Appointment.Source.AGENT,
             )
 
     def test_professional_with_confirmed_overlap_is_skipped(
         self, clinic_a, patient_a, service_a, prof_1, lunes_10h
     ):
+        """El hueco está cogido: eso no es "no hay quien la atienda", es otro error."""
         Appointment.objects.create(
             clinic=clinic_a, patient=patient_a, service=service_a, professional=prof_1,
             scheduled_at=lunes_10h, end_at=lunes_10h + timedelta(minutes=30),
             status=Appointment.Status.CONFIRMED,
         )
-        with pytest.raises(NoProfessionalAvailable):
+        with pytest.raises(SlotUnavailable):
             create_appointment(
                 clinic=clinic_a, patient=patient_a, service=service_a, scheduled_at=lunes_10h,
-                require_online_booking=True,
+                require_online_booking=True, source=Appointment.Source.AGENT,
             )
 
-    def test_pending_overlap_does_not_skip(
+    def test_professional_with_pending_overlap_is_skipped(
         self, clinic_a, patient_a, service_a, prof_1, lunes_10h
     ):
-        """Una 'pending' no bloquea (regla vigente en BLOCKING_STATUSES)."""
+        """Una 'pending' bloquea igual que una 'confirmed' (ver BLOCKING_STATUSES).
+
+        prof_1 es el único que presta el servicio y ya tiene ese tramo ocupado por
+        una cita pendiente de validar → no hay a quien asignársela.
+        """
         Appointment.objects.create(
             clinic=clinic_a, patient=patient_a, service=service_a, professional=prof_1,
             scheduled_at=lunes_10h, end_at=lunes_10h + timedelta(minutes=30),
             status=Appointment.Status.PENDING,
         )
-        cita = create_appointment(
-            clinic=clinic_a, patient=patient_a, service=service_a, scheduled_at=lunes_10h,
-            require_online_booking=True,
-        )
-        assert cita.professional == prof_1
+        with pytest.raises(SlotUnavailable):
+            create_appointment(
+                clinic=clinic_a, patient=patient_a, service=service_a, scheduled_at=lunes_10h,
+                require_online_booking=True, source=Appointment.Source.AGENT,
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -292,7 +298,7 @@ class TestExplicitProfessional:
         """Si el cliente elige uno válido, se respeta aunque no sea el que tocaría."""
         cita = create_appointment(
             clinic=clinic_a, patient=patient_a, service=service_a,
-            professional=prof_2, scheduled_at=lunes_10h, require_online_booking=True,
+            professional=prof_2, scheduled_at=lunes_10h, require_online_booking=True, source=Appointment.Source.AGENT,
         )
         assert cita.professional == prof_2
 
@@ -303,7 +309,7 @@ class TestExplicitProfessional:
         with pytest.raises(ProfessionalUnavailable) as exc:
             create_appointment(
                 clinic=clinic_a, patient=patient_a, service=service_a,
-                professional=ajeno, scheduled_at=lunes_10h, require_online_booking=True,
+                professional=ajeno, scheduled_at=lunes_10h, require_online_booking=True, source=Appointment.Source.AGENT,
             )
         assert exc.value.detail['code'] == 'professional_unavailable'
         assert 'clínica' in exc.value.detail['message']
@@ -320,7 +326,7 @@ class TestExplicitProfessional:
         with pytest.raises(ProfessionalUnavailable) as exc:
             create_appointment(
                 clinic=clinic_a, patient=patient_a, service=service_a,
-                professional=prof, scheduled_at=lunes_10h, require_online_booking=True,
+                professional=prof, scheduled_at=lunes_10h, require_online_booking=True, source=Appointment.Source.AGENT,
             )
         assert 'no ofrece el servicio' in exc.value.detail['message']
 
@@ -332,7 +338,7 @@ class TestExplicitProfessional:
         with pytest.raises(ProfessionalUnavailable) as exc:
             create_appointment(
                 clinic=clinic_a, patient=patient_a, service=service_a,
-                professional=prof_1, scheduled_at=tarde, require_online_booking=True,
+                professional=prof_1, scheduled_at=tarde, require_online_booking=True, source=Appointment.Source.AGENT,
             )
         assert 'horario del profesional' in exc.value.detail['message']
 
@@ -364,7 +370,7 @@ class TestInvariant:
     ):
         cita = create_appointment(
             clinic=clinic_a, patient=patient_a, service=service_a, scheduled_at=lunes_10h,
-            require_online_booking=True,
+            require_online_booking=True, source=Appointment.Source.AGENT,
         )
         assert cita.professional_id is not None
 
@@ -375,6 +381,6 @@ class TestInvariant:
         with pytest.raises(NoProfessionalAvailable):
             create_appointment(
                 clinic=clinic_a, patient=patient_a, service=service_a, scheduled_at=lunes_10h,
-                require_online_booking=True,
+                require_online_booking=True, source=Appointment.Source.AGENT,
             )
         assert not Appointment.objects.exists()

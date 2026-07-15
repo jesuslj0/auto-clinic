@@ -49,7 +49,9 @@ class AppointmentAdmin(admin.ModelAdmin):
     list_display = ('patient', 'service', 'professional', 'clinic', 'scheduled_at', 'status')
     search_fields = ('patient__first_name', 'patient__last_name', 'service__name')
     list_filter = ('clinic', 'status', 'scheduled_at', 'professional')
-    readonly_fields = ('confirmation_token',)
+    # `source`, `patient_confirmed_at` y `hold_expires_at` son estado de dominio:
+    # los escriben los services, no se teclean. Se muestran, pero no se editan.
+    readonly_fields = ('confirmation_token', 'source', 'patient_confirmed_at', 'hold_expires_at')
 
     def save_model(self, request, obj, form, change):
         """Ninguna cita se guarda sin profesional ni con uno que no pueda atenderla.
@@ -57,6 +59,9 @@ class AppointmentAdmin(admin.ModelAdmin):
         El admin es vía staff: se relaja `accepts_online_booking`, pero el resto
         de criterios (horario, ausencias, solapamiento) se validan igual que en
         la API. Si `professional` se deja vacío, se auto-asigna.
+
+        El alta desde aquí es vía staff, así que la cita nace con `source=staff`
+        (el default del campo) y sin hold: no hay nada que validar después.
         """
         if obj.professional_id is None:
             obj.professional = select_professional_for_appointment(

@@ -100,12 +100,15 @@ class TestAppointmentViewSet:
 @pytest.mark.django_db
 class TestAppointmentTokenActions:
     def test_confirm_via_token(self, api_client, appointment_a):
+        """El "SÍ" del paciente NO cambia el estado: solo deja constancia."""
+        estado_previo = appointment_a.status
         token = appointment_a.confirmation_token
         url = f"/api/public/appointments/{token}/confirm/"
         response = api_client.post(url)
         assert response.status_code == 200
         appointment_a.refresh_from_db()
-        assert appointment_a.status == Appointment.Status.CONFIRMED
+        assert appointment_a.status == estado_previo
+        assert appointment_a.patient_confirmed_at is not None
 
     def test_cancel_via_token(self, api_client, appointment_a):
         token = appointment_a.confirmation_token
@@ -140,4 +143,4 @@ class TestAppointmentTokenActions:
         response = api_client.post(url)
         assert "id" in response.data
         assert "status" in response.data
-        assert response.data["status"] == "confirmed"
+        assert response.data["status"] == appointment_a.status

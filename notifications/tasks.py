@@ -42,8 +42,12 @@ def _dispatch_window(hours):
     target_start = now + timedelta(hours=hours)
     target_end = target_start + timedelta(minutes=30)
     reminder_type = Reminder.ReminderType.H24 if hours == 24 else Reminder.ReminderType.H2
+    # Solo se recuerdan las citas que la clínica tiene EN FIRME. Una 'pending'
+    # está a la espera de que el staff la valide: no tiene sentido pedirle al
+    # paciente que confirme algo que la clínica aún no ha aceptado. Misma regla
+    # que el endpoint `pending-reminders` que consume n8n.
     appointments = Appointment.objects.filter(
-        status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED],
+        status=Appointment.Status.CONFIRMED,
         scheduled_at__gte=target_start,
         scheduled_at__lt=target_end,
     ).select_related('patient', 'clinic')

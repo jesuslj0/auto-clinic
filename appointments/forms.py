@@ -3,9 +3,10 @@ from zoneinfo import ZoneInfo
 
 from django import forms
 from django.db.models import Q
+from django.forms import inlineformset_factory
 from django.utils import timezone
 
-from appointments.models import Professional
+from appointments.models import Professional, ProfessionalSchedule, ProfessionalTimeOff
 from core.models import User
 from patients.models import Patient
 from services.models import Service
@@ -174,3 +175,130 @@ class AppointmentForm(forms.Form):
             cleaned['scheduled_at'] = scheduled_at
 
         return cleaned
+
+
+# ---------------------------------------------------------------------------
+# Horario recurrente y ausencias del profesional (inline formsets del edit)
+# ---------------------------------------------------------------------------
+#
+# Ambos cuelgan del edit de un profesional YA existente, así que su clínica —y
+# por tanto su timezone— se conoce sin ambigüedad. Ver `ProfessionalUpdateView`.
+
+# Clase de input compartida con el resto del panel, para que las filas de los
+# formsets no desentonen con el form del profesional. Vive aquí (y no repetida en
+# el template) para poder usar `{{ campo }}` directo y que el widget ya venga
+# estilizado.
+_FIELD_CLASS = (
+    'block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm '
+    'text-slate-900 shadow-sm focus:border-transparent focus:outline-none '
+    'focus:ring-2 focus:ring-brand-500 transition'
+)
+
+
+class ProfessionalScheduleForm(forms.ModelForm):
+    """Un tramo del horario semanal. `start_time`/`end_time` son hora LOCAL.
+
+    No hay conversión de zona horaria: un horario recurrente no tiene UTC (ver el
+    docstring de `ProfessionalSchedule`). La materialización a instantes absolutos
+    ocurre en `services.py`, no aquí.
+    """
+
+    class Meta:
+        model = ProfessionalSchedule
+        fields = ['day_of_week', 'start_time', 'end_time', 'is_active']
+        widgets = {
+            'day_of_week': forms.Select(attrs={'class': _FIELD_CLASS}),
+            'start_time': forms.TimeInput(format='%H:%M', attrs={'type': 'time', 'class': _FIELD_CLASS}),
+            'end_time': forms.TimeInput(format='%H:%M', attrs={'type': 'time', 'class': _FIELD_CLASS}),
+            'is_active': forms.CheckboxInput(
+                attrs={'class': 'h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500'}
+            ),
+        }
+
+
+class BaseScheduleFormSet(forms.BaseInlineFormSet):
+    """Detecta solapamientos ENTRE las filas del propio POST.
+
+    `ProfessionalSchedule.clean()` valida contra lo ya guardado en BD, pero durante
+    `is_valid()` ninguna fila nueva está aún en BD, así que dos tramos nuevos que
+    se pisan pasarían su validación individual. Este `clean()` cierra ese hueco.
+    """
+
+    def clean(self):
+        super().clean()
+        if any(self.errors):
+            return
+
+        tramos = []
+        for form in self.forms:
+            if not form.cleaned_data or form.cleaned_data.get('DELETE'):
+                continue
+            dia = form.cleaned_data.get('day_of_week')
+            inicio = form.cleaned_data.get('start_time')
+            fin = form.cleaned_data.get('end_time')
+            if dia is None or inicio is None or fin is None:
+                continue
+            for otro_dia, otro_inicio, otro_fin in tramos:
+                if dia == otro_dia and inicio < otro_fin and fin > otro_inicio:
+                    raise forms.ValidationError(
+                        'Hay dos tramos que se solapan el mismo día. Revísalos.'
+                    )
+            tramos.append((dia, inicio, fin))
+
+
+class ProfessionalTimeOffForm(forms.ModelForm):
+    """Una ausencia puntual. `starts_at`/`ends_at` son instantes en UTC.
+
+    El staff los teclea en hora LOCAL de la clínica; aquí se convierte a UTC al
+    guardar y de vuelta a local al mostrar. Misma responsabilidad que
+    `AppointmentForm`: la BD guarda UTC, la UI habla en hora de la clínica.
+    """
+
+    class Meta:
+        model = ProfessionalTimeOff
+        fields = ['starts_at', 'ends_at', 'reason', 'note']
+        widgets = {
+            'starts_at': forms.DateTimeInput(attrs={'type': 'datetime-local', 'class': _FIELD_CLASS}),
+            'ends_at': forms.DateTimeInput(attrs={'type': 'datetime-local', 'class': _FIELD_CLASS}),
+            'reason': forms.Select(attrs={'class': _FIELD_CLASS}),
+            'note': forms.TextInput(attrs={'placeholder': 'Opcional', 'class': _FIELD_CLASS}),
+        }
+
+    def __init__(self, *args, clinic_tz=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.clinic_tz = clinic_tz or ZoneInfo(timezone.get_current_timezone_name())
+        # El input datetime-local no lleva zona: acepta 'YYYY-MM-DDTHH:MM'.
+        for campo in ('starts_at', 'ends_at'):
+            self.fields[campo].input_formats = ['%Y-%m-%dT%H:%M', '%Y-%m-%dT%H:%M:%S']
+
+        # Prellenar en hora local: la instancia guarda UTC, el widget muestra local.
+        if self.instance and self.instance.pk:
+            for campo in ('starts_at', 'ends_at'):
+                valor = getattr(self.instance, campo)
+                if valor:
+                    self.initial[campo] = valor.astimezone(self.clinic_tz).strftime('%Y-%m-%dT%H:%M')
+
+    def _to_utc(self, valor):
+        """Interpreta un datetime naive del input como hora local y lo pasa a UTC."""
+        if valor and timezone.is_naive(valor):
+            return valor.replace(tzinfo=self.clinic_tz).astimezone(ZoneInfo('UTC'))
+        return valor
+
+    def clean_starts_at(self):
+        return self._to_utc(self.cleaned_data.get('starts_at'))
+
+    def clean_ends_at(self):
+        return self._to_utc(self.cleaned_data.get('ends_at'))
+
+
+ScheduleFormSet = inlineformset_factory(
+    Professional, ProfessionalSchedule,
+    form=ProfessionalScheduleForm, formset=BaseScheduleFormSet,
+    extra=0, can_delete=True,
+)
+
+TimeOffFormSet = inlineformset_factory(
+    Professional, ProfessionalTimeOff,
+    form=ProfessionalTimeOffForm,
+    extra=0, can_delete=True,
+)

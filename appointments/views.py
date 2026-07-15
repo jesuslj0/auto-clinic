@@ -15,13 +15,22 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from appointments.forms import AppointmentForm, ProfessionalForm, ProfessionalProfileForm
+from appointments.forms import (
+    AppointmentForm,
+    ProfessionalForm,
+    ProfessionalProfileForm,
+    ScheduleFormSet,
+    TimeOffFormSet,
+)
 from appointments.models import Appointment, AppointmentStatusHistory, Professional, ProfessionalSchedule
 from appointments.services import (
     AppointmentDomainError,
+    cancel_appointment,
+    confirm_by_clinic,
     create_appointment,
     get_clinic_available_slots,
     get_professional_availability,
+    register_patient_confirmation,
 )
 from appointments.serializers import AppointmentSerializer, ProfessionalScheduleSerializer, ProfessionalSerializer
 from core.authentication import ClinicAgent
@@ -144,28 +153,52 @@ class AppointmentViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets
             'confirmation_token': str(appointment.confirmation_token),
         })
     
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='confirm',
+        permission_classes=[IsStaffOrAdmin],
+    )
+    def confirm(self, request, pk=None):
+        """La clínica pone la cita en firme: `pending` → `confirmed`, y sin hold.
+
+        Es la contrapartida autenticada de `/api/public/appointments/<token>/confirm/`,
+        que es del paciente y NO cambia el estado. Confirmar es de la clínica, así
+        que aquí no vale la API key del agente: solo staff o admin.
+        """
+        appointment = self.get_object()
+        confirm_by_clinic(appointment, user=request.user)
+        return Response(self.get_serializer(appointment).data)
+
     @action(detail=False, methods=['get'], url_path='pending-reminders')
     def pending_reminders(self, request):
+        """Citas a las que toca mandarles recordatorio.
+
+        Solo se recuerdan las citas que la clínica tiene EN FIRME: una `pending`
+        es una cita a la espera de que el staff la valide, y no tiene sentido
+        pedirle al paciente que confirme algo que la clínica aún no ha aceptado.
+
+        `patient_confirmed_at` es lo que dice si el paciente ya respondió. Los
+        flags `reminder_*` solo dicen qué se ha ENVIADO, que es lo suyo: ya no
+        hacen de estado.
+        """
         reminder_type = request.query_params.get('type', '24h')
         now = timezone.now()
-        
+
         if reminder_type == '24h':
-            window_start = now + timedelta(hours=23)
-            window_end = now + timedelta(hours=25)
-            qs = self.get_queryset().filter(
-                scheduled_at__range=(window_start, window_end),
-                status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED],
-                reminder_24h_sent=False,
-            )
+            window = (now + timedelta(hours=23), now + timedelta(hours=25))
+            pendiente_de_envio = {'reminder_24h_sent': False}
         else:  # 3h
-            window_start = now + timedelta(hours=2, minutes=30)
-            window_end = now + timedelta(hours=3, minutes=30)
-            qs = self.get_queryset().filter(
-                scheduled_at__range=(window_start, window_end),
-                status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED],
-                reminder_3h_sent=False,
-            )
-        
+            window = (now + timedelta(hours=2, minutes=30), now + timedelta(hours=3, minutes=30))
+            pendiente_de_envio = {'reminder_24h_sent': True, 'reminder_3h_sent': False}
+
+        qs = self.get_queryset().filter(
+            scheduled_at__range=window,
+            status=Appointment.Status.CONFIRMED,
+            patient_confirmed_at__isnull=True,
+            **pendiente_de_envio,
+        )
+
         serializer = self.get_serializer(qs, many=True)
         return Response({'results': serializer.data, 'count': qs.count()})
 
@@ -569,6 +602,9 @@ class AppointmentCreateView(LoginRequiredMixin, FormView):
                 # profesional que no acepta reservas online. Todo lo demás
                 # (horario, ausencias, solapamientos) se sigue validando igual.
                 require_online_booking=False,
+                # La pone la clínica, así que nace en firme y sin hold: no hay
+                # nada que validar después.
+                source=Appointment.Source.STAFF,
             )
         except AppointmentDomainError as error:
             # El profesional elegido no puede atender la cita (horario, ausencia,
@@ -584,6 +620,18 @@ class AppointmentCreateView(LoginRequiredMixin, FormView):
 
 
 class AppointmentActionByTokenAPIView(APIView):
+    """Respuesta del PACIENTE al recordatorio, sin autenticación (n8n la llama).
+
+    Mismo contrato de siempre: 200 con la cita serializada, 404 si el token no
+    existe, 400 si la acción no se reconoce. Lo que cambió es la semántica de
+    `confirm`, no la forma de la respuesta:
+
+      - "SÍ" → se registra `patient_confirmed_at`. El `status` NO se toca: el
+        hueco ya estaba bloqueado y sigue estándolo. Confirmar la cita (ponerla
+        en firme) es cosa de la clínica, no del paciente.
+      - "NO" → se cancela, porque eso sí libera el hueco.
+    """
+
     permission_classes = [AllowAny]
 
     def post(self, request, token, action):
@@ -593,13 +641,17 @@ class AppointmentActionByTokenAPIView(APIView):
             return Response({'detail': 'Invalid token.'}, status=status.HTTP_404_NOT_FOUND)
 
         if action == 'confirm':
-            appointment.status = Appointment.Status.CONFIRMED
+            register_patient_confirmation(appointment)
         elif action == 'cancel':
-            appointment.status = Appointment.Status.CANCELLED
+            cancel_appointment(
+                appointment,
+                actor=AppointmentStatusHistory.Actor.PATIENT,
+                actor_label='Paciente (recordatorio)',
+                cancelled_by=Appointment.CancelledBy.PATIENT,
+            )
         else:
             return Response({'detail': 'Unsupported action.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        appointment.save(update_fields=['status', 'updated_at'])
         return Response(AppointmentSerializer(appointment).data, status=status.HTTP_200_OK)
 
 
@@ -697,10 +749,49 @@ class ProfessionalUpdateView(LoginRequiredMixin, UpdateView):
         kwargs['request_user'] = self.request.user
         return kwargs
 
+    def _clinic_tz(self):
+        return ZoneInfo(self.object.clinic.timezone) if self.object.clinic_id else None
+
+    def _build_formsets(self, data=None):
+        """Los dos inline formsets del edit, atados al profesional que se edita.
+
+        El de ausencias necesita la timezone de la clínica para convertir los
+        instantes que teclea el staff (hora local) a los UTC que guarda la BD.
+        """
+        return {
+            'schedule_formset': ScheduleFormSet(
+                data, instance=self.object, prefix='schedules',
+            ),
+            'timeoff_formset': TimeOffFormSet(
+                data, instance=self.object, prefix='timeoff',
+                form_kwargs={'clinic_tz': self._clinic_tz()},
+            ),
+        }
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['section'] = 'professionals'
+        # Al repintar tras un POST inválido, no re-vincular los formsets: ya vienen
+        # en kwargs con sus errores. Solo se construyen frescos en el GET.
+        if 'schedule_formset' not in context:
+            context.update(self._build_formsets())
+        return context
+
     def form_valid(self, form):
         if self.request.user.is_superuser:
             form.instance.clinic = form.cleaned_data['user'].clinic
         else:
             form.instance.clinic = self.request.user.clinic
+
+        formsets = self._build_formsets(self.request.POST)
+        if not all(fs.is_valid() for fs in formsets.values()):
+            # Un formset inválido invalida todo el guardado: nada se escribe.
+            return self.render_to_response(self.get_context_data(form=form, **formsets))
+
+        self.object = form.save()
+        for fs in formsets.values():
+            fs.instance = self.object
+            fs.save()
+
         messages.success(self.request, 'Profesional actualizado correctamente.')
-        return super().form_valid(form)
+        return redirect(self.get_success_url())

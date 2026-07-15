@@ -68,7 +68,7 @@ class TestDispatchWindow:
             service=service_a,
             scheduled_at=scheduled,
             end_at=scheduled + timedelta(minutes=30),
-            status=Appointment.Status.PENDING,
+            status=Appointment.Status.CONFIRMED,
         )
 
         with patch("notifications.tasks.send_appointment_reminder") as mock_task:
@@ -92,7 +92,7 @@ class TestDispatchWindow:
             service=service_a,
             scheduled_at=scheduled,
             end_at=scheduled + timedelta(minutes=30),
-            status=Appointment.Status.PENDING,
+            status=Appointment.Status.CONFIRMED,
         )
 
         with patch("notifications.tasks.send_appointment_reminder") as mock_task:
@@ -105,6 +105,25 @@ class TestDispatchWindow:
             reminder_type=Reminder.ReminderType.H24,
         ).count()
         assert count == 1
+
+    def test_pending_appointment_skipped(self, db, clinic_a, patient_a, service_a):
+        """La clínica aún no la ha validado: no le pedimos al paciente que confirme."""
+        now = timezone.now()
+        scheduled = now + timedelta(hours=24, minutes=10)
+        appointment = Appointment.objects.create(
+            clinic=clinic_a,
+            patient=patient_a,
+            service=service_a,
+            scheduled_at=scheduled,
+            end_at=scheduled + timedelta(minutes=30),
+            status=Appointment.Status.PENDING,
+        )
+
+        with patch("notifications.tasks.send_appointment_reminder") as mock_task:
+            mock_task.delay = lambda rid: None
+            _dispatch_window(24)
+
+        assert Reminder.objects.filter(appointment=appointment).first() is None
 
     def test_cancelled_appointment_skipped(self, db, clinic_a, patient_a, service_a):
         now = timezone.now()

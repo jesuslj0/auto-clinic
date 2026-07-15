@@ -4,13 +4,16 @@ from datetime import datetime, time, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from django.db import transaction
 from django.db.models import Count, Q
+from django.utils import timezone
 from rest_framework import status as http_status
 from rest_framework.exceptions import APIException
 
 from appointments.models import (
     BLOCKING_STATUSES,
     DEFAULT_DURATION_MINUTES,
+    LIVE_STATUSES,
     Appointment,
     AppointmentStatusHistory,
     Professional,
@@ -18,17 +21,25 @@ from appointments.models import (
     ProfessionalTimeOff,
 )
 
-# `BLOCKING_STATUSES` (qué estados ocupan un hueco) se define en models.py, que
-# es de donde lo lee `find_overlap()`. Se reexporta aquí por comodidad: es la
-# misma lista, no una copia. Nunca la redefinas.
+# `BLOCKING_STATUSES` (qué estados ocupan un hueco) y `LIVE_STATUSES` (en cuáles
+# la cita sigue viva) se definen en models.py, que es de donde las lee
+# `find_overlap()`. Se reexportan aquí por comodidad: son las mismas, no copias.
+# Nunca las redefinas.
 __all__ = [
     'BLOCKING_STATUSES',
+    'LIVE_STATUSES',
     'AppointmentDomainError',
     'NoProfessionalAvailable',
     'ProfessionalUnavailable',
+    'InvalidTransition',
+    'SlotUnavailable',
     'create_appointment',
+    'lock_agenda',
     'validate_appointment_update',
     'select_professional_for_appointment',
+    'register_patient_confirmation',
+    'confirm_by_clinic',
+    'cancel_appointment',
     'get_professional_availability',
     'get_clinic_available_slots',
 ]
@@ -68,6 +79,16 @@ class ProfessionalUnavailable(AppointmentDomainError):
     default_message = 'El profesional indicado no está disponible para esa cita.'
 
 
+class InvalidTransition(AppointmentDomainError):
+    default_code = 'invalid_transition'
+    default_message = 'La cita no admite ese cambio de estado.'
+
+
+class SlotUnavailable(AppointmentDomainError):
+    default_code = 'slot_unavailable'
+    default_message = 'Ese hueco ya no está disponible. Elige otra hora, por favor.'
+
+
 # ---------------------------------------------------------------------------
 # Elegibilidad y selección de profesional
 # ---------------------------------------------------------------------------
@@ -85,7 +106,7 @@ DAY_NAMES = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'd
 
 def ineligibility_reason(
     *, professional, clinic, service, scheduled_at, end_at,
-    require_online_booking: bool, exclude_pk=None,
+    require_online_booking: bool, exclude_pk=None, ignore_overlap: bool = False,
 ):
     """Motivo por el que un profesional NO puede atender esa cita, o None si sí puede.
 
@@ -114,6 +135,11 @@ def ineligibility_reason(
     Es lo ÚNICO que se relaja para el staff: todos los demás criterios se aplican
     igual por ambas vías. `services.py` no sabe nada de HTTP: recibe un booleano,
     no un `request`.
+
+    `ignore_overlap` NO relaja nada de cara al usuario: sirve para preguntar "¿este
+    profesional podría atenderla si el hueco estuviera libre?", y así distinguir
+    "no hay nadie que preste ese servicio a esa hora" de "el hueco está pillado".
+    Son dos mensajes distintos para el paciente. No lo uses para crear citas.
     """
     if professional.clinic_id != clinic.pk:
         return 'El profesional no pertenece a esta clínica.'
@@ -154,23 +180,36 @@ def ineligibility_reason(
     if _has_time_off(professional, scheduled_at, end_at):
         return 'El profesional no está disponible a esa hora.'
 
-    # El buffer se respeta alargando el hueco que ocupa la cita nueva, igual que
-    # hace el motor de disponibilidad.
-    margen = timedelta(minutes=professional.buffer_minutes)
-    conflicto = Appointment.find_overlap(
-        professional, scheduled_at, end_at + margen, exclude_pk=exclude_pk
+    if ignore_overlap:
+        return None
+
+    conflicto = _overlapping_appointment(
+        professional, scheduled_at, end_at, exclude_pk=exclude_pk
     )
     if conflicto:
         return (
-            f'El profesional ya tiene una cita confirmada que se solapa: '
+            f'El profesional ya tiene una cita que se solapa: '
             f'{conflicto.scheduled_at:%H:%M}–{conflicto.get_end_datetime():%H:%M}.'
         )
 
     return None
 
 
+def _overlapping_appointment(professional, scheduled_at, end_at, exclude_pk=None):
+    """Cita que le pisa el tramo a este profesional, o None.
+
+    El buffer se respeta alargando el hueco que ocupa la cita nueva, igual que
+    hace el motor de disponibilidad.
+    """
+    margen = timedelta(minutes=professional.buffer_minutes)
+    return Appointment.find_overlap(
+        professional, scheduled_at, end_at + margen, exclude_pk=exclude_pk
+    )
+
+
 def _eligible_professionals(
     *, clinic, service, scheduled_at, end_at, require_online_booking: bool,
+    ignore_overlap: bool = False,
 ) -> list:
     """Profesionales que pueden atender la cita, del más libre al más cargado.
 
@@ -208,8 +247,55 @@ def _eligible_professionals(
             professional=professional, clinic=clinic, service=service,
             scheduled_at=scheduled_at, end_at=end_at,
             require_online_booking=require_online_booking,
+            ignore_overlap=ignore_overlap,
         ) is None
     ]
+
+
+def _slot_is_taken(
+    *, clinic, service, scheduled_at, end_at, require_online_booking: bool, exclude_pk=None,
+) -> bool:
+    """¿El hueco está ocupado, teniendo la clínica quien pudiera atenderlo?
+
+    Distingue los dos "no" que el paciente puede recibir, que no son el mismo:
+
+      - "Ningún profesional presta ese servicio a esa hora" (nadie trabaja, nadie
+        lo ofrece…) → `no_professional_available`.
+      - "Alguien podría, pero ese hueco ya está cogido" → `slot_unavailable`, que
+        invita a elegir otra hora.
+    """
+    candidatos = _eligible_professionals(
+        clinic=clinic, service=service, scheduled_at=scheduled_at, end_at=end_at,
+        require_online_booking=require_online_booking, ignore_overlap=True,
+    )
+    return any(
+        _overlapping_appointment(professional, scheduled_at, end_at, exclude_pk=exclude_pk)
+        for professional in candidatos
+    )
+
+
+def lock_agenda(*, clinic, service, professional=None):
+    """Serializa las altas que compiten por el mismo hueco. Llamar dentro de atomic().
+
+    OJO, esto no es lo que parece a primera vista: NO basta con bloquear las citas
+    que ya existen en el tramo. Dos transacciones que insertan a la vez no ven la
+    fila de la otra (aún no está commiteada) y no hay nada que bloquear, así que
+    ambas pasarían la validación y ambas insertarían. Es un phantom read de manual.
+
+    Lo que se bloquea es el RECURSO por el que compiten: la fila del profesional.
+    Quien llega segundo espera, y cuando entra ya ve la cita del primero y la
+    revalidación la rechaza con `slot_unavailable`.
+
+    Con auto-asignación no sabemos aún el profesional, así que se bloquean todos
+    los que prestan el servicio, ordenados por `pk` (orden estable = sin deadlocks).
+    """
+    candidatos = Professional.objects.select_for_update().filter(clinic=clinic)
+    if professional is not None:
+        candidatos = candidatos.filter(pk=professional.pk)
+    elif service is not None:
+        candidatos = candidatos.filter(services=service)
+
+    list(candidatos.order_by('pk').values_list('pk', flat=True))
 
 
 def select_professional_for_appointment(
@@ -263,6 +349,7 @@ def create_appointment(
     clinic,
     scheduled_at,
     require_online_booking: bool,
+    source: str,
     service=None,
     end_at=None,
     status=None,
@@ -282,7 +369,6 @@ def create_appointment(
       (serializer / form).
     - Si no se indica `end_at`, se calcula a partir de
       `service.duration_minutes` (30 min por defecto si no hay servicio).
-    - Si no se indica `status`, la cita nace en 'pending'.
     - Si no se indica `professional`, se auto-asigna el menos cargado que pueda
       atenderla. Si se indica, se valida con esos mismos criterios. En ninguno de
       los dos casos se crea una cita sin profesional: si no hay ninguno válido,
@@ -290,43 +376,199 @@ def create_appointment(
     - `require_online_booking` va atado al llamante, no al camino interno: la API
       y la reserva pública pasan True (con o sin `professional` explícito), el
       panel y el admin pasan False. Ver `ineligibility_reason`.
+
+    `source` es OBLIGATORIO y explícito, igual que `require_online_booking`: lo
+    fija quien llama, porque solo esa capa sabe de dónde viene la cita. Decide
+    dos cosas, y por eso no puede tener un default silencioso:
+
+      - En qué estado NACE. Una cita del staff nace `confirmed`: el staff ES la
+        clínica, no hay nada que validar después. Las demás nacen `pending`, a la
+        espera de que alguien de la clínica las valide.
+      - Si lleva HOLD. Solo las que nacen pendientes de validación
+        (`agent`, `booking`) caducan, y solo si la clínica configuró un TTL
+        (`clinic.hold_ttl_minutes`; 0 = sin caducidad).
     """
     if end_at is None:
         duration = service.duration_minutes if service is not None else DEFAULT_DURATION_MINUTES
         end_at = scheduled_at + timedelta(minutes=duration)
 
-    status = status or Appointment.Status.PENDING
-
-    if professional is None:
-        professional = select_professional_for_appointment(
-            clinic=clinic, service=service, scheduled_at=scheduled_at, end_at=end_at,
-            require_online_booking=require_online_booking,
-        )
-    else:
-        validate_professional_for_appointment(
-            professional=professional, clinic=clinic, service=service,
-            scheduled_at=scheduled_at, end_at=end_at,
-            require_online_booking=require_online_booking,
+    if status is None:
+        status = (
+            Appointment.Status.CONFIRMED
+            if source == Appointment.Source.STAFF
+            else Appointment.Status.PENDING
         )
 
-    appointment = Appointment.objects.create(
-        clinic=clinic,
-        scheduled_at=scheduled_at,
-        service=service,
-        end_at=end_at,
-        status=status,
-        professional=professional,
-        **extra_fields,
-    )
+    hold_expires_at = None
+    ttl = clinic.hold_ttl_minutes
+    if source != Appointment.Source.STAFF and status == Appointment.Status.PENDING and ttl:
+        hold_expires_at = timezone.now() + timedelta(minutes=ttl)
 
+    # Entre que `available-slots` ofreció el hueco y llega este POST han pasado
+    # varios mensajes de WhatsApp: minutos. La disponibilidad de entonces no vale,
+    # hay que revalidarla AHORA y con el recurso bloqueado. Sin esto, dos
+    # conversaciones se cuelan por el mismo hueco y las dos reciben un "hecho".
+    with transaction.atomic():
+        lock_agenda(clinic=clinic, service=service, professional=professional)
+
+        if professional is None:
+            try:
+                professional = select_professional_for_appointment(
+                    clinic=clinic, service=service, scheduled_at=scheduled_at, end_at=end_at,
+                    require_online_booking=require_online_booking,
+                )
+            except NoProfessionalAvailable:
+                # Puede que sí hubiera quien la atendiera y lo único que falle sea
+                # que el hueco ya está cogido: son dos mensajes distintos.
+                if _slot_is_taken(
+                    clinic=clinic, service=service, scheduled_at=scheduled_at, end_at=end_at,
+                    require_online_booking=require_online_booking,
+                ):
+                    raise SlotUnavailable(details={'scheduled_at': scheduled_at.isoformat()})
+                raise
+        else:
+            if _overlapping_appointment(professional, scheduled_at, end_at):
+                raise SlotUnavailable(details={'scheduled_at': scheduled_at.isoformat()})
+            validate_professional_for_appointment(
+                professional=professional, clinic=clinic, service=service,
+                scheduled_at=scheduled_at, end_at=end_at,
+                require_online_booking=require_online_booking,
+            )
+
+        appointment = Appointment.objects.create(
+            clinic=clinic,
+            scheduled_at=scheduled_at,
+            service=service,
+            end_at=end_at,
+            status=status,
+            professional=professional,
+            source=source,
+            hold_expires_at=hold_expires_at,
+            **extra_fields,
+        )
+
+        AppointmentStatusHistory.objects.create(
+            appointment=appointment,
+            from_status=None,
+            to_status=status,
+            actor=actor,
+            actor_label=actor_label,
+        )
+
+    return appointment
+
+
+# ---------------------------------------------------------------------------
+# Transiciones de estado
+# ---------------------------------------------------------------------------
+#
+# TODA escritura de `status` pasa por aquí, con su guardia explícita y su entrada
+# en el historial. Nunca `.update()`, nunca un `appointment.status = ...` suelto
+# en una view: eso es cómo se pierde la trazabilidad y cómo una cita acaba
+# saltándose una regla que sí aplica el resto del código.
+
+
+def _record_transition(appointment, from_status, *, actor, actor_label=''):
     AppointmentStatusHistory.objects.create(
         appointment=appointment,
-        from_status=None,
-        to_status=status,
+        from_status=from_status,
+        to_status=appointment.status,
         actor=actor,
         actor_label=actor_label,
     )
 
+
+def register_patient_confirmation(appointment, *, at=None):
+    """El paciente respondió "SÍ" al recordatorio.
+
+    Registra el HECHO y NO toca `status`. El hueco ya estaba bloqueado antes de
+    que contestara y sigue bloqueado después: no hay recurso que se libere ni que
+    se ocupe, así que no hay transición. Ver el comentario del campo
+    `patient_confirmed_at` en models.py: la asimetría con el "NO" (que sí cancela)
+    es intencionada. Alguien va a querer "arreglarla" poniendo aquí un
+    `status = CONFIRMED`. No lo hagas: `confirmed` significa "la clínica la tiene
+    en firme", y el paciente no es la clínica.
+
+    Idempotente: si ya había confirmado, se respeta la primera vez que lo hizo.
+    """
+    if appointment.status == Appointment.Status.CANCELLED:
+        raise InvalidTransition('Esta cita fue cancelada y ya no puede confirmarse.')
+
+    if appointment.patient_confirmed_at is None:
+        appointment.patient_confirmed_at = at or timezone.now()
+
+    # El flag lo escribía n8n a mano; lo mantenemos coherente desde aquí para no
+    # dejar dos versiones de la misma verdad.
+    appointment.reminder_responded = True
+    appointment.save(
+        update_fields=['patient_confirmed_at', 'reminder_responded', 'updated_at']
+    )
+    return appointment
+
+
+def confirm_by_clinic(appointment, *, user=None):
+    """La clínica valida la cita: `pending` → `confirmed`. Y el hold desaparece.
+
+    Es la ÚNICA vía por la que una cita pasa a `confirmed`. Que el paciente diga
+    que vendrá no la confirma (ver `register_patient_confirmation`).
+
+    Una cita en firme no caduca, así que se le quita `hold_expires_at`.
+    """
+    if appointment.status == Appointment.Status.CONFIRMED:
+        return appointment  # idempotente: validar dos veces no es un error
+
+    if appointment.status != Appointment.Status.PENDING:
+        raise InvalidTransition(
+            f'Una cita en estado "{appointment.get_status_display()}" no puede confirmarse.'
+        )
+
+    # No se puede poner en firme un hueco que ya está ocupado por otra cita en
+    # firme. La regla la decide `BLOCKING_STATUSES`, como en todo lo demás.
+    if appointment.professional_id:
+        conflicto = Appointment.find_overlap(
+            appointment.professional,
+            appointment.scheduled_at,
+            appointment.get_end_datetime(),
+            exclude_pk=appointment.pk,
+        )
+        if conflicto:
+            raise ProfessionalUnavailable(
+                f'{appointment.professional} ya tiene otra cita en ese tramo '
+                f'({conflicto.scheduled_at:%H:%M}–{conflicto.get_end_datetime():%H:%M}).',
+                details={'appointment': str(appointment.pk)},
+            )
+
+    previo = appointment.status
+    appointment.status = Appointment.Status.CONFIRMED
+    appointment.hold_expires_at = None
+    appointment.save(update_fields=['status', 'hold_expires_at', 'updated_at'])
+
+    _record_transition(
+        appointment,
+        previo,
+        actor=AppointmentStatusHistory.Actor.STAFF,
+        actor_label=(user.get_full_name() or user.email) if user else '',
+    )
+    return appointment
+
+
+def cancel_appointment(
+    appointment,
+    *,
+    actor=AppointmentStatusHistory.Actor.SYSTEM,
+    actor_label='',
+    cancelled_by=None,
+):
+    """Cancela la cita y libera el hueco. Idempotente."""
+    if appointment.status == Appointment.Status.CANCELLED:
+        return appointment
+
+    previo = appointment.status
+    appointment.status = Appointment.Status.CANCELLED
+    appointment.cancelled_by = cancelled_by
+    appointment.save(update_fields=['status', 'cancelled_by', 'updated_at'])
+
+    _record_transition(appointment, previo, actor=actor, actor_label=actor_label)
     return appointment
 
 
@@ -358,9 +600,9 @@ def validate_appointment_update(appointment, changes: dict, *, require_online_bo
     scheduled_at = valor('scheduled_at')
     status = valor('status')
 
-    # Una cita cancelada o completada ya no ocupa agenda: no tiene sentido
-    # revalidar su elegibilidad (y bloquearía cerrar citas antiguas).
-    if status not in BLOCKING_STATUSES and status != Appointment.Status.PENDING:
+    # Una cita cancelada, completada o no_show ya no ocupa agenda: no tiene
+    # sentido revalidar su elegibilidad (y bloquearía cerrar citas antiguas).
+    if status not in LIVE_STATUSES:
         return {}
 
     # Si se mueve la hora sin decir la nueva duración, `end_at` se recalcula desde
@@ -379,6 +621,12 @@ def validate_appointment_update(appointment, changes: dict, *, require_online_bo
             'Una cita no puede quedarse sin profesional asignado.',
             details={'appointment': str(appointment.pk)},
         )
+
+    # Mover una cita a un hueco ocupado es la misma carrera que crearla ahí: quien
+    # llama debe hacerlo dentro de `atomic()` tras `lock_agenda()`. Ver
+    # `AppointmentSerializer.update()`.
+    if _overlapping_appointment(professional, scheduled_at, end_at, exclude_pk=appointment.pk):
+        raise SlotUnavailable(details={'scheduled_at': scheduled_at.isoformat()})
 
     validate_professional_for_appointment(
         professional=professional, clinic=clinic, service=service,

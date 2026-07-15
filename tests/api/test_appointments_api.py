@@ -238,11 +238,18 @@ class TestAppointmentStatusAction:
 @pytest.mark.django_db
 class TestPublicAppointmentTokenActions:
     def test_confirm_without_auth(self, api_client, appointment_a):
+        """El "SÍ" del paciente se registra como hecho; el estado NO cambia.
+
+        Confirmar (poner en firme) es de la clínica. El paciente solo dice si
+        piensa venir, y eso ni ocupa ni libera el hueco.
+        """
+        estado_previo = appointment_a.status
         token = appointment_a.confirmation_token
         response = api_client.post(f"/api/public/appointments/{token}/confirm/")
         assert response.status_code == 200
         appointment_a.refresh_from_db()
-        assert appointment_a.status == Appointment.Status.CONFIRMED
+        assert appointment_a.status == estado_previo
+        assert appointment_a.patient_confirmed_at is not None
 
     def test_cancel_without_auth(self, api_client, appointment_a):
         token = appointment_a.confirmation_token
@@ -265,4 +272,4 @@ class TestPublicAppointmentTokenActions:
         response = api_client.post(f"/api/public/appointments/{token}/confirm/")
         assert response.status_code == 200
         assert "id" in response.data
-        assert response.data["status"] == "confirmed"
+        assert response.data["status"] == appointment_a.status

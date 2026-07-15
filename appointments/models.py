@@ -187,9 +187,41 @@ class Appointment(models.Model):
         PATIENT = 'patient', 'Paciente'
         STAFF = 'staff', 'Clínica'
 
+    class Source(models.TextChoices):
+        AGENT = 'agent', 'Agente WhatsApp'
+        STAFF = 'staff', 'Panel'
+        BOOKING = 'booking', 'Reserva pública'
+
     scheduled_at = models.DateTimeField()
     end_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+
+    # De dónde vino la cita. Lo fija SIEMPRE la capa que llama al service (API,
+    # form del panel, admin), nunca el propio service: `services.py` no sabe de
+    # HTTP. Decide dos cosas: en qué estado nace la cita y si lleva hold.
+    source = models.CharField(
+        max_length=20, choices=Source.choices, default=Source.STAFF, db_index=True
+    )
+
+    # Cuándo el PACIENTE dijo "SÍ" al recordatorio. Es un HECHO REGISTRADO, no un
+    # estado: escribirlo NO cambia `status`, y esa asimetría es intencionada.
+    #
+    #   Paciente dice "SÍ" → patient_confirmed_at = now(). El hueco ya estaba
+    #     bloqueado antes y sigue bloqueado después: no libera ni ocupa nada, así
+    #     que no hay transición que registrar.
+    #   Paciente dice "NO" → status = cancelled. Esto SÍ es una transición,
+    #     porque libera un recurso.
+    #
+    # `confirmed` significa una sola cosa: "la clínica tiene la cita en firme".
+    # Que el paciente reconfirme asistencia es un eje ortogonal. No los vuelvas a
+    # juntar: es exactamente el bug que este campo vino a cerrar.
+    patient_confirmed_at = models.DateTimeField(null=True, blank=True)
+
+    # Hasta cuándo se le guarda el hueco a una cita que aún no ha validado el
+    # staff. Solo lo llevan las citas que nacen `pending` por una vía no
+    # presencial (agente, reserva pública). Al validarla, `confirm_by_clinic()`
+    # lo pone a None: una cita en firme no caduca.
+    hold_expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
     cancelled_by = models.CharField(
         max_length=10,
         choices=CancelledBy.choices,
@@ -295,7 +327,7 @@ class Appointment(models.Model):
         if not self.professional.services.filter(pk=self.service_id).exists():
             raise ValidationError({'professional': 'The selected professional does not provide the selected service.'})
 
-        if self.scheduled_at and self.status in (self.Status.PENDING, self.Status.CONFIRMED):
+        if self.scheduled_at and self.status in LIVE_STATUSES:
             end = self.get_end_datetime()
             conflict = self.find_overlap(self.professional, self.scheduled_at, end, exclude_pk=self.pk)
             if conflict:
@@ -307,14 +339,27 @@ class Appointment(models.Model):
                 })
 
 
-# Estados que ocupan de verdad un hueco en la agenda. Una cita 'pending' es una
-# solicitud, no una reserva en firme: varias pueden convivir en el mismo tramo.
+# Estados que ocupan un hueco en la agenda. Una cita 'pending' YA lo ocupa: en
+# cuanto el agente reserva, el hueco se cierra para todos los demás. Antes no era
+# así, y el resultado era que N pacientes podían reservar las 9:00 del día 20 y a
+# todos se les decía por escrito que su cita estaba hecha; el día 19 se lo
+# quedaba el primero que respondiera al recordatorio y al resto se le cancelaba.
+#
+# Lo que evita que un 'pending' bloquee el hueco para siempre es el hold
+# (`hold_expires_at`): si el staff no la valida a tiempo, se cancela y el hueco
+# se libera. Ver `expire_appointment_holds`.
 #
 # Fuente de verdad ÚNICA de la regla de bloqueo: la leen tanto `find_overlap()`
 # como el motor de disponibilidad (`services.py` la reexporta). Vive aquí, y no
 # en services.py, porque models.py no puede importar de services.py sin crear un
 # ciclo. Léela, no la redefinas.
-BLOCKING_STATUSES = [Appointment.Status.CONFIRMED]
+BLOCKING_STATUSES = frozenset({Appointment.Status.PENDING, Appointment.Status.CONFIRMED})
+
+# Estados en los que una cita sigue VIVA: ni cancelada, ni completada, ni no_show.
+# Es un eje distinto al de bloqueo (hoy una cita viva puede no bloquear), y
+# estaba copiada a mano en media docena de sitios. Se usa para decidir si hay que
+# revalidar su elegibilidad y si sigue teniendo sentido actuar sobre ella.
+LIVE_STATUSES = frozenset({Appointment.Status.PENDING, Appointment.Status.CONFIRMED})
 
 
 class AppointmentStatusHistory(models.Model):
