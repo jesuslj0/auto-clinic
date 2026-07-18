@@ -125,13 +125,22 @@ class TestAppointmentViewSetRetrieve:
 
 @pytest.mark.django_db
 class TestAppointmentViewSetUpdate:
-    def test_admin_can_update_status(self, admin_client, appointment_a):
+    def test_patch_cannot_confirm(self, admin_client, appointment_a):
+        """Confirmar no se hace escribiendo `status` por la API: es del staff/panel."""
         response = admin_client.patch(
             f"/api/appointments/{appointment_a.pk}/",
             {"status": "confirmed"},
         )
+        assert response.status_code == 400
+        appointment_a.refresh_from_db()
+        assert appointment_a.status != "confirmed"
+
+    def test_staff_confirm_endpoint_puts_it_in_firm(self, admin_client, appointment_a):
+        """La vía legítima: el endpoint dedicado del staff."""
+        response = admin_client.post(f"/api/appointments/{appointment_a.pk}/confirm/")
         assert response.status_code == 200
-        assert response.data["status"] == "confirmed"
+        appointment_a.refresh_from_db()
+        assert appointment_a.status == "confirmed"
 
     def test_confirmation_token_is_readonly(self, admin_client, appointment_a):
         original = str(appointment_a.confirmation_token)

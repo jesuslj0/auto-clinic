@@ -71,13 +71,15 @@ class TestAppointmentViewSet:
         response = admin_client.get(f"/api/appointments/{appointment_b.pk}/")
         assert response.status_code == 404
 
-    def test_update_status(self, admin_client, appointment_a):
+    def test_patch_cannot_confirm(self, admin_client, appointment_a):
+        """Confirmar por la API escribiendo `status` está prohibido: lo hace el staff."""
         response = admin_client.patch(
             f"/api/appointments/{appointment_a.pk}/",
             {"status": "confirmed"},
         )
-        assert response.status_code == 200
-        assert response.data["status"] == "confirmed"
+        assert response.status_code == 400
+        appointment_a.refresh_from_db()
+        assert appointment_a.status != "confirmed"
 
     def test_filter_by_status(self, admin_client, appointment_a):
         response = admin_client.get("/api/appointments/?status=pending")

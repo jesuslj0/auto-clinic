@@ -150,22 +150,18 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULE = {
-    'send-reminders-24h': {
-        'task': 'notifications.tasks.dispatch_24h_reminders',
-        'schedule': 3600.0,
-    },
-    'send-reminders-2h': {
-        'task': 'notifications.tasks.dispatch_2h_reminders',
-        'schedule': 900.0,
-    },
     # Libera los huecos de las citas que el staff no validó dentro del plazo.
     # Es lo que impide que una reserva del agente que nadie mira bloquee el hueco
-    # para siempre. Requiere un `celery beat` corriendo (hoy compose solo levanta
-    # el worker); mientras no lo haya, `python manage.py expire_appointment_holds`.
+    # para siempre. Lo ejecuta el servicio `celery-beat` del docker-compose.
     'expire-appointment-holds': {
         'task': 'appointments.tasks.expire_appointment_holds',
         'schedule': 600.0,
     },
+    # Los recordatorios al paciente (24h/3h) los manda n8n por WhatsApp, no Django:
+    # consume `GET /api/appointments/pending-reminders/`. Las tareas
+    # `notifications.tasks.dispatch_*_reminders` (que enviaban un email paralelo)
+    # se dejan fuera del schedule a propósito para no duplicar el aviso. El código
+    # sigue en `notifications/tasks.py` por si algún día se quiere el email.
 }
 
 AGENT_MASTER_API_KEY = config('AGENT_MASTER_API_KEY', default='')

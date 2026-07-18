@@ -14,7 +14,12 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
-from appointments.models import Appointment, AppointmentStatusHistory, ProfessionalSchedule
+from appointments.models import (
+    Appointment,
+    AppointmentStatusHistory,
+    ProfessionalSchedule,
+    ProfessionalTimeOff,
+)
 from appointments.services import (
     InvalidTransition,
     confirm_by_clinic,
@@ -151,6 +156,17 @@ class TestClinicConfirmation:
         """Confirmar es de la clínica: la API key del agente no basta."""
         response = agent_client.post(f'/api/appointments/{cita_agente.pk}/confirm/')
         assert response.status_code == 403
+
+        cita_agente.refresh_from_db()
+        assert cita_agente.status == Appointment.Status.PENDING
+
+    def test_agent_cannot_confirm_via_patch_status(self, agent_client, cita_agente):
+        """La puerta de atrás también está cerrada: escribir status=confirmed por
+        el PATCH general se rechaza. Confirmar es solo del staff."""
+        response = agent_client.patch(
+            f'/api/appointments/{cita_agente.pk}/', {'status': 'confirmed'}, format='json',
+        )
+        assert response.status_code == 400
 
         cita_agente.refresh_from_db()
         assert cita_agente.status == Appointment.Status.PENDING
@@ -309,3 +325,23 @@ class TestPendingReminders:
         """n8n consume esto: {results, count} y nada más."""
         response = admin_client.get('/api/appointments/pending-reminders/?type=24h')
         assert set(response.data.keys()) == {'results', 'count'}
+
+    def test_marking_reminder_sent_does_not_revalidate_eligibility(
+        self, admin_client, cita_manana
+    ):
+        """n8n marca `reminder_24h_sent` en cada envío. Ese PATCH no mueve el hueco,
+        así que no debe fallar aunque el profesional dejara de ser elegible
+        entretanto (aquí, una ausencia sobrevenida que solapa la cita)."""
+        ProfessionalTimeOff.objects.create(
+            professional=cita_manana.professional,
+            starts_at=cita_manana.scheduled_at - timedelta(minutes=30),
+            ends_at=cita_manana.scheduled_at + timedelta(minutes=30),
+            reason=ProfessionalTimeOff.Reason.SICK_LEAVE,
+        )
+        response = admin_client.patch(
+            f'/api/appointments/{cita_manana.pk}/',
+            {'reminder_24h_sent': True}, format='json',
+        )
+        assert response.status_code == 200
+        cita_manana.refresh_from_db()
+        assert cita_manana.reminder_24h_sent is True

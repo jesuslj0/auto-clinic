@@ -125,6 +125,25 @@ class AppointmentSerializer(serializers.ModelSerializer):
         clinic = attrs.get('clinic', getattr(self.instance, 'clinic', None))
         scheduled_at = attrs.get('scheduled_at', getattr(self.instance, 'scheduled_at', None))
 
+        # Confirmar es competencia de la clínica y tiene su propia vía con guardia
+        # e historial: `confirm_by_clinic()` (endpoint staff `/confirm/` o panel).
+        # Por la API general —que usa el agente con su Api-Key— NO se confirma
+        # escribiendo el campo `status`: eso saltaría la validación de solapamiento
+        # y el registro de quién la puso en firme. Solo se bloquea la TRANSICIÓN a
+        # `confirmed`; un PATCH sobre una cita que ya lo está no molesta.
+        nuevo_status = attrs.get('status', getattr(self.instance, 'status', None))
+        status_actual = getattr(self.instance, 'status', None)
+        if (
+            nuevo_status == Appointment.Status.CONFIRMED
+            and status_actual != Appointment.Status.CONFIRMED
+        ):
+            raise serializers.ValidationError({
+                'status': (
+                    'Una cita se confirma desde el panel de la clínica, no escribiendo '
+                    'este campo por la API.'
+                )
+            })
+
         # Bug 4: La cita no puede ser en el pasado
         if scheduled_at and scheduled_at < timezone.now():
             raise serializers.ValidationError(

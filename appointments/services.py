@@ -591,6 +591,16 @@ def validate_appointment_update(appointment, changes: dict, *, require_online_bo
             details={'appointment': str(appointment.pk)},
         )
 
+    # Campos que mueven o reservan el hueco. Un PATCH que no toca NINGUNO no cambia
+    # la disponibilidad, así que no hay nada que revalidar: marcar
+    # `reminder_24h_sent` (lo que hace n8n en cada recordatorio) o editar `notes`
+    # no debe fallar porque el profesional dejara de ser elegible por otra causa
+    # entretanto. Sin esto, n8n no podría marcar el recordatorio como enviado y lo
+    # reintentaría en bucle.
+    CAMPOS_DE_HUECO = {'scheduled_at', 'end_at', 'professional', 'service', 'status'}
+    if not (CAMPOS_DE_HUECO & changes.keys()):
+        return {}
+
     def valor(campo):
         return changes[campo] if campo in changes else getattr(appointment, campo)
 
