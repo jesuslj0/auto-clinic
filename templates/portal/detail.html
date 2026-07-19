@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load appointment_extras %}
 
 {% block title %}Portal de citas · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
 {% block page_heading %}Detalles de la cita{% endblock %}
@@ -27,7 +28,7 @@
             </div>
             <div>
                 <dt class="text-sm font-medium text-slate-500">Estado</dt>
-                <dd class="mt-1"><span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold {% if appointment.status == 'confirmed' %}bg-emerald-50 text-emerald-700{% elif appointment.status == 'cancelled' %}bg-rose-50 text-rose-700{% else %}bg-amber-50 text-amber-700{% endif %}">{{ appointment.get_status_display|default:appointment.status|title }}</span></dd>
+                <dd class="mt-1"><span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold {% if appointment.status == 'confirmed' %}bg-emerald-50 text-emerald-700{% elif appointment.status == 'cancelled' %}bg-rose-50 text-rose-700{% else %}bg-amber-50 text-amber-700{% endif %}">{{ appointment.status|status_icon:"h-3.5 w-3.5" }}{{ appointment.get_status_display|default:appointment.status|title }}</span></dd>
             </div>
             <div>
                 <dt class="text-sm font-medium text-slate-500">Correo electrónico</dt>

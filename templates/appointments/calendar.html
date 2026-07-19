@@ -71,7 +71,7 @@
                                     {% if appointment.scheduled_at|date:'Y-m-d' == day_info.date|date:'Y-m-d' and appointment.scheduled_at|time:'H' == slot|time:'H' %}
                                         <button
                                             type="button"
-                                            style="top: calc({% widthratio appointment.scheduled_at|local_minute 60 100 %}% + 2px); height: calc({% widthratio appointment|duration_minutes 60 100 %}% - 4px); left: 4px; right: 4px;"
+                                            style="top: calc({% widthratio appointment.scheduled_at|local_minute 60 100 %}% + 2px); height: calc({% widthratio appointment|duration_minutes 60 100 %}% - 4px); left: calc({{ appointment.col_left|default:0 }}% + 3px); width: calc({{ appointment.col_width|default:100 }}% - 6px);"
                                             class="absolute z-10 flex flex-col overflow-hidden rounded-xl border px-2 py-1.5 text-left shadow-sm transition
                                                     hover:z-20 hover:shadow-md active:scale-[0.99]
                                                     {{ appointment.status|status_cell }}"
@@ -93,6 +93,16 @@
                                         </button>
                                     {% endif %}
                                 {% endfor %}
+                            </div>
+                        {% elif slot.hour in day_info.break_hours %}
+                            {# Parón entre turnos (jornada partida) #}
+                            <div class="flex h-28 items-center justify-center border-r border-t border-slate-100 bg-slate-100/60 align-top">
+                                <span class="inline-flex items-center gap-1 rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-medium text-slate-400 ring-1 ring-slate-200">
+                                    <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+                                    </svg>
+                                    Descanso
+                                </span>
                             </div>
                         {% else %}
                             <div class="h-28 border-r border-t border-slate-100 bg-slate-50/70 align-top">

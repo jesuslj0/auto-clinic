@@ -132,8 +132,18 @@
             </div>
 
             <div class="flex items-center justify-between pt-2">
-                <a href="{% url 'appointments:calendar' %}" class="btn-secondary">Cancelar</a>
-                <button type="submit" class="btn-primary">Guardar cita</button>
+                <a href="{% url 'appointments:calendar' %}" class="btn-secondary inline-flex items-center gap-2">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                    </svg>
+                    Cancelar
+                </a>
+                <button type="submit" class="btn-primary inline-flex items-center gap-2">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                    </svg>
+                    Guardar cita
+                </button>
             </div>
         </form>
     </div>

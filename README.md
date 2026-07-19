@@ -39,6 +39,23 @@ Production-ready Django SaaS starter for a clinic appointment system.
 
 See `ENDPOINTS.md` for the full reference.
 
+## Appointment lifecycle
+
+States: `pending` → `confirmed` → `completed` (or `no_show`); `cancelled` can
+happen from any live state.
+
+- A `pending` appointment already blocks the slot (it holds it). Agent and public
+  bookings are born `pending`; staff bookings are born `confirmed`.
+- Confirming an appointment ("putting it in firm") is the clinic's job: staff
+  only, via the management panel or `POST /api/appointments/{id}/confirm/`. A
+  patient answering "YES" to a reminder only records attendance
+  (`patient_confirmed_at`) — it does **not** change the status.
+- An appointment can only be marked **completed** once it is `confirmed`. The
+  management panel hides the "Marcar completada" button until then, so the
+  confirmation step cannot be skipped.
+- Unconfirmed holds expire after `Clinic.hold_ttl_minutes` and are cancelled by
+  the `expire_appointment_holds` task (Celery beat), which frees the slot again.
+
 ## Quickstart
 1. Copy `.env.example` to `.env`.
 2. Run `docker compose up --build`.

@@ -21,7 +21,8 @@
             </svg>
             Volver al panel
         </a>
-        <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold {{ appointment.status|status_badge }}">
+        <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold {{ appointment.status|status_badge }}">
+            {{ appointment.status|status_icon:"h-4 w-4" }}
             {{ appointment.get_status_display|default:appointment.status|title }}
         </span>
     </div>
@@ -56,9 +57,7 @@
         {% if appointment.status == 'cancelled' %}
         <div class="mt-6 rounded-2xl bg-rose-50 px-4 py-4 ring-1 ring-rose-200">
             <div class="flex items-center gap-3">
-                <svg class="h-5 w-5 flex-shrink-0 text-rose-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                </svg>
+                {{ 'cancelled'|status_icon:"h-5 w-5 flex-shrink-0 text-rose-500" }}
                 <p class="text-sm font-semibold text-rose-700">
                     Cita cancelada
                     {% if appointment.cancelled_by == 'patient' %}
@@ -81,16 +80,18 @@
                     <button
                         type="button"
                         @click="open('reject')"
-                        class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+                        class="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
                     >
+                        {{ 'cancelled'|status_icon:"h-4 w-4" }}
                         Rechazar cita
                     </button>
                     {% if appointment.status != 'completed' %}
                     <button
                         type="button"
                         @click="open('no_show')"
-                        class="rounded-xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+                        class="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
                     >
+                        {{ 'no_show'|status_icon:"h-4 w-4" }}
                         No se presentó
                     </button>
                     {% endif %}
@@ -98,7 +99,7 @@
             </div>
 
             <!-- Acciones positivas -->
-            {% if appointment.status == 'pending' or appointment.status != 'completed' and appointment.status != 'no_show' %}
+            {% if appointment.status == 'pending' or appointment.status == 'confirmed' %}
             <div class="flex flex-col gap-2 sm:items-end">
                 <p class="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-right">Avanzar cita</p>
                 <div class="flex flex-wrap gap-2 sm:justify-end">
@@ -106,17 +107,19 @@
                     <button
                         type="button"
                         @click="open('confirm')"
-                        class="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                        class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
                     >
+                        {{ 'confirmed'|status_icon:"h-4 w-4" }}
                         Confirmar cita
                     </button>
                     {% endif %}
-                    {% if appointment.status != 'completed' and appointment.status != 'no_show' %}
+                    {% if appointment.status == 'confirmed' %}
                     <button
                         type="button"
                         @click="open('complete')"
-                        class="btn-primary"
+                        class="btn-primary inline-flex items-center gap-2"
                     >
+                        {{ 'completed'|status_icon:"h-4 w-4" }}
                         Marcar completada
                     </button>
                     {% endif %}
@@ -179,23 +182,8 @@
                 <span class="absolute left-[13px] top-7 h-full w-px bg-slate-200" aria-hidden="true"></span>
                 {% endif %}
                 <!-- Punto -->
-                <span class="relative flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full ring-2 ring-white
-                    {% if entry.to_status == 'confirmed' %}bg-emerald-100
-                    {% elif entry.to_status == 'cancelled' %}bg-rose-100
-                    {% else %}bg-amber-100{% endif %}">
-                    {% if entry.to_status == 'confirmed' %}
-                        <svg class="h-3.5 w-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                        </svg>
-                    {% elif entry.to_status == 'cancelled' %}
-                        <svg class="h-3.5 w-3.5 text-rose-600" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    {% else %}
-                        <svg class="h-3.5 w-3.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                    {% endif %}
+                <span class="relative flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full ring-2 ring-white {{ entry.to_status|status_badge }}">
+                    {{ entry.to_status|status_icon:"h-3.5 w-3.5" }}
                 </span>
                 <!-- Contenido -->
                 <div class="min-w-0 flex-1 pt-0.5">
@@ -255,9 +243,7 @@
     >
         <div class="flex items-start gap-4">
             <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-emerald-50">
-                <svg class="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                </svg>
+                {{ 'confirmed'|status_icon:"h-5 w-5 text-emerald-600" }}
             </span>
             <div>
                 <h3 id="modal-prof-confirm-title" class="text-base font-semibold text-slate-900">¿Confirmar esta cita?</h3>
@@ -276,8 +262,9 @@
             <button
                 type="button"
                 @click="close(); document.getElementById('form-confirm').submit()"
-                class="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
             >
+                {{ 'confirmed'|status_icon:"h-4 w-4" }}
                 Sí, confirmar
             </button>
         </div>
@@ -319,9 +306,7 @@
     >
         <div class="flex items-start gap-4">
             <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-rose-50">
-                <svg class="h-5 w-5 text-rose-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                </svg>
+                {{ 'cancelled'|status_icon:"h-5 w-5 text-rose-600" }}
             </span>
             <div>
                 <h3 id="modal-prof-reject-title" class="text-base font-semibold text-slate-900">¿Rechazar esta cita?</h3>
@@ -340,8 +325,9 @@
             <button
                 type="button"
                 @click="close(); document.getElementById('form-reject').submit()"
-                class="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700"
+                class="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700"
             >
+                {{ 'cancelled'|status_icon:"h-4 w-4" }}
                 Sí, rechazar
             </button>
         </div>
@@ -356,9 +342,7 @@
          class="relative w-full max-w-sm rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6">
         <div class="flex items-start gap-4">
             <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-50">
-                <svg class="h-5 w-5 text-brand-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                {{ 'completed'|status_icon:"h-5 w-5 text-brand-600" }}
             </span>
             <div>
                 <h3 class="text-base font-semibold text-slate-900">¿Marcar como completada?</h3>
@@ -371,7 +355,8 @@
         </div>
         <div class="mt-5 flex justify-end gap-3">
             <button type="button" @click="close()" class="btn-secondary">Volver</button>
-            <button type="button" @click="close(); document.getElementById('form-complete').submit()" class="btn-primary">
+            <button type="button" @click="close(); document.getElementById('form-complete').submit()" class="btn-primary inline-flex items-center gap-2">
+                {{ 'completed'|status_icon:"h-4 w-4" }}
                 Sí, completar
             </button>
         </div>
@@ -386,9 +371,7 @@
          class="relative w-full max-w-sm rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6">
         <div class="flex items-start gap-4">
             <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-slate-100">
-                <svg class="h-5 w-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                </svg>
+                {{ 'no_show'|status_icon:"h-5 w-5 text-slate-500" }}
             </span>
             <div>
                 <h3 class="text-base font-semibold text-slate-900">¿El paciente no se presentó?</h3>
@@ -402,7 +385,8 @@
         <div class="mt-5 flex justify-end gap-3">
             <button type="button" @click="close()" class="btn-secondary">Volver</button>
             <button type="button" @click="close(); document.getElementById('form-no_show').submit()"
-                    class="rounded-xl bg-slate-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">
+                    class="inline-flex items-center gap-2 rounded-xl bg-slate-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">
+                {{ 'no_show'|status_icon:"h-4 w-4" }}
                 Sí, marcar
             </button>
         </div>

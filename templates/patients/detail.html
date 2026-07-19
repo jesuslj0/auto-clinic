@@ -43,7 +43,7 @@
                         <p class="text-sm font-semibold text-slate-900">{{ appointment.service }}</p>
                         <p class="mt-1 text-sm text-slate-500">{{ appointment.scheduled_at|date:"j M, Y" }} · {{ appointment.scheduled_at|date:"g:i A" }} – {{ appointment.end_at|date:"g:i A" }}</p>
                     </div>
-                    <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold {{ appointment.status|status_badge }}">{{ appointment.get_status_display|default:appointment.status|title }}</span>
+                    <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold {{ appointment.status|status_badge }}">{{ appointment.status|status_icon:"h-3.5 w-3.5" }}{{ appointment.get_status_display|default:appointment.status|title }}</span>
                 </article>
             {% empty %}
                 <div class="px-6 py-12 text-center text-sm text-slate-500">No hay historial de citas disponible.</div>

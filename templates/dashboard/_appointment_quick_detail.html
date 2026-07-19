@@ -5,7 +5,8 @@
         <h3 class="mt-1 text-lg font-semibold text-slate-900">{{ appointment.patient|default:appointment.patient_name|default:'Sin paciente' }}</h3>
         <p class="mt-0.5 text-sm text-slate-500">{{ appointment.service|default:appointment.service_name|default:'Sin servicio' }}</p>
     </div>
-    <span class="mt-1 inline-flex flex-shrink-0 rounded-full px-3 py-1 text-xs font-semibold {{ appointment.status|status_badge }}">
+    <span class="mt-1 inline-flex flex-shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold {{ appointment.status|status_badge }}">
+        {{ appointment.status|status_icon:"h-3.5 w-3.5" }}
         {{ appointment.get_status_display|default:appointment.status|title }}
     </span>
 </div>

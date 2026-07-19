@@ -370,7 +370,9 @@ class AppointmentCalendarView(TemplateView):
             appointments_qs = appointments_qs.filter(clinic=user.clinic)
             schedules_qs = schedules_qs.filter(professional__clinic=user.clinic)
 
-        appointments = appointments_qs
+        # Materializar para poder anotar cada cita con su columna de solapamiento.
+        appointments = list(appointments_qs)
+        self._assign_overlap_columns(appointments)
 
         # Agrupar por día de la semana
         schedule_by_dow = {}
@@ -400,15 +402,21 @@ class AppointmentCalendarView(TemplateView):
                     working_hours.update(range(s.start_time.hour, s.end_time.hour))
                 min_start = min(s.start_time for s in sched_list)
                 max_end = max(s.end_time for s in sched_list)
+                # Parón entre turnos (jornada partida): horas que caen DENTRO de la
+                # jornada pero no las cubre ningún tramo. Ej. 14–15 si trabaja
+                # 9–14 y 16–20. Se distingue así de las horas de fuera de jornada.
+                break_hours = set(range(min_start.hour, max_end.hour)) - working_hours
                 schedule_label = f'{min_start.strftime("%H:%M")}–{max_end.strftime("%H:%M")}'
                 is_working = True
             elif has_schedules:
                 working_hours = set()
+                break_hours = set()
                 schedule_label = ''
                 is_working = False
             else:
                 # Sin horarios configurados: comportamiento anterior (todo activo)
                 working_hours = set(range(global_start, global_end))
+                break_hours = set()
                 schedule_label = ''
                 is_working = True
 
@@ -418,6 +426,7 @@ class AppointmentCalendarView(TemplateView):
                 'is_working': is_working,
                 'schedule_label': schedule_label,
                 'working_hours': working_hours,
+                'break_hours': break_hours,
             })
 
         context.update({
@@ -433,6 +442,58 @@ class AppointmentCalendarView(TemplateView):
             'section': 'calendar',
         })
         return context
+
+    @staticmethod
+    def _assign_overlap_columns(appointments):
+        """Reparte en columnas las citas que se solapan en el tiempo (mismo día).
+
+        Sin esto, dos citas en el mismo tramo (dos profesionales a las 10:00, o
+        dos pendientes) se pintan una encima de otra y solo se ve la de arriba.
+        A cada cita le fija `col_left` y `col_width` (porcentajes del ancho de la
+        casilla) para que N solapadas ocupen 1/N cada una, lado a lado.
+        """
+        by_day = {}
+        for appt in appointments:
+            dia = timezone.localtime(appt.scheduled_at).date()
+            by_day.setdefault(dia, []).append(appt)
+
+        for day_appts in by_day.values():
+            day_appts.sort(key=lambda a: a.scheduled_at)
+            # Un "cluster" es un grupo de citas encadenadas por solapamiento: se
+            # reparten el ancho entre ellas, independientes de los demás clusters.
+            cluster = []
+            cluster_end = None
+            for appt in day_appts:
+                if cluster and appt.scheduled_at >= cluster_end:
+                    AppointmentCalendarView._layout_cluster(cluster)
+                    cluster = []
+                    cluster_end = None
+                cluster.append(appt)
+                fin = appt.get_end_datetime()
+                cluster_end = fin if cluster_end is None else max(cluster_end, fin)
+            if cluster:
+                AppointmentCalendarView._layout_cluster(cluster)
+
+    @staticmethod
+    def _layout_cluster(cluster):
+        """Asigna columna a cada cita del cluster (greedy: primera columna libre)."""
+        columns = []  # fin de la última cita colocada en cada columna
+        for appt in cluster:
+            for i, col_end in enumerate(columns):
+                if appt.scheduled_at >= col_end:
+                    columns[i] = appt.get_end_datetime()
+                    appt.col_index = i
+                    break
+            else:
+                appt.col_index = len(columns)
+                columns.append(appt.get_end_datetime())
+
+        # Como str (con punto): si se pasaran como float, la localización es_ES los
+        # formatea con coma decimal ("50,0") y rompe el calc() del CSS.
+        n = len(columns)
+        for appt in cluster:
+            appt.col_width = str(round(100 / n, 2))
+            appt.col_left = str(round(appt.col_index * 100 / n, 2))
 
     def _get_week_start(self):
         week_param = self.request.GET.get('week')

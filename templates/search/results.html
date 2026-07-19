@@ -62,7 +62,8 @@
                         </p>
                     </div>
                     <div class="flex items-center gap-3">
-                        <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold {{ appointment.status|status_badge }}">
+                        <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold {{ appointment.status|status_badge }}">
+                            {{ appointment.status|status_icon:"h-3.5 w-3.5" }}
                             {{ appointment.get_status_display|default:appointment.status|title }}
                         </span>
                         <a href="{% url 'core:dashboard-manage-appointment' appointment.id %}" class="text-sm font-medium text-brand-600 hover:text-brand-700">Detalles</a>
