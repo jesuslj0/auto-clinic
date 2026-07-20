@@ -216,11 +216,13 @@ class TestAppointmentBulkCreate:
 @pytest.mark.django_db
 class TestAppointmentBulkUpdate:
     def test_bulk_update_appointments(self, admin_client, appointment_a):
-        payload = [{"id": str(appointment_a.pk), "status": "confirmed"}]
+        # No se confirma escribiendo `status` por la API (eso tiene su propia vía
+        # con guardia); un campo que no toca el hueco, como `notes`, sí se edita.
+        payload = [{"id": str(appointment_a.pk), "notes": "actualizado en lote"}]
         response = admin_client.patch("/api/appointments/bulk-update/", payload, format="json")
         assert response.status_code == 200
         assert len(response.data["updated"]) == 1
-        assert response.data["updated"][0]["status"] == "confirmed"
+        assert response.data["updated"][0]["notes"] == "actualizado en lote"
 
     def test_bulk_update_with_invalid_id_reports_error(self, admin_client):
         payload = [{"id": str(uuid.uuid4()), "status": "confirmed"}]

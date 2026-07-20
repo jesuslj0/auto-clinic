@@ -32,7 +32,6 @@ INSTALLED_APPS = [
     'services',
     'appointments',
     'booking',
-    'portal',
     'notifications',
     'billing',
     'knowledge',

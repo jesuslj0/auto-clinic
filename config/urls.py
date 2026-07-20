@@ -50,7 +50,6 @@ urlpatterns = [
     path('patients/', include('patients.urls')),
     path('booking/', include('booking.urls')),
     path('services/', include('services.urls')),
-    path('portal/', include('portal.urls')),
     path('knowledge/', include('knowledge.urls')),
 
     # REST API

@@ -37,7 +37,7 @@ class PatientViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets.Mod
         return queryset.filter(clinic=user.clinic)
 
 
-class PatientListView(ListView):
+class PatientListView(LoginRequiredMixin, ListView):
     model = Patient
     template_name = 'patients/list.html'
     context_object_name = 'patients'
@@ -49,7 +49,10 @@ class PatientListView(ListView):
 
     def get_queryset(self):
         query = self.request.GET.get('q', '').strip()
+        user = self.request.user
         queryset = Patient.objects.annotate(appointment_count=Count('appointments')).prefetch_related('appointments')
+        if not (user.is_superuser or not user.clinic_id):
+            queryset = queryset.filter(clinic=user.clinic)
         if query:
             queryset = queryset.filter(
                 Q(first_name__icontains=query)
@@ -60,7 +63,7 @@ class PatientListView(ListView):
         return queryset
 
 
-class PatientDetailView(DetailView):
+class PatientDetailView(LoginRequiredMixin, DetailView):
     model = Patient
     pk_url_kwarg = 'id'
     context_object_name = 'patient'
@@ -72,8 +75,12 @@ class PatientDetailView(DetailView):
         return context
 
     def get_queryset(self):
+        user = self.request.user
         appointment_queryset = Appointment.objects.select_related('service', 'professional__user').order_by('-scheduled_at')
-        return Patient.objects.prefetch_related(Prefetch('appointments', queryset=appointment_queryset))
+        queryset = Patient.objects.prefetch_related(Prefetch('appointments', queryset=appointment_queryset))
+        if user.is_superuser or not user.clinic_id:
+            return queryset
+        return queryset.filter(clinic=user.clinic)
 
 
 class PatientCreateView(LoginRequiredMixin, CreateView):
@@ -114,15 +121,19 @@ class PatientCreateView(LoginRequiredMixin, CreateView):
         return reverse_lazy('patients:detail', kwargs={'id': self.object.pk})
 
 
-class PatientEditView(UpdateView):
+class PatientEditView(LoginRequiredMixin, UpdateView):
     model = Patient
     pk_url_kwarg = 'id'
     context_object_name = 'patient'
     template_name = 'patients/edit_patient.html'
     form_class = PatientForm
-    
+
     def get_queryset(self):
-        return Patient.objects.select_related('clinic')
+        user = self.request.user
+        queryset = Patient.objects.select_related('clinic')
+        if user.is_superuser or not user.clinic_id:
+            return queryset
+        return queryset.filter(clinic=user.clinic)
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

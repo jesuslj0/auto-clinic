@@ -47,7 +47,6 @@ python manage.py runserver    # Uses config.settings.dev by default
 | `notifications` | Celery beat tasks for reminder dispatch |
 | `billing` | Subscription management |
 | `booking` | Template-only public booking flow (no models) |
-| `portal` | Template-only patient portal for confirm/cancel via token (no models) |
 | `agent` | WhatsApp bot state: `AgentMemory`, `ConversationSession`, `WorkflowError` |
 | `knowledge` | Clinic knowledge base: `ClinicKnowledgeBase`, `ClinicInfoQuery`, `ClinicInfoCache` |
 
@@ -84,7 +83,6 @@ Broker: Redis DB 1. Result backend: Redis DB 2. Channel layer: Redis DB 0.
 `Appointment` has a UUID `confirmation_token` field. Patients can confirm or cancel without authentication:
 - `POST /api/public/appointments/<uuid:token>/confirm/`
 - `POST /api/public/appointments/<uuid:token>/cancel/`
-- Template portal: `GET /portal/<token>/`
 
 ### Environment variables
 

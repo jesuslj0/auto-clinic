@@ -26,8 +26,16 @@ class AgentMemoryViewSet(ExportMixin, viewsets.ModelViewSet):
 
 
 class WorkflowErrorViewSet(ExportMixin, viewsets.ModelViewSet):
+    """Errores que n8n registra cuando falla un workflow.
+
+    Append-only vía API: n8n los crea con POST y el staff los consulta (o los
+    revisa en el admin de Django). No se editan ni se borran por la API, así
+    que PUT/PATCH/DELETE quedan fuera y devuelven 405.
+    """
+
     serializer_class = WorkflowErrorSerializer
     permission_classes = [IsStaffOrAdmin]
+    http_method_names = ['get', 'post', 'head', 'options']
     filterset_fields = ['workflow', 'phone']
     search_fields = ['workflow', 'workflow_name', 'node_name', 'phone', 'error_message']
     ordering_fields = ['workflow', 'created_at']

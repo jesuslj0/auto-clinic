@@ -48,7 +48,7 @@ class TestPatientViewSetCreate:
             "first_name": "Alice",
             "last_name": "Wonderland",
             "email": "alice@example.com",
-            "phone": "666-0001",
+            "phone": "666000001",
         }
         response = admin_client.post("/api/patients/", data)
         assert response.status_code == 201
@@ -60,7 +60,7 @@ class TestPatientViewSetCreate:
             "first_name": "Bob",
             "last_name": "Builder",
             "email": "bob@example.com",
-            "phone": "666-0002",
+            "phone": "666000002",
         }
         response = staff_client.post("/api/patients/", data)
         assert response.status_code == 201
@@ -132,7 +132,7 @@ class TestPatientBulkCreate:
                 "first_name": f"Patient{i}",
                 "last_name": "Bulk",
                 "email": f"bulk{i}@test.com",
-                "phone": f"999-{i:04d}",
+                "phone": f"6660100{i:02d}",
             }
             for i in range(3)
         ]

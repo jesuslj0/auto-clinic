@@ -62,7 +62,7 @@ class TestPatientViewSet:
             "first_name": "New",
             "last_name": "Patient",
             "email": "new.patient@test.com",
-            "phone": "123456789",
+            "phone": "612345678",
         }
         response = staff_client.post("/api/patients/", data)
         assert response.status_code == 201

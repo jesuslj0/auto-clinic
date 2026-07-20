@@ -136,7 +136,7 @@ class TestAgentMemoryExport:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
-class TestWorkflowErrorViewSetReadOnly:
+class TestWorkflowErrorViewSetAppendOnly:
     def test_unauthenticated_denied(self, api_client):
         response = api_client.get("/api/agent/errors/")
         assert response.status_code in (401, 403)
@@ -155,12 +155,13 @@ class TestWorkflowErrorViewSetReadOnly:
         assert response.status_code == 200
         assert str(response.data["id"]) == str(workflow_error_a.pk)
 
-    def test_post_not_allowed(self, admin_client):
+    def test_post_allowed(self, admin_client):
+        """n8n registra errores con POST; debe estar permitido."""
         response = admin_client.post("/api/agent/errors/", {
             "workflow": "test",
             "error_message": "test error",
         })
-        assert response.status_code == 405
+        assert response.status_code == 201
 
     def test_patch_not_allowed(self, admin_client, workflow_error_a):
         response = admin_client.patch(

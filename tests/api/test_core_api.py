@@ -57,9 +57,10 @@ class TestClinicViewSetRetrieveUpdateDelete:
         response = staff_client.patch(f"/api/clinics/{clinic_a.pk}/", {"name": "Hacked"})
         assert response.status_code == 403
 
-    def test_admin_can_delete(self, admin_client, db):
-        clinic = Clinic.objects.create(clinic_id="to-delete", name="Delete Me")
-        response = admin_client.delete(f"/api/clinics/{clinic.pk}/")
+    def test_admin_can_delete(self, admin_client, admin_user):
+        # El viewset restringe cada usuario a su propia clínica, así que un admin
+        # sólo puede borrar la suya (no una ajena, que devolvería 404).
+        response = admin_client.delete(f"/api/clinics/{admin_user.clinic_id}/")
         assert response.status_code == 204
 
     def test_staff_cannot_delete(self, staff_client, clinic_a):

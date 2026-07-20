@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from unittest import mock
 from zoneinfo import ZoneInfo
@@ -7,7 +7,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from appointments.models import Appointment, AppointmentStatusHistory
+from appointments.models import Appointment, AppointmentStatusHistory, ProfessionalSchedule
 from core.models import Clinic, User
 from patients.models import Patient
 from services.models import Service
@@ -33,6 +33,20 @@ class AppointmentCreateViewTests(TestCase):
             clinic=self.clinic, first_name='Ana', last_name='García', phone='+34600000001'
         )
 
+        # El staff tiene perfil de profesional (creado por signal). Para que sus
+        # citas superen la validación de disponibilidad del service, ese
+        # profesional debe ofrecer el servicio y tener horario configurado.
+        self.professional = self.user.professional_profile
+        self.professional.services.add(self.service)
+        for day in range(7):
+            ProfessionalSchedule.objects.create(
+                professional=self.professional,
+                day_of_week=day,
+                start_time=time(0, 0),
+                end_time=time(23, 59),
+                is_active=True,
+            )
+
         # Recursos de otra clínica (deben ser rechazados)
         self.other_service = Service.objects.create(
             clinic=self.other_clinic, name='Otro', duration_minutes=30, price=Decimal('10.00')
@@ -54,7 +68,7 @@ class AppointmentCreateViewTests(TestCase):
         data = {
             'patient': self.patient.pk,
             'service': self.service.pk,
-            'professional': '',
+            'professional': self.professional.pk,
             'date': date_str,
             'time': time_str,
             'notes': '',
@@ -62,23 +76,24 @@ class AppointmentCreateViewTests(TestCase):
         data.update(overrides)
         return data
 
-    def test_valid_post_creates_pending_appointment(self):
+    def test_valid_post_creates_confirmed_appointment(self):
         resp = self.client.post(self.url, self._post_data())
         self.assertEqual(resp.status_code, 302)
 
         appointment = Appointment.objects.get()
-        self.assertEqual(appointment.status, Appointment.Status.PENDING)
+        # La cita la da de alta el staff (source=STAFF): nace en firme.
+        self.assertEqual(appointment.status, Appointment.Status.CONFIRMED)
         self.assertEqual(appointment.clinic, self.clinic)
         # end_at se calcula a partir de duration_minutes del servicio
         self.assertEqual(appointment.end_at, appointment.scheduled_at + timedelta(minutes=45))
 
     def test_creation_goes_through_service_not_objects_create(self):
-        # El paso por el service deja un registro de historial inicial None -> pending.
+        # El paso por el service deja un registro de historial inicial None -> confirmed.
         self.client.post(self.url, self._post_data())
         appointment = Appointment.objects.get()
         history = AppointmentStatusHistory.objects.get(appointment=appointment)
         self.assertIsNone(history.from_status)
-        self.assertEqual(history.to_status, Appointment.Status.PENDING)
+        self.assertEqual(history.to_status, Appointment.Status.CONFIRMED)
         self.assertEqual(history.actor, AppointmentStatusHistory.Actor.STAFF)
 
     def test_view_delegates_to_create_appointment_service(self):
