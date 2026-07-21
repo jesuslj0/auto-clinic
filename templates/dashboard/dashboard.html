@@ -31,7 +31,9 @@
         <!-- Columna izquierda: citas -->
         <div class="grid gap-4">
             <!-- Citas de hoy (destacada) -->
-            <article class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6">
+            <a href="{% url 'appointments:list' %}?date={{ today|date:'Y-m-d' }}"
+               aria-label="Ver las citas de hoy"
+               class="group block rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:shadow-lg hover:ring-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:p-6">
                 <div class="flex items-start justify-between">
                     <div>
                         <div class="flex items-center gap-2">
@@ -46,63 +48,89 @@
                         <p class="mt-3 text-3xl font-semibold text-slate-900 sm:text-4xl">{{ stats.today|default:today_appointments|default:0 }}</p>
                         <p class="mt-2 text-sm text-slate-500">{{ today_completed|default:0 }} completada{{ today_completed|pluralize }} de {{ today_appointments|default:0 }} programada{{ today_appointments|pluralize }} hoy.</p>
                     </div>
-                    <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
-                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                    <div class="flex flex-col items-end gap-3">
+                        <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                            </svg>
+                        </span>
+                        <svg aria-hidden="true" class="h-4 w-4 flex-shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-brand-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                         </svg>
-                    </span>
+                    </div>
                 </div>
-            </article>
+            </a>
             <!-- Pendientes + Canceladas -->
             <div class="grid grid-cols-2 gap-4">
-                <article class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6">
+                <a href="{% url 'appointments:list' %}?date=&status=pending&sort=asc"
+                   aria-label="Ver las citas pendientes de confirmación"
+                   class="group block rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:shadow-lg hover:ring-amber-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 sm:p-6">
                     <div class="flex items-start justify-between">
                         <div>
                             <p class="text-sm font-medium text-slate-500">Pendientes</p>
                             <p class="mt-3 text-2xl font-semibold sm:text-3xl text-amber-500">{{ stats.pending|default:pending_appointments|default:0 }}</p>
                             <p class="mt-2 text-sm text-slate-500">En espera de confirmación.</p>
                         </div>
-                        <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
-                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <div class="flex flex-col items-end gap-3">
+                            <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </span>
+                            <svg aria-hidden="true" class="h-4 w-4 flex-shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-amber-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                             </svg>
-                        </span>
+                        </div>
                     </div>
-                </article>
-                <article class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6">
+                </a>
+                <a href="{% url 'appointments:list' %}?date=&status=cancelled&sort=desc"
+                   aria-label="Ver las citas canceladas"
+                   class="group block rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:shadow-lg hover:ring-rose-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 sm:p-6">
                     <div class="flex items-start justify-between">
                         <div>
                             <p class="text-sm font-medium text-slate-500">Canceladas</p>
                             <p class="mt-3 text-2xl font-semibold sm:text-3xl text-rose-500">{{ stats.cancelled|default:cancelled_appointments|default:0 }}</p>
                             <p class="mt-2 text-sm text-slate-500">En el periodo actual.</p>
                         </div>
-                        <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
-                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <div class="flex flex-col items-end gap-3">
+                            <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </span>
+                            <svg aria-hidden="true" class="h-4 w-4 flex-shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-rose-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                             </svg>
-                        </span>
+                        </div>
                     </div>
-                </article>
+                </a>
             </div>
         </div>
 
         <!-- Columna derecha: métricas del mes -->
         <div class="grid gap-4">
             <!-- Nuevos pacientes (este mes) -->
-            <article class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6">
+            <a href="{% url 'patients:list' %}"
+               aria-label="Ver la lista de pacientes"
+               class="group block rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:shadow-lg hover:ring-sky-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 sm:p-6">
                 <div class="flex items-start justify-between">
                     <div>
                         <p class="text-sm font-medium text-slate-500">Nuevos pacientes</p>
                         <p class="mt-3 text-2xl font-semibold sm:text-3xl text-slate-900">{{ new_patients_month|default:0 }}</p>
                         <p class="mt-2 text-sm text-slate-500">Registrados en {{ today|date:"F" }}.</p>
                     </div>
-                    <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
-                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
+                    <div class="flex flex-col items-end gap-3">
+                        <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
+                            </svg>
+                        </span>
+                        <svg aria-hidden="true" class="h-4 w-4 flex-shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-sky-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                         </svg>
-                    </span>
+                    </div>
                 </div>
-            </article>
+            </a>
             <!-- Ingresos del mes (citas completadas) -->
             <article class="relative overflow-hidden rounded-3xl bg-brand-gradient p-5 text-white shadow-glow sm:p-6">
                 <div aria-hidden="true" class="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/10 blur-2xl"></div>
