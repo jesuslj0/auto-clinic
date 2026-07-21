@@ -158,6 +158,10 @@ class AgentTestMessageView(ClinicAdminRequiredMixin, View):
     Recibe un mensaje del panel, lo reenvía a n8n con las credenciales del
     lado servidor (nunca se exponen en el navegador) y devuelve la respuesta
     del agente como JSON.
+
+    El intercambio se registra en el historial de chats igual que una
+    conversación real, para poder revisar después qué se probó y qué contestó
+    el agente.
     """
 
     def post(self, request):
@@ -165,6 +169,9 @@ class AgentTestMessageView(ClinicAdminRequiredMixin, View):
         import urllib.error
         import urllib.request
         from django.http import JsonResponse
+
+        from agent.models import ChatMessage
+        from agent.services import get_or_create_session, mark_session_read, record_message
 
         clinic = request.user.clinic
         if clinic is None:
@@ -183,6 +190,21 @@ class AgentTestMessageView(ClinicAdminRequiredMixin, View):
         # que el agente lo reconozca. Si no hay uno configurado, cae a 'panel-test'.
         test_patient = clinic.test_patient
         phone = (test_patient.phone if test_patient and test_patient.phone else '') or 'panel-test'
+
+        # El mensaje se registra ANTES de llamar a n8n: si el agente falla o
+        # tarda, en el panel queda igualmente lo que se le preguntó.
+        session = get_or_create_session(clinic, phone)
+        record_message(
+            clinic=clinic,
+            session=session,
+            direction=ChatMessage.Direction.INBOUND,
+            sender=ChatMessage.Sender.PATIENT,
+            body=message,
+            raw={'source': 'panel-test'},
+        )
+        # Lo acaba de escribir quien está mirando la pantalla, así que no tiene
+        # sentido que le aparezca como pendiente de leer.
+        mark_session_read(session)
 
         payload = json.dumps({
             'clinic_id': clinic.clinic_id,
@@ -230,7 +252,20 @@ class AgentTestMessageView(ClinicAdminRequiredMixin, View):
         except (json.JSONDecodeError, TypeError):
             pass
 
-        reply = (reply or '').strip() or 'El agente no devolvió ninguna respuesta.'
+        reply = (reply or '').strip()
+        if reply:
+            record_message(
+                clinic=clinic,
+                session=session,
+                direction=ChatMessage.Direction.OUTBOUND,
+                sender=ChatMessage.Sender.AGENT,
+                body=reply,
+                status=ChatMessage.Status.SENT,
+                raw={'source': 'panel-test'},
+            )
+        else:
+            reply = 'El agente no devolvió ninguna respuesta.'
+
         return JsonResponse({'reply': reply})
 
 
