@@ -1,9 +1,10 @@
 from rest_framework import serializers
 
+from core.serializers import ClinicScopedSerializerMixin
 from services.models import Service
 
 
-class ServiceSerializer(serializers.ModelSerializer):
+class ServiceSerializer(ClinicScopedSerializerMixin, serializers.ModelSerializer):
     class Meta:
         model = Service
         fields = '__all__'

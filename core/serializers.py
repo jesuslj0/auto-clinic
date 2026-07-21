@@ -1,7 +1,41 @@
 from rest_framework import serializers
 
 from appointments.models import Professional
+from core.authentication import ClinicAgent
 from core.models import Clinic, User
+
+
+class ClinicScopedSerializerMixin:
+    """Aislamiento multitenant en ESCRITURA.
+
+    Un usuario con clínica asignada (o un `ClinicAgent`) siempre opera sobre la
+    suya, aunque el payload traiga otro `clinic`. Solo el superusuario (o un
+    usuario sin clínica) puede fijar la clínica libremente desde el payload.
+
+    Se aplica en el serializer —no en `perform_create` del viewset— porque los
+    bulk endpoints (`bulk-create`/`bulk-update` de `core.mixins`) llaman a
+    `serializer.save()` directamente y se saltarían cualquier guardia del
+    viewset. El serializer es el único punto de paso común a create, update,
+    bulk-create y bulk-update.
+    """
+
+    def _enforce_clinic(self, validated_data):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if user is None:
+            return
+        if isinstance(user, ClinicAgent):
+            validated_data['clinic'] = user.clinic
+        elif not user.is_superuser and getattr(user, 'clinic_id', None):
+            validated_data['clinic'] = user.clinic
+
+    def create(self, validated_data):
+        self._enforce_clinic(validated_data)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        self._enforce_clinic(validated_data)
+        return super().update(instance, validated_data)
 
 
 class ClinicSerializer(serializers.ModelSerializer):

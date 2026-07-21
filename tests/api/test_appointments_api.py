@@ -284,3 +284,45 @@ class TestPublicAppointmentTokenActions:
         assert response.status_code == 200
         assert "id" in response.data
         assert response.data["status"] == appointment_a.status
+
+
+@pytest.mark.django_db
+class TestAppointmentWriteIsolation:
+    """Un usuario de la clínica A no puede crear citas en la clínica B mandando
+    otro `clinic` en el payload: la clínica se fija a la del usuario ANTES de la
+    comprobación servicio↔clínica."""
+
+    def test_create_ignores_payload_clinic_and_forces_own(
+        self, admin_client, clinic_a, clinic_b, patient_a, service_a, professional_a
+    ):
+        now = timezone.now() + timedelta(hours=5)
+        data = {
+            "clinic": clinic_b.pk,  # intento de crear en otra clínica
+            "patient": patient_a.pk,
+            "service": service_a.pk,
+            "professional": professional_a.pk,
+            "scheduled_at": now.isoformat(),
+            "end_at": (now + timedelta(minutes=30)).isoformat(),
+            "status": "pending",
+        }
+        response = admin_client.post("/api/appointments/", data)
+        assert response.status_code == 201
+        appointment = Appointment.objects.get(pk=response.data["id"])
+        assert appointment.clinic_id == clinic_a.pk
+
+    def test_create_in_other_clinic_with_its_resources_is_rejected(
+        self, admin_client, clinic_b, patient_b, service_b
+    ):
+        """Con `clinic`, paciente y servicio TODOS de la clínica B, el enforce fija
+        la clínica a la A del usuario y la comprobación servicio↔clínica falla."""
+        now = timezone.now() + timedelta(hours=5)
+        data = {
+            "clinic": clinic_b.pk,
+            "patient": patient_b.pk,
+            "service": service_b.pk,
+            "scheduled_at": now.isoformat(),
+            "end_at": (now + timedelta(minutes=60)).isoformat(),
+            "status": "pending",
+        }
+        response = admin_client.post("/api/appointments/", data)
+        assert response.status_code == 400

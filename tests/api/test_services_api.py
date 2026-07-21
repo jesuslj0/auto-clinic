@@ -108,6 +108,44 @@ class TestServiceViewSetDelete:
 
 
 @pytest.mark.django_db
+class TestServiceViewSetWriteIsolation:
+    """Un usuario de la clínica A no puede crear/mover servicios a la clínica B
+    aunque mande otro `clinic` en el payload. Solo el superusuario puede fijar
+    la clínica libremente."""
+
+    def test_create_ignores_payload_clinic_and_forces_own(self, admin_client, clinic_a, clinic_b):
+        data = {
+            "clinic": clinic_b.pk,  # intento de crear en otra clínica
+            "name": "Intruso",
+            "duration_minutes": 30,
+            "price": "10.00",
+        }
+        response = admin_client.post("/api/services/", data)
+        assert response.status_code == 201
+        assert response.data["clinic"] == clinic_a.pk
+        assert Service.objects.get(pk=response.data["id"]).clinic_id == clinic_a.pk
+
+    def test_update_cannot_move_to_other_clinic(self, admin_client, clinic_b, service_a):
+        response = admin_client.patch(
+            f"/api/services/{service_a.pk}/", {"clinic": clinic_b.pk}
+        )
+        assert response.status_code == 200
+        service_a.refresh_from_db()
+        assert service_a.clinic_id != clinic_b.pk
+
+    def test_superuser_can_set_clinic_freely(self, superuser_client, clinic_b):
+        data = {
+            "clinic": clinic_b.pk,
+            "name": "Super Service",
+            "duration_minutes": 30,
+            "price": "10.00",
+        }
+        response = superuser_client.post("/api/services/", data)
+        assert response.status_code == 201
+        assert response.data["clinic"] == clinic_b.pk
+
+
+@pytest.mark.django_db
 class TestServiceViewSetExport:
     def test_export_returns_list(self, admin_client, service_a):
         response = admin_client.get("/api/services/export/")

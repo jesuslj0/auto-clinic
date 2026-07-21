@@ -298,3 +298,62 @@ class TestInfoCacheExport:
         response = admin_client.get("/api/knowledge/cache/export/")
         assert response.status_code == 200
         assert isinstance(response.data, list)
+
+
+@pytest.mark.django_db
+class TestKnowledgeWriteIsolation:
+    """Un admin de la clínica A no puede crear/mover entradas de conocimiento a
+    la clínica B mandando otro `clinic` en el payload. Solo el superusuario
+    puede fijar la clínica libremente."""
+
+    def test_entry_create_forces_own_clinic(self, admin_client, clinic_a, clinic_b):
+        data = {
+            "clinic": clinic_b.pk,
+            "kb_type": "faq",
+            "title": "Intruso",
+            "content": "x",
+        }
+        response = admin_client.post("/api/knowledge/entries/", data)
+        assert response.status_code == 201
+        assert response.data["clinic"] == clinic_a.pk
+        assert ClinicKnowledgeBase.objects.get(pk=response.data["id"]).clinic_id == clinic_a.pk
+
+    def test_entry_update_cannot_move_to_other_clinic(self, admin_client, clinic_b, kb_entry_a):
+        response = admin_client.patch(
+            f"/api/knowledge/entries/{kb_entry_a.pk}/", {"clinic": clinic_b.pk}
+        )
+        assert response.status_code == 200
+        kb_entry_a.refresh_from_db()
+        assert kb_entry_a.clinic_id != clinic_b.pk
+
+    def test_entry_bulk_create_forces_own_clinic(self, admin_client, clinic_a, clinic_b):
+        payload = [
+            {"clinic": clinic_b.pk, "kb_type": "faq", "title": "B1", "content": "x"},
+            {"clinic": clinic_b.pk, "kb_type": "faq", "title": "B2", "content": "y"},
+        ]
+        response = admin_client.post("/api/knowledge/entries/bulk-create/", payload, format="json")
+        assert response.status_code == 201
+        assert all(item["clinic"] == clinic_a.pk for item in response.data)
+
+    def test_query_create_forces_own_clinic(self, admin_client, clinic_a, clinic_b):
+        data = {"clinic": clinic_b.pk, "question": "¿?", "intent_category": "schedule"}
+        response = admin_client.post("/api/knowledge/queries/", data)
+        assert response.status_code == 201
+        assert response.data["clinic"] == clinic_a.pk
+
+    def test_cache_create_forces_own_clinic(self, admin_client, clinic_a, clinic_b):
+        data = {"clinic": clinic_b.pk, "normalized_question": "hola", "answer": "x"}
+        response = admin_client.post("/api/knowledge/cache/", data)
+        assert response.status_code == 201
+        assert response.data["clinic"] == clinic_a.pk
+
+    def test_superuser_can_set_clinic_freely(self, superuser_client, clinic_b):
+        data = {
+            "clinic": clinic_b.pk,
+            "kb_type": "faq",
+            "title": "Super",
+            "content": "x",
+        }
+        response = superuser_client.post("/api/knowledge/entries/", data)
+        assert response.status_code == 201
+        assert response.data["clinic"] == clinic_b.pk

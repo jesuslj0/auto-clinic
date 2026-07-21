@@ -35,17 +35,19 @@ class ClinicForm(forms.ModelForm):
     class Meta:
         model = Clinic
         fields = [
-            'name', 'phone', 'email', 'address', 'city', 'province',
+            'name', 'phone', 'email', 'website', 'address', 'city', 'province',
             'postal_code', 'timezone', 'description', 'logo', 'api_type', 'api_url',
         ]
         widgets = {
             'description': forms.Textarea(attrs={'rows': 3}),
+            'website': forms.URLInput(),
             'api_url': forms.URLInput(),
         }
         labels = {
             'name': 'Nombre',
             'phone': 'Teléfono',
             'email': 'Correo electrónico',
+            'website': 'Sitio web',
             'address': 'Dirección',
             'city': 'Ciudad',
             'province': 'Provincia',

@@ -12,6 +12,7 @@ from appointments.services import (
     validate_appointment_update,
 )
 from core.models import User
+from core.serializers import ClinicScopedSerializerMixin
 from services.models import Service
 
 
@@ -51,7 +52,7 @@ class ProfessionalScheduleSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class ProfessionalSerializer(serializers.ModelSerializer):
+class ProfessionalSerializer(ClinicScopedSerializerMixin, serializers.ModelSerializer):
     user_info = UserMinimalSerializer(source='user', read_only=True)
     professional_type_display = serializers.CharField(source='get_professional_type_display', read_only=True)
     services_detail = ServiceMinimalSerializer(source='services', many=True, read_only=True)
@@ -66,6 +67,11 @@ class ProfessionalSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+
+        # Aislamiento multitenant: se fija la clínica del usuario ANTES de la
+        # comprobación servicio↔clínica de abajo, igual que en AppointmentSerializer.
+        self._enforce_clinic(attrs)
+
         clinic = attrs.get('clinic', getattr(self.instance, 'clinic', None))
         services = attrs.get('services', None)
         if services and clinic:
@@ -96,7 +102,7 @@ class ProfessionalSerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
 
 
-class AppointmentSerializer(serializers.ModelSerializer):
+class AppointmentSerializer(ClinicScopedSerializerMixin, serializers.ModelSerializer):
     patient_phone = serializers.CharField(source='patient.phone', read_only=True, default='')
     patient_name = serializers.SerializerMethodField()
     service_name = serializers.CharField(source='service.name', read_only=True, default='')
@@ -120,6 +126,13 @@ class AppointmentSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+
+        # Aislamiento multitenant: se fija la clínica del usuario ANTES de las
+        # comprobaciones de abajo (servicio↔clínica, elegibilidad del
+        # profesional). Si se enforcara después, un payload con `clinic` de otra
+        # clínica pasaría la validación de servicio y quedaría incoherente.
+        self._enforce_clinic(attrs)
+
         professional = attrs.get('professional', getattr(self.instance, 'professional', None))
         service = attrs.get('service', getattr(self.instance, 'service', None))
         clinic = attrs.get('clinic', getattr(self.instance, 'clinic', None))

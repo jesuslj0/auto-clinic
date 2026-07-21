@@ -339,7 +339,7 @@ class ProfessionalScheduleViewSet(viewsets.ModelViewSet):
         return queryset.filter(professional__clinic=user.clinic)
 
 
-class AppointmentCalendarView(TemplateView):
+class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
     template_name = 'appointments/calendar.html'
 
     def get_context_data(self, **kwargs):
@@ -365,10 +365,17 @@ class AppointmentCalendarView(TemplateView):
             # Vista personal: solo sus citas y su horario
             appointments_qs = appointments_qs.filter(professional=professional)
             schedules_qs = schedules_qs.filter(professional=professional)
-        elif user.is_authenticated and not user.is_superuser and user.clinic_id:
+        elif user.is_superuser:
+            # Superusuario: ve todas las clínicas
+            pass
+        elif user.clinic_id:
             # Admin de clínica: toda la clínica
             appointments_qs = appointments_qs.filter(clinic=user.clinic)
             schedules_qs = schedules_qs.filter(professional__clinic=user.clinic)
+        else:
+            # Usuario autenticado sin clínica ni perfil: no ve nada de otras clínicas
+            appointments_qs = appointments_qs.none()
+            schedules_qs = schedules_qs.none()
 
         # Materializar para poder anotar cada cita con su columna de solapamiento.
         appointments = list(appointments_qs)
@@ -506,7 +513,7 @@ class AppointmentCalendarView(TemplateView):
         return today - timedelta(days=today.weekday())
 
 
-class AppointmentListView(TemplateView):
+class AppointmentListView(LoginRequiredMixin, TemplateView):
     template_name = 'appointments/list.html'
     paginate_by = 20
 
@@ -514,6 +521,14 @@ class AppointmentListView(TemplateView):
         from django.core.paginator import Paginator
         context = super().get_context_data(**kwargs)
         appointments = Appointment.objects.select_related('patient', 'service', 'professional__user')
+
+        # Aislamiento multitenant: cada usuario solo ve las citas de su clínica.
+        user = self.request.user
+        if not user.is_superuser:
+            if user.clinic_id:
+                appointments = appointments.filter(clinic=user.clinic)
+            else:
+                appointments = appointments.none()
 
         # Por defecto (sin `date` en la query string) mostramos las citas de
         # hoy. Si el usuario limpia el campo de fecha a propósito, `date`
