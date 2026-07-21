@@ -12,8 +12,8 @@ class AgentMemoryAdmin(admin.ModelAdmin):
 
 @admin.register(WorkflowError)
 class WorkflowErrorAdmin(admin.ModelAdmin):
-    list_display = ('workflow', 'node_name', 'phone', 'created_at')
-    list_filter = ('workflow',)
+    list_display = ('workflow', 'clinic', 'node_name', 'phone', 'created_at')
+    list_filter = ('clinic', 'workflow')
     search_fields = ('workflow', 'workflow_name', 'phone', 'error_message')
 
 

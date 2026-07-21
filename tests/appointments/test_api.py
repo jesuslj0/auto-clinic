@@ -8,6 +8,17 @@ from django.utils import timezone
 from appointments.models import Appointment
 
 
+def next_morning(hour=10):
+    """Mañana a `hour` en punto, hora local.
+
+    Antes se usaba `timezone.now() + N horas`, lo que hacía fallar los tests al
+    ejecutarlos de noche: la cita cruzaba la medianoche y su `end_at` caía fuera
+    del horario del profesional (00:00–23:59 del mismo día).
+    """
+    tomorrow = timezone.localtime() + timedelta(days=1)
+    return tomorrow.replace(hour=hour, minute=0, second=0, microsecond=0)
+
+
 @pytest.mark.django_db
 class TestAppointmentViewSet:
     def test_list_appointments_scoped_to_clinic(self, admin_client, appointment_a, appointment_b):
@@ -38,7 +49,7 @@ class TestAppointmentViewSet:
         assert appointment_a.pk not in ids
 
     def test_create_appointment(self, admin_client, clinic_a, patient_a, service_a, professional_a):
-        now = timezone.now() + timedelta(hours=3)
+        now = next_morning(10)
         data = {
             "clinic": clinic_a.pk,
             "patient": patient_a.pk,
@@ -55,7 +66,7 @@ class TestAppointmentViewSet:
     def test_staff_can_create_appointment(
         self, staff_client, clinic_a, patient_a, service_a, professional_a
     ):
-        now = timezone.now() + timedelta(hours=4)
+        now = next_morning(11)
         data = {
             "clinic": clinic_a.pk,
             "patient": patient_a.pk,

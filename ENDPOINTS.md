@@ -116,7 +116,7 @@ El recurso `/api/professionals/` devuelve:
 | ViewSet | Ruta base | Permiso | Búsqueda | Filtros | Notas |
 |---------|-----------|---------|----------|---------|-------|
 | `AgentMemoryViewSet` | `/api/agent/memory/` | `IsStaffOrAdmin` \| `IsAgentClinicKey` | session_id | session_id | Memoria del LLM. Aislada por clínica |
-| `WorkflowErrorViewSet` | `/api/agent/errors/` | `IsStaffOrAdmin` | workflow, workflow_name, node_name, phone, error_message | workflow, phone | — |
+| `WorkflowErrorViewSet` | `/api/agent/errors/` | `IsStaffOrAdmin` \| `IsAgentClinicKey` | workflow, workflow_name, node_name, phone, error_message | workflow, phone | Append-only (GET/POST). Aislado por clínica |
 | `ConversationSessionViewSet` | `/api/agent/sessions/` | `IsStaffOrAdmin` \| `IsAgentClinicKey` | phone | clinic, phone | BulkCreate + BulkUpdate |
 | `ChatMessageViewSet` | `/api/agent/messages/` | `IsStaffOrAdmin` \| `IsAgentClinicKey` | body | session, direction, sender, message_type | Append-only (GET/POST) + BulkCreate |
 

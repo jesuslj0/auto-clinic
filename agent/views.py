@@ -47,13 +47,13 @@ class AgentMemoryViewSet(ExportMixin, viewsets.ModelViewSet):
 class WorkflowErrorViewSet(ExportMixin, viewsets.ModelViewSet):
     """Errores que n8n registra cuando falla un workflow.
 
-    Append-only vía API: n8n los crea con POST y el staff los consulta (o los
-    revisa en el admin de Django). No se editan ni se borran por la API, así
-    que PUT/PATCH/DELETE quedan fuera y devuelven 405.
+    Append-only vía API: n8n los crea con POST usando la `Api-Key` de la clínica
+    y el staff los consulta (o los revisa en el admin de Django). No se editan ni
+    se borran por la API, así que PUT/PATCH/DELETE quedan fuera y devuelven 405.
     """
 
     serializer_class = WorkflowErrorSerializer
-    permission_classes = [IsStaffOrAdmin]
+    permission_classes = [IsStaffOrAdmin | IsAgentClinicKey]
     http_method_names = ['get', 'post', 'head', 'options']
     filterset_fields = ['workflow', 'phone']
     search_fields = ['workflow', 'workflow_name', 'node_name', 'phone', 'error_message']
@@ -61,7 +61,7 @@ class WorkflowErrorViewSet(ExportMixin, viewsets.ModelViewSet):
     ordering = ['-created_at']
 
     def get_queryset(self):
-        return WorkflowError.objects.all()
+        return scope_to_clinic(WorkflowError.objects.all(), self.request.user)
 
 
 class ConversationSessionViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets.ModelViewSet):

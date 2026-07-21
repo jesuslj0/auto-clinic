@@ -32,13 +32,24 @@ def agent_memory_b(db, clinic_b):
 
 
 @pytest.fixture
-def workflow_error_a(db):
+def workflow_error_a(db, clinic_a):
     return WorkflowError.objects.create(
+        clinic=clinic_a,
         workflow="booking-flow",
         workflow_name="Booking Workflow",
         node_name="ParseNode",
         error_message="Unexpected payload format",
         phone="+34600000002",
+    )
+
+
+@pytest.fixture
+def workflow_error_b(db, clinic_b):
+    return WorkflowError.objects.create(
+        clinic=clinic_b,
+        workflow="booking-flow",
+        error_message="Error de otra clínica",
+        phone="+34600000003",
     )
 
 
@@ -183,6 +194,36 @@ class TestWorkflowErrorViewSetAppendOnly:
             "error_message": "test error",
         })
         assert response.status_code == 201
+
+    def test_agent_key_can_post(self, api_client, clinic_a):
+        """El flujo real: n8n autentica con la Api-Key de la clínica."""
+        api_client.credentials(HTTP_AUTHORIZATION=f"Api-Key {clinic_a.agent_api_key}")
+        response = api_client.post(
+            "/api/agent/errors/",
+            {"workflow": "whatsapp-inbound", "error_message": "timeout", "phone": "+34600111222"},
+            format="json",
+        )
+        assert response.status_code == 201
+        assert WorkflowError.objects.get().clinic_id == clinic_a.clinic_id
+
+    def test_agent_key_cannot_write_into_another_clinic(self, api_client, clinic_a, clinic_b):
+        api_client.credentials(HTTP_AUTHORIZATION=f"Api-Key {clinic_a.agent_api_key}")
+        api_client.post(
+            "/api/agent/errors/",
+            {"workflow": "wf", "error_message": "boom", "clinic": clinic_b.clinic_id},
+            format="json",
+        )
+        assert WorkflowError.objects.filter(clinic=clinic_b).count() == 0
+
+    def test_other_clinic_errors_are_hidden(self, admin_client, workflow_error_a, workflow_error_b):
+        response = admin_client.get("/api/agent/errors/")
+        returned = {str(item["id"]) for item in response.data["results"]}
+        assert str(workflow_error_a.pk) in returned
+        assert str(workflow_error_b.pk) not in returned
+
+    def test_retrieve_other_clinic_error_returns_404(self, admin_client, workflow_error_b):
+        response = admin_client.get(f"/api/agent/errors/{workflow_error_b.pk}/")
+        assert response.status_code == 404
 
     def test_patch_not_allowed(self, admin_client, workflow_error_a):
         response = admin_client.patch(
@@ -484,3 +525,47 @@ class TestChatMessageIsolationAndMethods:
             f"/api/agent/messages/{message.pk}/", {"body": "editado"}, format="json"
         ).status_code == 405
         assert admin_client.delete(f"/api/agent/messages/{message.pk}/").status_code == 405
+
+
+@pytest.mark.django_db
+class TestChatMessageAgentKey:
+    """El flujo real de n8n: autenticación por Api-Key de clínica."""
+
+    def test_agent_key_can_ingest_and_is_scoped(self, api_client, clinic_a, clinic_b):
+        api_client.credentials(HTTP_AUTHORIZATION=f"Api-Key {clinic_a.agent_api_key}")
+        response = api_client.post("/api/agent/messages/", _message_payload(), format="json")
+        assert response.status_code == 201
+
+        message = ChatMessage.objects.get()
+        assert message.clinic_id == clinic_a.clinic_id
+
+        # Aunque el payload declare otra clínica, se impone la de la Api-Key.
+        api_client.post(
+            "/api/agent/messages/",
+            _message_payload(phone="+34600000011", clinic=clinic_b.clinic_id),
+            format="json",
+        )
+        assert ChatMessage.objects.filter(clinic=clinic_b).count() == 0
+
+    def test_agent_key_only_lists_own_clinic(self, api_client, clinic_a, session_b, clinic_b):
+        from agent.services import record_message
+
+        record_message(
+            clinic=clinic_b,
+            session=session_b,
+            direction="inbound",
+            sender="patient",
+            body="ajeno",
+        )
+        api_client.credentials(HTTP_AUTHORIZATION=f"Api-Key {clinic_a.agent_api_key}")
+        api_client.post("/api/agent/messages/", _message_payload(), format="json")
+        response = api_client.get("/api/agent/messages/")
+        assert response.status_code == 200
+        assert response.data["count"] == 1
+
+    def test_agent_key_cannot_delete(self, api_client, clinic_a):
+        api_client.credentials(HTTP_AUTHORIZATION=f"Api-Key {clinic_a.agent_api_key}")
+        api_client.post("/api/agent/messages/", _message_payload(), format="json")
+        message = ChatMessage.objects.get()
+        response = api_client.delete(f"/api/agent/messages/{message.pk}/")
+        assert response.status_code in (403, 405)

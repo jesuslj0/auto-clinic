@@ -12,11 +12,13 @@ class AgentMemorySerializer(ClinicScopedSerializerMixin, serializers.ModelSerial
         read_only_fields = ('id', 'created_at')
 
 
-class WorkflowErrorSerializer(serializers.ModelSerializer):
+class WorkflowErrorSerializer(ClinicScopedSerializerMixin, serializers.ModelSerializer):
     class Meta:
         model = WorkflowError
         fields = '__all__'
         read_only_fields = ('id', 'created_at')
+        # La clínica sale de la Api-Key del agente; n8n no la manda.
+        extra_kwargs = {'clinic': {'required': False}}
 
 
 class ConversationSessionSerializer(ClinicScopedSerializerMixin, serializers.ModelSerializer):

@@ -33,6 +33,9 @@ class AgentMemory(models.Model):
 
 class WorkflowError(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    clinic = models.ForeignKey(
+        Clinic, on_delete=models.CASCADE, null=True, blank=True, db_column="clinic_id"
+    )
     workflow = models.CharField(max_length=100, blank=True)
     workflow_name = models.CharField(max_length=100, blank=True)
     node_name = models.CharField(max_length=100, blank=True)
