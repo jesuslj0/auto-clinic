@@ -64,6 +64,26 @@ class Clinic(models.Model):
         help_text="API Key única que usa n8n para autenticarse con esta clínica",
     )
 
+    # Control del agente desde el panel de conversaciones
+    agent_enabled = models.BooleanField(
+        default=True,
+        help_text=(
+            "Interruptor general del agente. Si se apaga, el agente deja de "
+            "responder en todos los chats de la clínica y la atención pasa a ser manual."
+        ),
+    )
+    agent_handoff_timeout_seconds = models.PositiveIntegerField(
+        default=300,
+        help_text=(
+            "Segundos de inactividad del staff tras los que el agente retoma "
+            "automáticamente una conversación puesta en modo humano."
+        ),
+    )
+    conversation_retention_months = models.PositiveIntegerField(
+        default=24,
+        help_text="Meses que se conserva el histórico de conversaciones antes de purgarse. 0 = sin límite.",
+    )
+
     # Integración de calendario
     api_type = models.CharField(
         max_length=20,

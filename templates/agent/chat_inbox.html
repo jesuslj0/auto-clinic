@@ -7,12 +7,38 @@
 {% endblock %}
 
 {% block page_actions %}
-{% if total_unread %}
-<span class="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand-700">
-    <span class="h-2 w-2 rounded-full bg-brand-500"></span>
-    {{ total_unread }} sin leer
-</span>
-{% endif %}
+<div class="flex items-center gap-2">
+    {% if total_unread %}
+    <span class="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand-700">
+        <span class="h-2 w-2 rounded-full bg-brand-500"></span>
+        {{ total_unread }} sin leer
+    </span>
+    {% endif %}
+
+    {% comment %}
+    Interruptor general: afecta a todos los chats de la clínica, no solo al
+    abierto. Por eso vive en la cabecera y no dentro del hilo.
+    {% endcomment %}
+    {% if request.user.clinic %}
+    <form method="post" action="{% url 'agent:agent-switch' %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        {% if request.user.clinic.agent_enabled %}
+        <button type="submit"
+                class="inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand-700 ring-1 ring-brand-200 transition hover:bg-brand-100"
+                title="Desactivar el agente en toda la clínica">
+            <span class="h-2 w-2 rounded-full bg-brand-500"></span>Agente activo
+        </button>
+        {% else %}
+        <button type="submit"
+                class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-600 ring-1 ring-slate-300 transition hover:bg-slate-200"
+                title="Activar el agente en toda la clínica">
+            <span class="h-2 w-2 rounded-full bg-slate-400"></span>Agente apagado
+        </button>
+        {% endif %}
+    </form>
+    {% endif %}
+</div>
 {% endblock %}
 
 {% block content %}
@@ -79,8 +105,8 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
                         {% endif %}
                     </span>
                     {% if session.agent_paused %}
-                    <span class="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
-                        Bot en pausa
+                    <span class="mt-1 inline-flex items-center gap-1 rounded-full bg-accent-50 px-2 py-0.5 text-xs font-medium text-tertiary-600">
+                        Modo humano
                     </span>
                     {% endif %}
                 </span>
@@ -117,16 +143,45 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
                 </p>
             </div>
             <div class="flex flex-shrink-0 items-center gap-2">
-                {% if active_session.agent_paused %}
-                <span class="hidden items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 sm:inline-flex">
-                    Bot en pausa
-                </span>
-                {% endif %}
+                {% comment %}
+                Conmutador por hilo. Pulsar el lado inactivo cambia el modo; el
+                activo es solo una etiqueta, no un botón.
+                {% endcomment %}
+                <form method="post" action="{% url 'agent:chat-toggle-agent' active_session.id %}"
+                      class="flex items-center gap-0.5 rounded-full bg-slate-100 p-0.5 ring-1 ring-slate-200">
+                    {% csrf_token %}
+                    {% if active_session.agent_paused %}
+                    <button type="submit" class="rounded-full px-3 py-1 text-xs font-semibold text-slate-500 transition hover:text-brand-700">
+                        Agente IA
+                    </button>
+                    <span class="rounded-full bg-tertiary-600 px-3 py-1 text-xs font-semibold text-white">Modo humano</span>
+                    {% else %}
+                    <span class="rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white">Agente IA</span>
+                    <button type="submit" class="rounded-full px-3 py-1 text-xs font-semibold text-slate-500 transition hover:text-tertiary-600">
+                        Modo humano
+                    </button>
+                    {% endif %}
+                </form>
                 {% if active_session.patient %}
                 <a href="{% url 'patients:detail' active_session.patient.id %}" class="btn-outlined px-3 py-1.5 text-xs">Ver ficha</a>
                 {% endif %}
             </div>
         </header>
+
+        {% comment %}
+        Avisos de estado. Sólo se pinta el que manda: el interruptor general
+        gana sobre el modo del hilo, porque apagado no responde en ningún caso.
+        {% endcomment %}
+        {% if not active_session.clinic.agent_enabled %}
+        <p class="border-b border-slate-200 bg-slate-100 px-4 py-2 text-xs text-slate-600 sm:px-5">
+            El agente está apagado en toda la clínica. Ningún chat recibe respuestas automáticas.
+        </p>
+        {% elif active_session.is_handoff_active %}
+        <p class="border-b border-accent-100 bg-accent-50 px-4 py-2 text-xs text-tertiary-700 sm:px-5">
+            Has intervenido en la conversación. El agente la retoma en
+            {{ active_session.handoff_expires_at|timeuntil }} si no vuelves a escribir.
+        </p>
+        {% endif %}
 
         <div class="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-50 px-4 py-5 sm:px-6 max-lg:max-h-[60vh]">
             {% if has_older_messages %}
@@ -148,11 +203,11 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
                 <div class="flex {% if message.direction == 'inbound' %}justify-start{% else %}justify-end{% endif %}">
                     <div class="max-w-[85%] rounded-2xl px-4 py-2.5 shadow-sm sm:max-w-[70%]
                         {% if message.direction == 'inbound' %}rounded-tl-sm bg-white text-slate-800 ring-1 ring-slate-200
-                        {% elif message.sender == 'staff' %}rounded-tr-sm bg-emerald-600 text-white
+                        {% elif message.sender == 'staff' %}rounded-tr-sm bg-tertiary-600 text-white
                         {% else %}rounded-tr-sm bg-brand-600 text-white{% endif %}">
 
                         {% if message.sender == 'staff' or message.sender == 'agent' %}
-                        <p class="mb-1 text-xs font-semibold {% if message.sender == 'staff' %}text-emerald-100{% else %}text-brand-100{% endif %}">
+                        <p class="mb-1 text-xs font-semibold {% if message.sender == 'staff' %}text-accent-100{% else %}text-brand-100{% endif %}">
                             {{ message.get_sender_display }}
                         </p>
                         {% endif %}
@@ -192,8 +247,47 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
             {% endfor %}
         </div>
 
-        <footer class="border-t border-slate-200 bg-white px-4 py-3 text-center text-xs text-slate-500 sm:px-6">
-            Vista de solo lectura: las respuestas se envían desde el agente de WhatsApp.
+        <footer class="border-t border-slate-200 bg-white px-4 py-3 sm:px-6">
+            {% if active_session.can_send_free_text %}
+            {% comment %}
+            Enviar aparta al agente automáticamente: no hace falta poner antes el
+            hilo en modo humano, basta con escribir.
+            {% endcomment %}
+            <form method="post" action="{% url 'agent:chat-send' active_session.id %}" class="flex items-end gap-2">
+                {% csrf_token %}
+                <label class="sr-only" for="chat-body">Mensaje</label>
+                <textarea id="chat-body" name="body" rows="1" required maxlength="4096"
+                          placeholder="Escribe un mensaje…"
+                          class="min-h-[2.75rem] flex-1 resize-y rounded-2xl border-slate-200 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"></textarea>
+                <button type="submit" class="btn-primary flex-shrink-0 px-4 py-2.5 text-sm">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                    </svg>
+                    <span class="ml-1.5 hidden sm:inline">Enviar</span>
+                </button>
+            </form>
+            <p class="mt-2 text-xs text-slate-400">
+                Al enviar, el agente deja de responder en este chat
+                {% if request.user.clinic.agent_handoff_timeout_seconds %}
+                y lo retoma tras {{ request.user.clinic.agent_handoff_timeout_seconds }} segundos sin que escribas.
+                {% else %}
+                hasta que lo reactives.
+                {% endif %}
+            </p>
+            {% else %}
+            <div class="rounded-2xl bg-slate-50 px-4 py-3 text-center ring-1 ring-slate-200">
+                <p class="text-xs font-medium text-slate-700">No se puede escribir en esta conversación.</p>
+                <p class="mt-1 text-xs text-slate-500">
+                    {% if active_session.last_interaction %}
+                    WhatsApp solo permite responder con texto libre durante las 24 horas siguientes al
+                    mensaje del paciente, y ya han pasado. Habrá que esperar a que vuelva a escribir.
+                    {% else %}
+                    Este paciente todavía no ha escrito, y WhatsApp no permite iniciar una conversación
+                    con texto libre.
+                    {% endif %}
+                </p>
+            </div>
+            {% endif %}
         </footer>
 
         {% else %}
