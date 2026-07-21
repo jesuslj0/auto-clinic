@@ -6,7 +6,12 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.authtoken.views import obtain_auth_token
 from rest_framework.routers import DefaultRouter
 
-from agent.views import AgentMemoryViewSet, ConversationSessionViewSet, WorkflowErrorViewSet
+from agent.views import (
+    AgentMemoryViewSet,
+    ChatMessageViewSet,
+    ConversationSessionViewSet,
+    WorkflowErrorViewSet,
+)
 from appointments.views import AppointmentActionByTokenAPIView, AppointmentViewSet, ProfessionalScheduleViewSet, ProfessionalViewSet
 from billing.views import SubscriptionViewSet
 from core.views import AgentConfigByPhoneView, AgentConfigView, ClinicViewSet, UserViewSet
@@ -39,6 +44,7 @@ router.register(r'knowledge/cache', ClinicInfoCacheViewSet, basename='knowledge-
 router.register(r'agent/memory', AgentMemoryViewSet, basename='agent-memory')
 router.register(r'agent/errors', WorkflowErrorViewSet, basename='agent-error')
 router.register(r'agent/sessions', ConversationSessionViewSet, basename='agent-session')
+router.register(r'agent/messages', ChatMessageViewSet, basename='agent-message')
 
 urlpatterns = [
     # Django admin
@@ -51,6 +57,7 @@ urlpatterns = [
     path('booking/', include('booking.urls')),
     path('services/', include('services.urls')),
     path('knowledge/', include('knowledge.urls')),
+    path('chats/', include('agent.urls')),
 
     # REST API
     path(

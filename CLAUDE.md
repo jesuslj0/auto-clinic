@@ -47,7 +47,7 @@ python manage.py runserver    # Uses config.settings.dev by default
 | `notifications` | Celery beat tasks for reminder dispatch |
 | `billing` | Subscription management |
 | `booking` | Template-only public booking flow (no models) |
-| `agent` | WhatsApp bot state: `AgentMemory`, `ConversationSession`, `WorkflowError` |
+| `agent` | WhatsApp bot state: `AgentMemory` (contexto del LLM), `ConversationSession` (hilo), `ChatMessage` (historial append-only), `WorkflowError` |
 | `knowledge` | Clinic knowledge base: `ClinicKnowledgeBase`, `ClinicInfoQuery`, `ClinicInfoCache` |
 
 ### Multi-tenancy

@@ -115,15 +115,39 @@ El recurso `/api/professionals/` devuelve:
 
 | ViewSet | Ruta base | Permiso | Búsqueda | Filtros | Notas |
 |---------|-----------|---------|----------|---------|-------|
-| `AgentMemoryViewSet` | `/api/agent/memory/` | `IsStaffOrAdmin` | session_id | session_id | — |
+| `AgentMemoryViewSet` | `/api/agent/memory/` | `IsStaffOrAdmin` \| `IsAgentClinicKey` | session_id | session_id | Memoria del LLM. Aislada por clínica |
 | `WorkflowErrorViewSet` | `/api/agent/errors/` | `IsStaffOrAdmin` | workflow, workflow_name, node_name, phone, error_message | workflow, phone | — |
-| `ConversationSessionViewSet` | `/api/agent/sessions/` | `IsStaffOrAdmin` | phone | clinic, phone | BulkCreate + BulkUpdate |
+| `ConversationSessionViewSet` | `/api/agent/sessions/` | `IsStaffOrAdmin` \| `IsAgentClinicKey` | phone | clinic, phone | BulkCreate + BulkUpdate |
+| `ChatMessageViewSet` | `/api/agent/messages/` | `IsStaffOrAdmin` \| `IsAgentClinicKey` | body | session, direction, sender, message_type | Append-only (GET/POST) + BulkCreate |
 
 #### Acción personalizada en ConversationSessionViewSet
 
 | Método | URL | Descripción |
 |--------|-----|-------------|
-| GET | `/api/agent/sessions/{id}/status/` | Devuelve id, phone, last_interaction, has_appointment_context, updated_at |
+| GET | `/api/agent/sessions/{id}/status/` | Devuelve id, phone, last_interaction, has_appointment_context, agent_paused, unread_count, updated_at |
+
+#### Ingesta del historial de chat (`/api/agent/messages/`)
+
+n8n publica cada mensaje —entrante del paciente y saliente del agente— con un POST.
+La conversación se resuelve por `phone` (se crea si no existe) o se indica con `session`:
+
+```json
+{
+  "phone": "+34600111222",
+  "direction": "inbound",
+  "sender": "patient",
+  "body": "Hola, quiero pedir cita",
+  "wa_message_id": "wamid.ABC123",
+  "sent_at": "2026-07-21T10:30:00Z"
+}
+```
+
+- `direction`: `inbound` | `outbound` · `sender`: `patient` | `agent` | `staff`
+- **Idempotente por `wa_message_id`**: reenviar el mismo id devuelve 201 con el mensaje ya
+  registrado, sin duplicarlo en el hilo ni volver a sumar no leídos.
+- El teléfono se normaliza a E.164, así que `600 111 222` y `+34600111222` caen en el mismo hilo.
+- Cada mensaje actualiza `last_message_at`, `last_message_preview` y `unread_count` de la sesión.
+- La clínica se toma de la `Api-Key` del agente: un POST no puede escribir en el hilo de otra clínica.
 
 ---
 

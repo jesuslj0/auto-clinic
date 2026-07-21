@@ -6,7 +6,7 @@ API tests for agent app:
 """
 import pytest
 
-from agent.models import AgentMemory, ConversationSession, WorkflowError
+from agent.models import AgentMemory, ChatMessage, ConversationSession, WorkflowError
 
 
 # ---------------------------------------------------------------------------
@@ -14,10 +14,20 @@ from agent.models import AgentMemory, ConversationSession, WorkflowError
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def agent_memory_a(db):
+def agent_memory_a(db, clinic_a):
     return AgentMemory.objects.create(
+        clinic=clinic_a,
         session_id="+34600000001",
         messages=[{"role": "user", "content": "Hello"}],
+    )
+
+
+@pytest.fixture
+def agent_memory_b(db, clinic_b):
+    return AgentMemory.objects.create(
+        clinic=clinic_b,
+        session_id="+34600000099",
+        messages=[{"role": "user", "content": "Hola"}],
     )
 
 
@@ -69,6 +79,13 @@ class TestAgentMemoryViewSetList:
         response = staff_client.get("/api/agent/memory/")
         assert response.status_code == 200
 
+    def test_other_clinic_memory_is_hidden(self, admin_client, agent_memory_a, agent_memory_b):
+        response = admin_client.get("/api/agent/memory/")
+        assert response.status_code == 200
+        returned = {str(item["id"]) for item in response.data["results"]}
+        assert str(agent_memory_a.pk) in returned
+        assert str(agent_memory_b.pk) not in returned
+
 
 @pytest.mark.django_db
 class TestAgentMemoryViewSetCreate:
@@ -100,6 +117,10 @@ class TestAgentMemoryViewSetRetrieve:
         response = admin_client.get(f"/api/agent/memory/{agent_memory_a.pk}/")
         assert response.status_code == 200
         assert str(response.data["id"]) == str(agent_memory_a.pk)
+
+    def test_retrieve_other_clinic_memory_returns_404(self, admin_client, agent_memory_b):
+        response = admin_client.get(f"/api/agent/memory/{agent_memory_b.pk}/")
+        assert response.status_code == 404
 
 
 @pytest.mark.django_db
@@ -324,3 +345,142 @@ class TestConversationSessionExport:
         ids = [str(s["id"]) for s in response.data]
         assert str(session_a.pk) in ids
         assert str(session_b.pk) not in ids
+
+
+# ---------------------------------------------------------------------------
+# ChatMessage (historial del panel de chats)
+# ---------------------------------------------------------------------------
+
+def _message_payload(**overrides):
+    data = {
+        "phone": "+34600000010",
+        "direction": "inbound",
+        "sender": "patient",
+        "body": "Hola, quiero pedir cita",
+    }
+    data.update(overrides)
+    return data
+
+
+@pytest.mark.django_db
+class TestChatMessageIngest:
+    def test_unauthenticated_denied(self, api_client):
+        response = api_client.post("/api/agent/messages/", _message_payload(), format="json")
+        assert response.status_code in (401, 403)
+
+    def test_creates_session_on_first_message(self, admin_client, clinic_a):
+        response = admin_client.post("/api/agent/messages/", _message_payload(), format="json")
+        assert response.status_code == 201
+        session = ConversationSession.objects.get(clinic=clinic_a, phone="+34600000010")
+        assert session.messages.count() == 1
+
+    def test_reuses_session_and_normalizes_phone(self, admin_client, clinic_a):
+        admin_client.post("/api/agent/messages/", _message_payload(), format="json")
+        # Mismo número escrito de otra forma: debe caer en el mismo hilo.
+        admin_client.post(
+            "/api/agent/messages/",
+            _message_payload(phone="600 000 010", body="¿Hola?"),
+            format="json",
+        )
+        sessions = ConversationSession.objects.filter(clinic=clinic_a, phone="+34600000010")
+        assert sessions.count() == 1
+        assert sessions.first().messages.count() == 2
+
+    def test_duplicate_wa_message_id_is_ignored(self, admin_client, clinic_a):
+        payload = _message_payload(wa_message_id="wamid.ABC123")
+        first = admin_client.post("/api/agent/messages/", payload, format="json")
+        second = admin_client.post("/api/agent/messages/", payload, format="json")
+        assert first.status_code == 201
+        assert second.status_code == 201
+        assert ChatMessage.objects.filter(wa_message_id="wamid.ABC123").count() == 1
+        session = ConversationSession.objects.get(clinic=clinic_a, phone="+34600000010")
+        # El reintento tampoco debe inflar el contador de no leídos.
+        assert session.unread_count == 1
+
+    def test_requires_body_or_media(self, admin_client):
+        response = admin_client.post(
+            "/api/agent/messages/", _message_payload(body=""), format="json"
+        )
+        assert response.status_code == 400
+
+    def test_requires_phone_or_session(self, admin_client):
+        payload = _message_payload()
+        del payload["phone"]
+        response = admin_client.post("/api/agent/messages/", payload, format="json")
+        assert response.status_code == 400
+
+    def test_links_existing_patient_by_phone(self, admin_client, clinic_a, patient_a):
+        admin_client.post(
+            "/api/agent/messages/", _message_payload(phone=patient_a.phone), format="json"
+        )
+        session = ConversationSession.objects.get(clinic=clinic_a, phone=patient_a.phone)
+        assert session.patient_id == patient_a.pk
+
+    def test_cannot_write_into_another_clinic_session(self, admin_client, session_b):
+        payload = _message_payload()
+        del payload["phone"]
+        payload["session"] = str(session_b.pk)
+        response = admin_client.post("/api/agent/messages/", payload, format="json")
+        assert response.status_code == 400
+
+
+@pytest.mark.django_db
+class TestChatMessageSessionCounters:
+    def test_inbound_updates_preview_and_unread(self, admin_client, clinic_a):
+        admin_client.post(
+            "/api/agent/messages/", _message_payload(body="Buenos días"), format="json"
+        )
+        session = ConversationSession.objects.get(clinic=clinic_a, phone="+34600000010")
+        assert session.last_message_preview == "Buenos días"
+        assert session.unread_count == 1
+        assert session.last_message_at is not None
+
+    def test_outbound_does_not_increase_unread(self, admin_client, clinic_a):
+        admin_client.post(
+            "/api/agent/messages/",
+            _message_payload(direction="outbound", sender="agent", body="Claro, dime"),
+            format="json",
+        )
+        session = ConversationSession.objects.get(clinic=clinic_a, phone="+34600000010")
+        assert session.unread_count == 0
+        assert session.last_message_preview == "Claro, dime"
+
+    def test_mark_session_read_resets_counter(self, admin_client, clinic_a):
+        from agent.services import mark_session_read
+
+        admin_client.post("/api/agent/messages/", _message_payload(), format="json")
+        session = ConversationSession.objects.get(clinic=clinic_a, phone="+34600000010")
+        mark_session_read(session)
+        session.refresh_from_db()
+        assert session.unread_count == 0
+        assert session.messages.filter(read_at__isnull=True).count() == 0
+
+
+@pytest.mark.django_db
+class TestChatMessageIsolationAndMethods:
+    def test_list_only_own_clinic(self, admin_client, clinic_b, session_b):
+        from agent.services import record_message
+
+        admin_client.post("/api/agent/messages/", _message_payload(), format="json")
+        # El mensaje ajeno se crea por el ORM y no con `client_b`: ese fixture
+        # comparte instancia de APIClient con `admin_client` y reautenticaría
+        # la sesión del test.
+        record_message(
+            clinic=clinic_b,
+            session=session_b,
+            direction="inbound",
+            sender="patient",
+            body="Mensaje de otra clínica",
+        )
+        response = admin_client.get("/api/agent/messages/")
+        assert response.status_code == 200
+        assert response.data["count"] == 1
+        assert response.data["results"][0]["body"] == "Hola, quiero pedir cita"
+
+    def test_is_append_only(self, admin_client, clinic_a):
+        admin_client.post("/api/agent/messages/", _message_payload(), format="json")
+        message = ChatMessage.objects.get()
+        assert admin_client.patch(
+            f"/api/agent/messages/{message.pk}/", {"body": "editado"}, format="json"
+        ).status_code == 405
+        assert admin_client.delete(f"/api/agent/messages/{message.pk}/").status_code == 405

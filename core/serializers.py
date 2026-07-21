@@ -19,15 +19,27 @@ class ClinicScopedSerializerMixin:
     bulk-create y bulk-update.
     """
 
-    def _enforce_clinic(self, validated_data):
+    def _forced_clinic(self):
+        """Clínica que se impondrá al guardar, o None si el payload manda.
+
+        Útil en `validate()` para comprobar restricciones que dependen de la
+        clínica antes de llegar a la base de datos: `clinic` no viaja en el
+        payload de un agente, así que los validadores de DRF no lo ven.
+        """
         request = self.context.get('request')
         user = getattr(request, 'user', None)
         if user is None:
-            return
+            return None
         if isinstance(user, ClinicAgent):
-            validated_data['clinic'] = user.clinic
-        elif not user.is_superuser and getattr(user, 'clinic_id', None):
-            validated_data['clinic'] = user.clinic
+            return user.clinic
+        if not user.is_superuser and getattr(user, 'clinic_id', None):
+            return user.clinic
+        return None
+
+    def _enforce_clinic(self, validated_data):
+        clinic = self._forced_clinic()
+        if clinic is not None:
+            validated_data['clinic'] = clinic
 
     def create(self, validated_data):
         self._enforce_clinic(validated_data)
