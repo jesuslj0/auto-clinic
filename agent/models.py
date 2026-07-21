@@ -1,8 +1,14 @@
 import uuid
+from datetime import timedelta
 
 from django.db import models
+from django.utils import timezone
 
 from core.models import Clinic
+
+# WhatsApp solo permite texto libre dentro de las 24 h siguientes al último
+# mensaje del usuario. Fuera de esa ventana hay que usar plantillas aprobadas.
+CUSTOMER_SERVICE_WINDOW = timedelta(hours=24)
 
 
 class AgentMemory(models.Model):
@@ -92,6 +98,14 @@ class ConversationSession(models.Model):
             "que no contesten los dos a la vez."
         ),
     )
+    last_staff_message_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Último mensaje escrito por una persona del staff. Abre una pausa "
+            "temporal del agente que se cierra sola por inactividad."
+        ),
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -109,6 +123,62 @@ class ConversationSession(models.Model):
 
     def __str__(self):
         return f"Session {self.phone}"
+
+    # -- Control del agente ------------------------------------------------
+    #
+    # Hay dos pausas distintas y conviene no confundirlas:
+    #
+    #   * `agent_paused` es explícita e indefinida. La activa el staff con el
+    #     interruptor y solo el staff la quita.
+    #   * La que abre `last_staff_message_at` es automática y temporal: escribir
+    #     en el hilo aparta al agente un rato para que no conteste encima, y se
+    #     cierra sola por inactividad.
+
+    @property
+    def handoff_expires_at(self):
+        """Cuándo retoma el agente tras el último mensaje del staff."""
+        if self.last_staff_message_at is None or self.clinic is None:
+            return None
+        timeout = self.clinic.agent_handoff_timeout_seconds
+        if not timeout:
+            return None
+        return self.last_staff_message_at + timedelta(seconds=timeout)
+
+    @property
+    def is_handoff_active(self):
+        """Si la pausa automática por intervención humana sigue vigente."""
+        expires_at = self.handoff_expires_at
+        return expires_at is not None and timezone.now() < expires_at
+
+    @property
+    def agent_should_reply(self):
+        """Respuesta única a «¿contesta el agente en este hilo ahora mismo?».
+
+        Es la que consulta n8n antes de generar nada, y la que decide qué
+        estado pinta el panel.
+        """
+        if self.clinic is None or not self.clinic.agent_enabled:
+            return False
+        return not self.agent_paused and not self.is_handoff_active
+
+    # -- Ventana de servicio de WhatsApp ------------------------------------
+
+    @property
+    def customer_window_expires_at(self):
+        """Fin del plazo de 24 h para responder con texto libre."""
+        if self.last_interaction is None:
+            return None
+        return self.last_interaction + CUSTOMER_SERVICE_WINDOW
+
+    @property
+    def can_send_free_text(self):
+        """Si Meta aceptaría ahora un mensaje de texto normal.
+
+        Fuera de la ventana solo pasan plantillas aprobadas, así que el panel
+        bloquea el cuadro de texto en vez de dejar escribir para nada.
+        """
+        expires_at = self.customer_window_expires_at
+        return expires_at is not None and timezone.now() < expires_at
 
 
 class ChatMessage(models.Model):

@@ -1,7 +1,11 @@
+from django.contrib import messages as django_messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import F, Q, Sum
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.views import View
 from django.views.generic import TemplateView
+from rest_framework import status as http_status
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -13,7 +17,8 @@ from agent.serializers import (
     ConversationSessionSerializer,
     WorkflowErrorSerializer,
 )
-from agent.services import mark_session_read
+from agent.services import mark_session_read, send_staff_message
+from agent.whatsapp import WhatsAppError
 from core.authentication import ClinicAgent
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
 from core.permissions import IsAgentClinicKey, IsClinicAdminOrReadOnly, IsStaffOrAdmin
@@ -96,6 +101,70 @@ class ConversationSessionViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, 
         mark_session_read(session)
         session.refresh_from_db(fields=['unread_count'])
         return Response({'id': str(session.id), 'unread_count': session.unread_count})
+
+    @action(detail=False, methods=['get'], url_path='should-reply')
+    def should_reply(self, request):
+        """Le dice a n8n si el agente debe contestar en un hilo, y con qué contexto.
+
+        n8n consulta por teléfono porque es lo único que trae el webhook de
+        Meta. Devuelve además los últimos mensajes para que, al retomar tras una
+        intervención humana, el agente sepa lo que dijo la recepcionista; su
+        propia memoria no lo contiene porque ese mensaje no pasó por n8n.
+        """
+        phone = (request.query_params.get('phone') or '').strip()
+        if not phone:
+            return Response(
+                {'detail': 'El parámetro phone es obligatorio.'},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            history_size = int(request.query_params.get('history', 20))
+        except (TypeError, ValueError):
+            history_size = 20
+        history_size = max(0, min(history_size, 100))
+
+        session = self.get_queryset().filter(phone=phone).first()
+        if session is None:
+            # Primer mensaje de este número: no hay hilo todavía, así que no hay
+            # nada que pause al agente. Se responde sin crear la sesión, que ya
+            # la creará la ingesta del mensaje.
+            clinic = getattr(request.user, 'clinic', None)
+            return Response({
+                'session_id': None,
+                'phone': phone,
+                'agent_should_reply': bool(clinic and clinic.agent_enabled),
+                'agent_enabled': bool(clinic and clinic.agent_enabled),
+                'agent_paused': False,
+                'handoff_active': False,
+                'handoff_expires_at': None,
+                'history': [],
+            })
+
+        history = []
+        if history_size:
+            recent = session.messages.order_by('-created_at')[:history_size]
+            history = [
+                {
+                    'sender': message.sender,
+                    'body': message.body,
+                    'created_at': (message.sent_at or message.created_at).isoformat(),
+                }
+                for message in reversed(list(recent))
+            ]
+
+        return Response({
+            'session_id': str(session.id),
+            'phone': session.phone,
+            'agent_should_reply': session.agent_should_reply,
+            'agent_enabled': session.clinic.agent_enabled if session.clinic else False,
+            'agent_paused': session.agent_paused,
+            'handoff_active': session.is_handoff_active,
+            'handoff_expires_at': (
+                session.handoff_expires_at.isoformat() if session.handoff_expires_at else None
+            ),
+            'history': history,
+        })
 
 
 class ChatMessageViewSet(ExportMixin, BulkCreateMixin, viewsets.ModelViewSet):
@@ -209,3 +278,80 @@ class ChatInboxView(LoginRequiredMixin, TemplateView):
         except (TypeError, ValueError):
             return self.default_message_limit
         return max(1, min(limit, self.max_message_limit))
+
+
+class ChatSessionActionMixin(LoginRequiredMixin):
+    """Resuelve el hilo comprobando que sea de la clínica de quien lo pide."""
+
+    def get_session(self, session_id):
+        sessions = scope_to_clinic(
+            ConversationSession.objects.select_related('clinic'), self.request.user
+        )
+        return get_object_or_404(sessions, pk=session_id)
+
+
+class ChatSendMessageView(ChatSessionActionMixin, View):
+    """Envía un mensaje escrito por el staff desde el panel."""
+
+    def post(self, request, session_id):
+        session = self.get_session(session_id)
+        body = (request.POST.get('body') or '').strip()
+
+        if not body:
+            django_messages.error(request, 'Escribe un mensaje antes de enviarlo.')
+        else:
+            try:
+                send_staff_message(session=session, body=body)
+            except WhatsAppError as exc:
+                django_messages.error(request, str(exc))
+
+        return redirect('agent:chat-thread', session_id=session.id)
+
+
+class ChatToggleAgentView(ChatSessionActionMixin, View):
+    """Alterna entre «Agente IA» y «Modo humano» en un hilo concreto."""
+
+    def post(self, request, session_id):
+        session = self.get_session(session_id)
+
+        session.agent_paused = not session.agent_paused
+        if session.agent_paused:
+            # Una pausa explícita no debe caducar por inactividad: si alguien
+            # pone el hilo en modo humano, se queda así hasta que lo devuelva.
+            session.last_staff_message_at = None
+            django_messages.success(request, 'Modo humano activado. El agente no responderá en este chat.')
+        else:
+            django_messages.success(request, 'El agente vuelve a atender este chat.')
+        session.save(update_fields=['agent_paused', 'last_staff_message_at', 'updated_at'])
+
+        return redirect('agent:chat-thread', session_id=session.id)
+
+
+class ClinicAgentSwitchView(LoginRequiredMixin, View):
+    """Interruptor general del agente para toda la clínica."""
+
+    def post(self, request):
+        clinic = request.user.clinic
+        if clinic is None:
+            django_messages.error(request, 'Tu usuario no está asociado a ninguna clínica.')
+            return redirect('agent:chat-inbox')
+
+        clinic.agent_enabled = not clinic.agent_enabled
+        clinic.save(update_fields=['agent_enabled'])
+
+        if clinic.agent_enabled:
+            django_messages.success(request, 'Agente activado. Volverá a responder los chats de la clínica.')
+        else:
+            django_messages.success(
+                request,
+                'Agente desactivado. Ningún chat recibirá respuestas automáticas hasta que lo vuelvas a activar.',
+            )
+
+        # El destino viene del formulario, así que se comprueba que sea interno
+        # antes de redirigir: si no, sirve para mandar al usuario fuera del sitio.
+        next_url = request.POST.get('next') or ''
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+        ):
+            return redirect(next_url)
+        return redirect('agent:chat-inbox')

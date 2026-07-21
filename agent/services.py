@@ -10,6 +10,7 @@ from django.db.models import F
 from django.utils import timezone
 
 from agent.models import ChatMessage, ConversationSession
+from agent.whatsapp import WhatsAppError, send_text
 from patients.models import Patient
 from patients.services import normalize_phone_safe
 
@@ -119,6 +120,11 @@ def record_message(
         session.unread_count = F('unread_count') + 1
         session.last_interaction = now
         fields += ['unread_count', 'last_interaction']
+    elif sender == ChatMessage.Sender.STAFF:
+        # Abre la pausa temporal del agente: si contesta una persona, el bot se
+        # aparta hasta que pase el plazo de inactividad de la clínica.
+        session.last_staff_message_at = now
+        fields += ['last_staff_message_at']
 
     session.save(update_fields=fields + ['updated_at'])
     # Tras un F(), el atributo guarda la expresión y no el número: lo recargamos
@@ -134,3 +140,58 @@ def mark_session_read(session: ConversationSession) -> None:
         direction=ChatMessage.Direction.INBOUND, read_at__isnull=True
     ).update(read_at=now)
     ConversationSession.objects.filter(pk=session.pk).update(unread_count=0)
+
+
+def send_staff_message(*, session: ConversationSession, body: str) -> ChatMessage:
+    """Envía por WhatsApp un mensaje escrito por una persona y lo deja en el hilo.
+
+    Va directo a la Cloud API en lugar de pasar por n8n: si el bot está caído,
+    la clínica tiene que poder seguir hablando con sus pacientes.
+
+    El mensaje se registra siempre, salga o no. Si Meta lo rechaza queda como
+    `failed` con el motivo, para que en el panel se vea que no llegó en vez de
+    aparentar que sí.
+    """
+    body = (body or '').strip()
+    if not body:
+        raise ValueError('El mensaje no puede estar vacío.')
+
+    if session.clinic is None:
+        raise WhatsAppError('Esta conversación no está asociada a ninguna clínica.')
+
+    # Se comprueba antes de registrar nada: fuera de la ventana el envío es
+    # imposible, así que no tiene sentido dejar una burbuja fallida en el hilo.
+    if not session.can_send_free_text:
+        raise WhatsAppError(
+            'Han pasado más de 24 horas desde el último mensaje del paciente. '
+            'WhatsApp ya no permite responder con texto libre en esta conversación.'
+        )
+
+    message = record_message(
+        clinic=session.clinic,
+        session=session,
+        direction=ChatMessage.Direction.OUTBOUND,
+        sender=ChatMessage.Sender.STAFF,
+        body=body,
+        status=ChatMessage.Status.QUEUED,
+    )
+
+    # La llamada HTTP va fuera de la transacción de `record_message`: mantener
+    # abierta una transacción mientras se espera a un tercero es pedir bloqueos.
+    try:
+        wa_message_id = send_text(session.clinic, session.phone, body)
+    except WhatsAppError as exc:
+        ChatMessage.objects.filter(pk=message.pk).update(
+            status=ChatMessage.Status.FAILED, error_message=str(exc)
+        )
+        message.status = ChatMessage.Status.FAILED
+        message.error_message = str(exc)
+        raise
+
+    ChatMessage.objects.filter(pk=message.pk).update(
+        status=ChatMessage.Status.SENT,
+        wa_message_id=wa_message_id or None,
+        sent_at=timezone.now(),
+    )
+    message.refresh_from_db()
+    return message
