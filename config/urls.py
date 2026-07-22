@@ -18,7 +18,7 @@ from core.views import AgentConfigByPhoneView, AgentConfigView, ClinicViewSet, U
 from knowledge.views import ClinicInfoCacheViewSet, ClinicInfoQueryViewSet, ClinicKnowledgeBaseViewSet
 from notifications.views import ReminderViewSet
 from patients.views import PatientViewSet
-from services.views import ServiceViewSet
+from services.views import ServiceCategoryViewSet, ServiceViewSet
 
 router = DefaultRouter()
 
@@ -29,6 +29,7 @@ router.register(r'users', UserViewSet, basename='user')
 # Clinical data
 router.register(r'patients', PatientViewSet, basename='patient')
 router.register(r'services', ServiceViewSet, basename='service')
+router.register(r'service-categories', ServiceCategoryViewSet, basename='service-category')
 router.register(r'appointments', AppointmentViewSet, basename='appointment')
 router.register(r'professionals', ProfessionalViewSet, basename='professional')
 router.register(r'professional-schedules', ProfessionalScheduleViewSet, basename='professional-schedule')

@@ -249,7 +249,7 @@
             initialLabel,
             extraParams: { is_active: 'true' },
             format(service) {
-                return `${service.name} — ${service.duration_minutes} min · ${service.price}€`;
+                return `${service.name} — ${service.duration_display} · ${service.price_display}`;
             },
         });
     }

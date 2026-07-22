@@ -157,3 +157,71 @@ class TestServiceViewSetExport:
         ids = [s["id"] for s in response.data]
         assert service_a.pk in ids
         assert service_b.pk not in ids
+
+
+@pytest.mark.django_db
+class TestServiceVariableRangesAPI:
+    """La API aplica la misma regla del rango que el panel."""
+
+    def test_create_variable_service(self, admin_client, clinic_a):
+        data = {
+            "clinic": clinic_a.pk,
+            "name": "Limpieza",
+            "duration_minutes": 30,
+            "duration_type": "variable",
+            "duration_max_minutes": 60,
+            "price": "40.00",
+            "price_type": "variable",
+            "price_max": "80.00",
+        }
+        response = admin_client.post("/api/services/", data)
+
+        assert response.status_code == 201
+        assert response.data["duration_display"] == "30 – 60 min"
+        assert response.data["price_display"] == "40 – 80 €"
+        assert response.data["booking_duration_minutes"] == 60
+
+    def test_max_must_be_greater_than_min(self, admin_client, clinic_a):
+        data = {
+            "clinic": clinic_a.pk,
+            "name": "Rango inválido",
+            "duration_minutes": 30,
+            "duration_type": "variable",
+            "duration_max_minutes": 30,
+            "price": "40.00",
+            "price_type": "variable",
+            "price_max": "20.00",
+        }
+        response = admin_client.post("/api/services/", data)
+
+        assert response.status_code == 400
+        assert "price_max" in response.data
+        assert "duration_max_minutes" in response.data
+
+    def test_switching_to_fixed_clears_the_max(self, admin_client, clinic_a):
+        svc = Service.objects.create(
+            clinic=clinic_a,
+            name="Limpieza",
+            duration_minutes=30,
+            duration_type=Service.ValueType.VARIABLE,
+            duration_max_minutes=60,
+            price="40.00",
+            price_type=Service.ValueType.VARIABLE,
+            price_max="80.00",
+        )
+
+        response = admin_client.patch(
+            f"/api/services/{svc.pk}/", {"price_type": "fixed", "duration_type": "fixed"}
+        )
+
+        assert response.status_code == 200
+        svc.refresh_from_db()
+        assert svc.price_max is None
+        assert svc.duration_max_minutes is None
+
+    def test_fixed_service_keeps_its_display(self, admin_client, service_a):
+        response = admin_client.get(f"/api/services/{service_a.pk}/")
+
+        assert response.data["duration_display"] == "30 min"
+        assert response.data["price_display"] == "50 €"
+        assert response.data["booking_duration_minutes"] == 30

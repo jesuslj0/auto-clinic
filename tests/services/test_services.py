@@ -1,5 +1,6 @@
 """Tests for services app: models and API."""
 import pytest
+from django.core.exceptions import ValidationError as DjangoValidationError
 
 from services.models import Service
 
@@ -80,3 +81,67 @@ class TestServiceViewSet:
     def test_unauthenticated_denied(self, api_client):
         response = api_client.get("/api/services/")
         assert response.status_code in (401, 403)
+
+
+@pytest.mark.django_db
+class TestServiceVariableRanges:
+    """Precio y duración variables: qué se ocupa en agenda y cómo se lee."""
+
+    def _variable(self, clinic, **kwargs):
+        datos = dict(
+            clinic=clinic,
+            name="Limpieza",
+            duration_minutes=30,
+            duration_type=Service.ValueType.VARIABLE,
+            duration_max_minutes=60,
+            price="40.00",
+            price_type=Service.ValueType.VARIABLE,
+            price_max="80.00",
+        )
+        datos.update(kwargs)
+        return Service(**datos)
+
+    def test_booking_duration_es_el_maximo_si_es_variable(self, clinic_a):
+        assert self._variable(clinic_a).booking_duration_minutes == 60
+
+    def test_booking_duration_es_el_minimo_sin_maximo(self, clinic_a):
+        servicio = self._variable(clinic_a, duration_max_minutes=None)
+        assert servicio.booking_duration_minutes == 30
+
+    def test_booking_duration_de_un_servicio_fijo(self, service_a):
+        assert service_a.booking_duration_minutes == service_a.duration_minutes
+
+    def test_display_de_un_servicio_fijo(self, service_a):
+        assert service_a.duration_display == "30 min"
+        assert service_a.price_display == "50 €"
+
+    def test_display_de_un_rango(self, clinic_a):
+        servicio = self._variable(clinic_a)
+        assert servicio.duration_display == "30 – 60 min"
+        assert servicio.price_display == "40 – 80 €"
+
+    def test_display_sin_maximo_es_desde(self, clinic_a):
+        servicio = self._variable(clinic_a, duration_max_minutes=None, price_max=None)
+        assert servicio.duration_display == "Desde 30 min"
+        assert servicio.price_display == "Desde 40 €"
+
+    def test_el_maximo_debe_superar_al_minimo(self, clinic_a):
+        servicio = self._variable(clinic_a, duration_max_minutes=30, price_max="40.00")
+
+        with pytest.raises(DjangoValidationError) as exc:
+            servicio.clean()
+
+        assert set(exc.value.message_dict) == {"duration_max_minutes", "price_max"}
+
+    def test_un_valor_fijo_descarta_el_maximo(self, clinic_a):
+        """Cambiar de variable a fijo no puede dejar el máximo antiguo colgando."""
+        servicio = self._variable(
+            clinic_a,
+            duration_type=Service.ValueType.FIXED,
+            price_type=Service.ValueType.FIXED,
+        )
+
+        servicio.clean()
+
+        assert servicio.duration_max_minutes is None
+        assert servicio.price_max is None

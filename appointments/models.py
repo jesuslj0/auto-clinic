@@ -277,7 +277,7 @@ class Appointment(models.Model):
         if self.end_at:
             return self.end_at
         if self.service_id and self.service:
-            return self.scheduled_at + timedelta(minutes=self.service.duration_minutes)
+            return self.scheduled_at + timedelta(minutes=self.service.booking_duration_minutes)
         return self.scheduled_at + timedelta(minutes=DEFAULT_DURATION_MINUTES)
 
     @classmethod

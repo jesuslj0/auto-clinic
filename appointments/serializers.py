@@ -29,9 +29,24 @@ class UserMinimalSerializer(serializers.ModelSerializer):
 
 
 class ServiceMinimalSerializer(serializers.ModelSerializer):
+    price_display = serializers.ReadOnlyField()
+    duration_display = serializers.ReadOnlyField()
+
     class Meta:
         model = Service
-        fields = ['id', 'name', 'duration_minutes', 'price', 'is_active']
+        fields = [
+            'id',
+            'name',
+            'duration_minutes',
+            'duration_type',
+            'duration_max_minutes',
+            'duration_display',
+            'price',
+            'price_type',
+            'price_max',
+            'price_display',
+            'is_active',
+        ]
         read_only_fields = fields
 
 

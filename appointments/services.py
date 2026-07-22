@@ -368,7 +368,9 @@ def create_appointment(
       timezone de la clínica es responsabilidad de la capa que llama
       (serializer / form).
     - Si no se indica `end_at`, se calcula a partir de
-      `service.duration_minutes` (30 min por defecto si no hay servicio).
+      `service.booking_duration_minutes` (30 min por defecto si no hay servicio).
+      Ojo: en un servicio de duración variable esa propiedad devuelve el máximo
+      del rango, que es lo que la cita bloquea en la agenda.
     - Si no se indica `professional`, se auto-asigna el menos cargado que pueda
       atenderla. Si se indica, se valida con esos mismos criterios. En ninguno de
       los dos casos se crea una cita sin profesional: si no hay ninguno válido,
@@ -389,7 +391,7 @@ def create_appointment(
         (`clinic.hold_ttl_minutes`; 0 = sin caducidad).
     """
     if end_at is None:
-        duration = service.duration_minutes if service is not None else DEFAULT_DURATION_MINUTES
+        duration = service.booking_duration_minutes if service is not None else DEFAULT_DURATION_MINUTES
         end_at = scheduled_at + timedelta(minutes=duration)
 
     if status is None:
@@ -621,7 +623,7 @@ def validate_appointment_update(appointment, changes: dict, *, require_online_bo
     if 'end_at' in changes and changes['end_at']:
         end_at = changes['end_at']
     elif 'scheduled_at' in changes:
-        duracion = service.duration_minutes if service else DEFAULT_DURATION_MINUTES
+        duracion = service.booking_duration_minutes if service else DEFAULT_DURATION_MINUTES
         end_at = scheduled_at + timedelta(minutes=duracion)
     else:
         end_at = appointment.end_at or appointment.get_end_datetime()

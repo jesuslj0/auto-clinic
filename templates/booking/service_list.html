@@ -19,8 +19,8 @@
                         <p class="mt-2 text-sm leading-6 text-slate-500">{{ service.description|default:'Un servicio profesional de clínica con un flujo de reserva ágil.' }}</p>
                     </div>
                     <div class="rounded-2xl bg-slate-100 px-3 py-2 text-right text-sm font-semibold text-slate-700">
-                        ${{ service.price }}<br>
-                        <span class="text-xs font-medium text-slate-500">{{ service.duration_minutes }} min</span>
+                        {{ service.price_display }}<br>
+                        <span class="text-xs font-medium text-slate-500">{{ service.duration_display }}</span>
                     </div>
                 </div>
                 <div class="mt-6">

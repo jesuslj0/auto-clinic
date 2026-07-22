@@ -9,20 +9,38 @@ from core.authentication import ClinicAgent
 from core.mixins import ExportMixin
 from core.permissions import IsAgentClinicKey, IsStaffOrAdmin
 from services.forms import ServiceForm
-from services.models import Service
-from services.serializers import ServiceSerializer
+from services.models import Service, ServiceCategory
+from services.serializers import ServiceCategorySerializer, ServiceSerializer
+
+
+class ServiceCategoryViewSet(ExportMixin, viewsets.ModelViewSet):
+    serializer_class = ServiceCategorySerializer
+    permission_classes = [IsStaffOrAdmin | IsAgentClinicKey]
+    search_fields = ['name']
+    filterset_fields = ['clinic', 'is_active']
+    ordering_fields = ['name', 'created_at']
+    ordering = ['name']
+
+    def get_queryset(self):
+        queryset = ServiceCategory.objects.select_related('clinic')
+        user = self.request.user
+        if isinstance(user, ClinicAgent):
+            return queryset.filter(clinic=user.clinic)
+        if user.is_superuser or not user.clinic_id:
+            return queryset
+        return queryset.filter(clinic=user.clinic)
 
 
 class ServiceViewSet(ExportMixin, viewsets.ModelViewSet):
     serializer_class = ServiceSerializer
     permission_classes = [IsStaffOrAdmin | IsAgentClinicKey]
     search_fields = ['name', 'description']
-    filterset_fields = ['clinic', 'is_active']
+    filterset_fields = ['clinic', 'is_active', 'category']
     ordering_fields = ['name', 'price', 'duration_minutes', 'created_at']
     ordering = ['name']
 
     def get_queryset(self):
-        queryset = Service.objects.select_related('clinic')
+        queryset = Service.objects.select_related('clinic', 'category')
         user = self.request.user
         if isinstance(user, ClinicAgent):
             return queryset.filter(clinic=user.clinic)
@@ -40,10 +58,15 @@ class ServiceListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['section'] = 'services'
+        # Solo las categorías con servicios a la vista: el desplegable filtra lo
+        # que hay en pantalla, no el catálogo de categorías completo.
+        context['categories'] = (
+            ServiceCategory.objects.filter(services__in=self.object_list).distinct()
+        )
         return context
 
     def get_queryset(self):
-        queryset = Service.objects.select_related('clinic').order_by(*self.ordering)
+        queryset = Service.objects.select_related('clinic', 'category').order_by(*self.ordering)
         user = self.request.user
         if user.is_superuser or not user.clinic_id:
             return queryset
@@ -60,6 +83,11 @@ class ServiceCreateView(LoginRequiredMixin, CreateView):
         context = super().get_context_data(**kwargs)
         context['section'] = 'services'
         return context
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['clinic'] = self.request.user.clinic
+        return kwargs
 
     def dispatch(self, request, *args, **kwargs):
         if request.user.is_authenticated and not request.user.clinic_id:
@@ -85,11 +113,16 @@ class ServiceUpdateView(LoginRequiredMixin, UpdateView):
         return context
 
     def get_queryset(self):
-        queryset = Service.objects.select_related('clinic')
+        queryset = Service.objects.select_related('clinic', 'category')
         user = self.request.user
         if user.is_superuser or not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['clinic'] = self.object.clinic
+        return kwargs
 
     def form_valid(self, form):
         messages.success(self.request, 'Servicio actualizado correctamente.')

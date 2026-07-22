@@ -63,49 +63,180 @@
                 {% endif %}
             </div>
 
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                    <label for="{{ form.duration_minutes.id_for_label }}" class="mb-1.5 block text-sm font-medium text-slate-700">
-                        {{ form.duration_minutes.label }}
-                    </label>
-                    <div class="relative">
-                        <input
-                            type="number"
-                            name="{{ form.duration_minutes.html_name }}"
-                            id="{{ form.duration_minutes.id_for_label }}"
-                            value="{{ form.duration_minutes.value|default:'30' }}"
-                            min="1"
-                            step="5"
-                            class="block w-full rounded-xl border {% if form.duration_minutes.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 pr-12 text-sm text-slate-900 shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2"
-                        >
-                        <span class="pointer-events-none absolute inset-y-0 right-4 flex items-center text-xs text-slate-400">min</span>
+            <div>
+                <label for="{{ form.category_name.id_for_label }}" class="mb-1.5 block text-sm font-medium text-slate-700">
+                    {{ form.category_name.label }}
+                    <span class="ml-1 font-normal text-slate-400">(opcional)</span>
+                </label>
+                <input
+                    type="text"
+                    name="{{ form.category_name.html_name }}"
+                    id="{{ form.category_name.id_for_label }}"
+                    value="{{ form.category_name.value|default:'' }}"
+                    list="categorias-servicio"
+                    autocomplete="off"
+                    placeholder="Quiropodia, Biomecánica…"
+                    class="block w-full rounded-xl border {% if form.category_name.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2"
+                >
+                <datalist id="categorias-servicio">
+                    {% for categoria in form.category_suggestions %}
+                    <option value="{{ categoria.name }}"></option>
+                    {% endfor %}
+                </datalist>
+                <p class="mt-1.5 text-xs text-slate-500">Elige una de la lista o escribe una nueva para crearla.</p>
+                {% if form.category_name.errors %}
+                <p class="mt-1.5 text-xs text-red-600">{{ form.category_name.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            {# ── Duración: fija o rango ── #}
+            <div
+                x-data="{ tipo: '{{ form.duration_type.value|default:'fixed' }}' }"
+                class="rounded-2xl border border-slate-200 bg-slate-50/60 p-4"
+            >
+                <input type="hidden" name="{{ form.duration_type.html_name }}" :value="tipo">
+
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <span class="text-sm font-medium text-slate-700">Duración</span>
+                    <div class="flex items-center gap-1 rounded-xl bg-slate-200/70 p-1">
+                        <button
+                            type="button"
+                            @click="tipo = 'fixed'"
+                            :class="tipo === 'fixed' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'"
+                            class="rounded-lg px-3 py-1 text-xs font-medium transition"
+                        >Fija</button>
+                        <button
+                            type="button"
+                            @click="tipo = 'variable'"
+                            :class="tipo === 'variable' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'"
+                            class="rounded-lg px-3 py-1 text-xs font-medium transition"
+                        >Variable</button>
                     </div>
-                    {% if form.duration_minutes.errors %}
-                    <p class="mt-1.5 text-xs text-red-600">{{ form.duration_minutes.errors|join:", " }}</p>
-                    {% endif %}
                 </div>
 
-                <div>
-                    <label for="{{ form.price.id_for_label }}" class="mb-1.5 block text-sm font-medium text-slate-700">
-                        {{ form.price.label }}
-                    </label>
-                    <div class="relative">
-                        <span class="pointer-events-none absolute inset-y-0 left-4 flex items-center text-sm text-slate-400">€</span>
-                        <input
-                            type="number"
-                            name="{{ form.price.html_name }}"
-                            id="{{ form.price.id_for_label }}"
-                            value="{{ form.price.value|default:'' }}"
-                            min="0"
-                            step="0.01"
-                            placeholder="0.00"
-                            class="block w-full rounded-xl border {% if form.price.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white py-2.5 pl-8 pr-4 text-sm text-slate-900 shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2"
-                        >
+                <div class="mt-4 grid grid-cols-1 gap-4" :class="tipo === 'variable' && 'sm:grid-cols-2'">
+                    <div>
+                        <label for="{{ form.duration_minutes.id_for_label }}" class="mb-1.5 block text-xs font-medium text-slate-500">
+                            <span x-text="tipo === 'variable' ? 'Mínimo' : 'Minutos'"></span>
+                        </label>
+                        <div class="relative">
+                            <input
+                                type="number"
+                                name="{{ form.duration_minutes.html_name }}"
+                                id="{{ form.duration_minutes.id_for_label }}"
+                                value="{{ form.duration_minutes.value|default:'30' }}"
+                                min="1"
+                                step="5"
+                                class="block w-full rounded-xl border {% if form.duration_minutes.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 pr-12 text-sm text-slate-900 shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2"
+                            >
+                            <span class="pointer-events-none absolute inset-y-0 right-4 flex items-center text-xs text-slate-400">min</span>
+                        </div>
+                        {% if form.duration_minutes.errors %}
+                        <p class="mt-1.5 text-xs text-red-600">{{ form.duration_minutes.errors|join:", " }}</p>
+                        {% endif %}
                     </div>
-                    {% if form.price.errors %}
-                    <p class="mt-1.5 text-xs text-red-600">{{ form.price.errors|join:", " }}</p>
-                    {% endif %}
+
+                    <div x-show="tipo === 'variable'" x-cloak>
+                        <label for="{{ form.duration_max_minutes.id_for_label }}" class="mb-1.5 block text-xs font-medium text-slate-500">
+                            Máximo <span class="text-slate-400">(opcional)</span>
+                        </label>
+                        <div class="relative">
+                            <input
+                                type="number"
+                                name="{{ form.duration_max_minutes.html_name }}"
+                                id="{{ form.duration_max_minutes.id_for_label }}"
+                                value="{{ form.duration_max_minutes.value|default_if_none:'' }}"
+                                min="1"
+                                step="5"
+                                class="block w-full rounded-xl border {% if form.duration_max_minutes.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 pr-12 text-sm text-slate-900 shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2"
+                            >
+                            <span class="pointer-events-none absolute inset-y-0 right-4 flex items-center text-xs text-slate-400">min</span>
+                        </div>
+                        {% if form.duration_max_minutes.errors %}
+                        <p class="mt-1.5 text-xs text-red-600">{{ form.duration_max_minutes.errors|join:", " }}</p>
+                        {% endif %}
+                    </div>
                 </div>
+
+                <p class="mt-3 text-xs text-slate-500" x-show="tipo === 'variable'" x-cloak>
+                    La cita reserva el máximo en la agenda. Sin máximo se muestra como «desde».
+                </p>
+            </div>
+
+            {# ── Precio: fijo o rango ── #}
+            <div
+                x-data="{ tipo: '{{ form.price_type.value|default:'fixed' }}' }"
+                class="rounded-2xl border border-slate-200 bg-slate-50/60 p-4"
+            >
+                <input type="hidden" name="{{ form.price_type.html_name }}" :value="tipo">
+
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <span class="text-sm font-medium text-slate-700">Precio</span>
+                    <div class="flex items-center gap-1 rounded-xl bg-slate-200/70 p-1">
+                        <button
+                            type="button"
+                            @click="tipo = 'fixed'"
+                            :class="tipo === 'fixed' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'"
+                            class="rounded-lg px-3 py-1 text-xs font-medium transition"
+                        >Fijo</button>
+                        <button
+                            type="button"
+                            @click="tipo = 'variable'"
+                            :class="tipo === 'variable' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'"
+                            class="rounded-lg px-3 py-1 text-xs font-medium transition"
+                        >Variable</button>
+                    </div>
+                </div>
+
+                <div class="mt-4 grid grid-cols-1 gap-4" :class="tipo === 'variable' && 'sm:grid-cols-2'">
+                    <div>
+                        <label for="{{ form.price.id_for_label }}" class="mb-1.5 block text-xs font-medium text-slate-500">
+                            <span x-text="tipo === 'variable' ? 'Mínimo' : 'Importe'"></span>
+                        </label>
+                        <div class="relative">
+                            <span class="pointer-events-none absolute inset-y-0 left-4 flex items-center text-sm text-slate-400">€</span>
+                            <input
+                                type="number"
+                                name="{{ form.price.html_name }}"
+                                id="{{ form.price.id_for_label }}"
+                                value="{{ form.price.value|default:'' }}"
+                                min="0"
+                                step="0.01"
+                                placeholder="0.00"
+                                class="block w-full rounded-xl border {% if form.price.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white py-2.5 pl-8 pr-4 text-sm text-slate-900 shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2"
+                            >
+                        </div>
+                        {% if form.price.errors %}
+                        <p class="mt-1.5 text-xs text-red-600">{{ form.price.errors|join:", " }}</p>
+                        {% endif %}
+                    </div>
+
+                    <div x-show="tipo === 'variable'" x-cloak>
+                        <label for="{{ form.price_max.id_for_label }}" class="mb-1.5 block text-xs font-medium text-slate-500">
+                            Máximo <span class="text-slate-400">(opcional)</span>
+                        </label>
+                        <div class="relative">
+                            <span class="pointer-events-none absolute inset-y-0 left-4 flex items-center text-sm text-slate-400">€</span>
+                            <input
+                                type="number"
+                                name="{{ form.price_max.html_name }}"
+                                id="{{ form.price_max.id_for_label }}"
+                                value="{{ form.price_max.value|default_if_none:'' }}"
+                                min="0"
+                                step="0.01"
+                                placeholder="0.00"
+                                class="block w-full rounded-xl border {% if form.price_max.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white py-2.5 pl-8 pr-4 text-sm text-slate-900 shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2"
+                            >
+                        </div>
+                        {% if form.price_max.errors %}
+                        <p class="mt-1.5 text-xs text-red-600">{{ form.price_max.errors|join:", " }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <p class="mt-3 text-xs text-slate-500" x-show="tipo === 'variable'" x-cloak>
+                    Sin máximo, el servicio se muestra como «desde».
+                </p>
             </div>
 
             <div class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
