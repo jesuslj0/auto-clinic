@@ -33,6 +33,9 @@ class ConversationSessionSerializer(ClinicScopedSerializerMixin, serializers.Mod
             'last_message_at',
             'last_message_preview',
             'unread_count',
+            # Lo fija el panel al abrir el chat de pruebas. Si n8n pudiera
+            # escribirlo, un fallo suyo escondería hilos reales de la bandeja.
+            'is_test',
         )
 
     def validate(self, attrs):

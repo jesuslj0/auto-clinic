@@ -1,5 +1,3 @@
-import uuid
-
 from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
@@ -119,21 +117,17 @@ class WhatsAppIntegrationView(ClinicAdminRequiredMixin, View):
             messages.error(request, 'Tu usuario no está asociado a ninguna clínica.')
             return redirect('core:dashboard')
 
-        if request.POST.get('action') == 'rotate_api_key':
-            clinic.agent_api_key = uuid.uuid4()
-            clinic.save(update_fields=['agent_api_key'])
-            messages.success(
-                request,
-                'Se ha generado una nueva clave del agente. Actualízala en n8n para no perder la conexión.',
-            )
-            return redirect('core:clinic-integrations')
-
+        # La clave del agente no se toca desde aquí: la rota el equipo de la
+        # plataforma en el admin, que es quien mantiene el workflow de n8n.
         form = WhatsAppIntegrationForm(request.POST, instance=clinic)
         if form.is_valid():
             form.save()
             messages.success(request, 'Configuración del agente de WhatsApp guardada correctamente.')
             return redirect('core:clinic-integrations')
         return self._render(request, clinic, form)
+
+    # Mensajes del chat de pruebas que se precargan al abrir la página.
+    test_history_limit = 50
 
     def _render(self, request, clinic, form):
         is_connected = bool(
@@ -148,8 +142,32 @@ class WhatsAppIntegrationView(ClinicAdminRequiredMixin, View):
             'webhook_url': settings.WHATSAPP_WEBHOOK_URL,
             'has_token': bool(clinic.whatsapp_token),
             'is_connected': is_connected,
+            'test_messages': self._test_history(clinic),
         }
         return render(request, self.template_name, context)
+
+    def _test_history(self, clinic):
+        """Hilo de pruebas ya guardado, en el formato que pinta el chat del panel.
+
+        El chat es la única ventana a esta conversación —queda fuera de la
+        bandeja de chats—, así que se recupera al recargar en vez de empezar
+        siempre en blanco.
+        """
+        from agent.models import ChatMessage
+        from agent.services import get_test_session
+
+        session = get_test_session(clinic)
+        if session is None:
+            return []
+
+        recent = session.messages.order_by('-created_at')[:self.test_history_limit]
+        return [
+            {
+                'role': 'user' if message.sender == ChatMessage.Sender.PATIENT else 'agent',
+                'text': message.body,
+            }
+            for message in reversed(list(recent))
+        ]
 
 
 class AgentTestMessageView(ClinicAdminRequiredMixin, View):
@@ -171,7 +189,12 @@ class AgentTestMessageView(ClinicAdminRequiredMixin, View):
         from django.http import JsonResponse
 
         from agent.models import ChatMessage
-        from agent.services import get_or_create_session, mark_session_read, record_message
+        from agent.services import (
+            get_or_create_session,
+            mark_session_read,
+            record_message,
+            resolve_test_phone,
+        )
 
         clinic = request.user.clinic
         if clinic is None:
@@ -186,14 +209,11 @@ class AgentTestMessageView(ClinicAdminRequiredMixin, View):
         if not message:
             return JsonResponse({'error': 'El mensaje no puede estar vacío.'}, status=400)
 
-        # Simula ser el paciente de prueba de la clínica: usamos su teléfono para
-        # que el agente lo reconozca. Si no hay uno configurado, cae a 'panel-test'.
-        test_patient = clinic.test_patient
-        phone = (test_patient.phone if test_patient and test_patient.phone else '') or 'panel-test'
+        phone = resolve_test_phone(clinic)
 
         # El mensaje se registra ANTES de llamar a n8n: si el agente falla o
         # tarda, en el panel queda igualmente lo que se le preguntó.
-        session = get_or_create_session(clinic, phone)
+        session = get_or_create_session(clinic, phone, is_test=True)
         record_message(
             clinic=clinic,
             session=session,

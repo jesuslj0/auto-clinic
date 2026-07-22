@@ -91,6 +91,14 @@ class ConversationSession(models.Model):
     last_message_preview = models.CharField(max_length=280, blank=True)
     unread_count = models.PositiveIntegerField(default=0)
 
+    is_test = models.BooleanField(
+        default=False,
+        help_text=(
+            "Conversación del banco de pruebas del panel, no de un paciente "
+            "real. Se guarda igual, pero queda fuera de la bandeja de chats."
+        ),
+    )
+
     agent_paused = models.BooleanField(
         default=False,
         help_text=(

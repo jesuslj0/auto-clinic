@@ -22,7 +22,7 @@ class ConversationSessionAdmin(admin.ModelAdmin):
     list_display = (
         'phone', 'clinic', 'patient', 'unread_count', 'agent_paused', 'last_message_at'
     )
-    list_filter = ('clinic', 'agent_paused')
+    list_filter = ('clinic', 'agent_paused', 'is_test')
     search_fields = ('phone',)
     readonly_fields = ('last_message_at', 'last_message_preview', 'unread_count')
 

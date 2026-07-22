@@ -127,3 +127,52 @@ class TestAgentTestMessageHistory:
         response = _send(client, "   ")
         assert response.status_code == 400
         assert ChatMessage.objects.count() == 0
+
+
+@pytest.mark.django_db
+class TestTestThreadIsSeparateFromTheInbox:
+    """El cliente de prueba se guarda, pero no es un paciente de la clínica."""
+
+    def test_thread_is_flagged_as_test(self, client, admin_user, clinic_a):
+        client.force_login(admin_user)
+        with _n8n_replies('Hola'):
+            _send(client)
+        assert ConversationSession.objects.get(clinic=clinic_a).is_test is True
+
+    def test_thread_stays_out_of_the_chat_inbox(self, client, admin_user, clinic_a, patient_a):
+        """Ni en la lista de conversaciones ni en el contador de no leídos."""
+        clinic_a.test_patient = patient_a
+        clinic_a.save(update_fields=['test_patient'])
+        client.force_login(admin_user)
+        with _n8n_replies('Hola'):
+            _send(client)
+
+        response = client.get(reverse('agent:chat-inbox'))
+        assert list(response.context['sessions']) == []
+        assert response.context['total_unread'] == 0
+
+    def test_thread_cannot_be_opened_from_the_inbox(self, client, admin_user, clinic_a):
+        client.force_login(admin_user)
+        with _n8n_replies('Hola'):
+            _send(client)
+        session = ConversationSession.objects.get(clinic=clinic_a)
+
+        response = client.get(reverse('agent:chat-thread', args=[session.id]))
+        assert response.status_code == 404
+
+    def test_history_is_preloaded_in_the_settings_chat(self, client, admin_user):
+        """El chat de configuración es la única ventana a este hilo."""
+        client.force_login(admin_user)
+        with _n8n_replies(json.dumps({'reply': 'Sí, a las 10:00'})):
+            _send(client)
+
+        response = client.get(reverse('core:clinic-integrations'))
+        assert response.context['test_messages'] == [
+            {'role': 'user', 'text': '¿Tenéis hueco mañana?'},
+            {'role': 'agent', 'text': 'Sí, a las 10:00'},
+        ]
+
+    def test_settings_chat_starts_empty_without_history(self, client, admin_user):
+        client.force_login(admin_user)
+        response = client.get(reverse('core:clinic-integrations'))
+        assert response.context['test_messages'] == []

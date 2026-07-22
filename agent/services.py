@@ -33,19 +33,27 @@ def build_preview(message: ChatMessage) -> str:
     return _NON_TEXT_PREVIEW.get(message.message_type, '')
 
 
-def get_or_create_session(clinic, phone: str) -> ConversationSession:
+def get_or_create_session(clinic, phone: str, *, is_test: bool = False) -> ConversationSession:
     """Devuelve la conversación de ese número en esa clínica, creándola si hace falta.
 
     El teléfono se normaliza a E.164 con las mismas reglas que los pacientes,
     para que `+34600111222`, `600 111 222` y `0034600111222` caigan en el mismo
     hilo en vez de abrir tres.
+
+    `is_test` marca el hilo como banco de pruebas del panel. La marca solo se
+    pone, nunca se quita: si el número de prueba escribe luego por WhatsApp de
+    verdad, el hilo sigue siendo el de pruebas y no aparece en la bandeja.
     """
     normalized = normalize_phone_safe(phone) or phone.strip()
 
     session, created = ConversationSession.objects.get_or_create(
         clinic=clinic,
         phone=normalized,
+        defaults={'is_test': is_test},
     )
+    if is_test and not session.is_test:
+        session.is_test = True
+        session.save(update_fields=['is_test'])
 
     # Vinculamos con la ficha del paciente cuando el número coincide. Se
     # reintenta mientras no haya vínculo: el paciente puede darse de alta
@@ -131,6 +139,25 @@ def record_message(
     # para que quien reciba el mensaje pueda leer el contador.
     session.refresh_from_db(fields=['unread_count'])
     return message
+
+
+def resolve_test_phone(clinic) -> str:
+    """Teléfono con el que el panel simula ser el paciente de prueba.
+
+    Se usa el del paciente de prueba para que el agente lo reconozca; sin uno
+    configurado queda un literal que no colisiona con ningún número real.
+    """
+    test_patient = clinic.test_patient
+    return (test_patient.phone if test_patient and test_patient.phone else '') or 'panel-test'
+
+
+def get_test_session(clinic) -> ConversationSession | None:
+    """Hilo de pruebas de la clínica, si ya se ha usado el chat del panel."""
+    phone = resolve_test_phone(clinic)
+    normalized = normalize_phone_safe(phone) or phone.strip()
+    return ConversationSession.objects.filter(
+        clinic=clinic, phone=normalized, is_test=True
+    ).first()
 
 
 def mark_session_read(session: ConversationSession) -> None:

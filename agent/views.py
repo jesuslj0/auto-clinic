@@ -213,9 +213,12 @@ class ChatInboxView(LoginRequiredMixin, TemplateView):
         query = self.request.GET.get('q', '').strip()
         only_unread = self.request.GET.get('unread') == '1'
 
+        # El hilo del cliente de prueba vive en la configuración del agente:
+        # sus mensajes se guardan igual, pero no son conversaciones reales y
+        # ensucian la bandeja (y el contador de no leídos) de la clínica.
         sessions = scope_to_clinic(
             ConversationSession.objects.select_related('patient'), user
-        )
+        ).exclude(is_test=True)
         if query:
             sessions = sessions.filter(
                 Q(phone__icontains=query)
@@ -284,9 +287,11 @@ class ChatSessionActionMixin(LoginRequiredMixin):
     """Resuelve el hilo comprobando que sea de la clínica de quien lo pide."""
 
     def get_session(self, session_id):
+        # Mismo criterio que la bandeja: si el hilo de pruebas no se lista, sus
+        # acciones (enviar, pausar el agente) tampoco se atienden por URL suelta.
         sessions = scope_to_clinic(
             ConversationSession.objects.select_related('clinic'), self.request.user
-        )
+        ).exclude(is_test=True)
         return get_object_or_404(sessions, pk=session_id)
 
 
