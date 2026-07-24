@@ -165,6 +165,9 @@ class WhatsAppIntegrationView(ClinicAdminRequiredMixin, View):
             {
                 'role': 'user' if message.sender == ChatMessage.Sender.PATIENT else 'agent',
                 'text': message.body,
+                'time': timezone.localtime(
+                    message.sent_at or message.created_at
+                ).strftime('%H:%M'),
             }
             for message in reversed(list(recent))
         ]

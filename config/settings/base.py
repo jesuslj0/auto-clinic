@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     'billing',
     'knowledge',
     'agent',
+    'audit',
 ]
 
 MIDDLEWARE = [
@@ -46,6 +47,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # Después de AuthenticationMiddleware: necesita `request.user`.
+    'audit.middleware.AuditContextMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -178,6 +181,14 @@ WHATSAPP_TEST_WEBHOOK_URL = config(
     'WHATSAPP_TEST_WEBHOOK_URL',
     default='https://n8n.alt4ir.online/webhook/whatsapp-test',
 )
+
+# Qué hacer si no se puede escribir un registro de auditoría (app `audit`).
+#   fail_closed → se aborta la operación auditada. Es el valor por defecto:
+#     son datos de salud, y un cambio que después no se puede justificar es peor
+#     que una operación que falla ahora y se ve.
+#   fail_open   → la operación se completa y el fallo se anota en el logger
+#     `audit` a nivel CRITICAL. Válvula de escape para una incidencia.
+AUDIT_FAILURE_POLICY = config('AUDIT_FAILURE_POLICY', default='fail_closed')
 
 LOGGING = {
     'version': 1,

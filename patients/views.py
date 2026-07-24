@@ -9,6 +9,7 @@ from rest_framework import viewsets
 from django.urls import reverse_lazy
 
 from appointments.models import Appointment
+from audit.mixins import AccessLogMixin, AuditedViewSetMixin
 from core.authentication import ClinicAgent
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
 from core.permissions import IsAgentClinicKey, IsStaffOrAdmin
@@ -19,7 +20,9 @@ from patients.forms import PatientForm
 from patients.services import create_patient
 
 
-class PatientViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets.ModelViewSet):
+class PatientViewSet(
+    AuditedViewSetMixin, ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets.ModelViewSet
+):
     serializer_class = PatientSerializer
     permission_classes = [IsStaffOrAdmin | IsAgentClinicKey]
     search_fields = ["first_name", "last_name", "email", "phone"]
@@ -37,7 +40,7 @@ class PatientViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets.Mod
         return queryset.filter(clinic=user.clinic)
 
 
-class PatientListView(LoginRequiredMixin, ListView):
+class PatientListView(AccessLogMixin, LoginRequiredMixin, ListView):
     model = Patient
     template_name = 'patients/list.html'
     context_object_name = 'patients'
@@ -63,7 +66,7 @@ class PatientListView(LoginRequiredMixin, ListView):
         return queryset
 
 
-class PatientDetailView(LoginRequiredMixin, DetailView):
+class PatientDetailView(AccessLogMixin, LoginRequiredMixin, DetailView):
     model = Patient
     pk_url_kwarg = 'id'
     context_object_name = 'patient'

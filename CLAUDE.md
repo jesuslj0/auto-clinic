@@ -49,6 +49,25 @@ python manage.py runserver    # Uses config.settings.dev by default
 | `booking` | Template-only public booking flow (no models) |
 | `agent` | WhatsApp bot state: `AgentMemory` (contexto del LLM), `ConversationSession` (hilo), `ChatMessage` (historial append-only), `WorkflowError` |
 | `knowledge` | Clinic knowledge base: `ClinicKnowledgeBase`, `ClinicInfoQuery`, `ClinicInfoCache` |
+| `audit` | Append-only audit trail: `ChangeLog` (writes, via signals) and `AccessLog` (reads, instrumented per view) |
+
+### Auditing (mandatory for clinical data)
+
+The project stores health data: special category under GDPR art. 9, part of the
+medical record under Ley 41/2002. Two rules apply to every new piece of the
+clinical layer:
+
+- **Every clinical model must be registered in the audit trail**, from its
+  app's `AppConfig.ready()`: `audit.registry.register(Model, sensitive=[...])`.
+  Nothing is audited automatically. Clinical free text goes in `sensitive`, so
+  the log records *that* a field changed but never its value.
+- **Every view that exposes clinical data must instrument the read**, with
+  `AccessLogMixin` (CBV), `AuditedViewSetMixin` (DRF) or `log_access()`.
+  Reads emit no signals, so an uninstrumented view leaves no trace.
+
+Bulk ORM operations (`bulk_create`, `queryset.update()`, `queryset.delete()`)
+skip signals and are **not** audited — never use them on a registered model.
+See `audit/README.md`.
 
 ### Multi-tenancy
 

@@ -39,10 +39,13 @@
                input: '',
                loading: false,
                init() { this.$nextTick(() => this.scroll()); },
+               ahora() {
+                   return new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+               },
                async send(preset) {
                    const text = (preset || this.input).trim();
                    if (!text || this.loading) return;
-                   this.messages.push({ role: 'user', text: text });
+                   this.messages.push({ role: 'user', text: text, time: this.ahora() });
                    this.input = '';
                    this.loading = true;
                    this.$nextTick(() => this.scroll());
@@ -54,10 +57,10 @@
                        });
                        const data = await res.json();
                        this.messages.push(res.ok
-                           ? { role: 'agent', text: data.reply }
-                           : { role: 'error', text: data.error || 'Error al contactar con el agente.' });
+                           ? { role: 'agent', text: data.reply, time: this.ahora() }
+                           : { role: 'error', text: data.error || 'Error al contactar con el agente.', time: this.ahora() });
                    } catch (e) {
-                       this.messages.push({ role: 'error', text: 'No se pudo enviar el mensaje.' });
+                       this.messages.push({ role: 'error', text: 'No se pudo enviar el mensaje.', time: this.ahora() });
                    } finally {
                        this.loading = false;
                        this.$nextTick(() => this.scroll());
@@ -102,13 +105,19 @@
 
                 <template x-for="(m, i) in messages" :key="i">
                     <div :class="m.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
-                        <div x-text="m.text"
-                             :class="{
-                                 'bg-brand-gradient text-white': m.role === 'user',
-                                 'bg-white text-slate-700 ring-1 ring-white/70': m.role === 'agent',
-                                 'bg-rose-50 text-rose-700 ring-1 ring-rose-200': m.role === 'error'
+                        <div :class="{
+                                 'bg-brand-gradient text-white chat-bubble-out rounded-tr-sm': m.role === 'user',
+                                 'bg-white text-slate-700 ring-1 ring-white/70 chat-bubble-in rounded-tl-sm': m.role === 'agent',
+                                 'bg-rose-50 text-rose-700 ring-1 ring-rose-200 chat-bubble-in rounded-tl-sm': m.role === 'error'
                              }"
-                             class="max-w-[80%] whitespace-pre-line rounded-2xl px-3.5 py-2 text-sm shadow-sm"></div>
+                             {# El pico no puede heredar el degradado: toma el tono del gradiente a la altura de la esquina #}
+                             :style="m.role === 'user' ? '--bubble-tail: #b25aca' : (m.role === 'error' ? '--bubble-tail: #fff1f2' : '--bubble-tail: #ffffff')"
+                             class="chat-bubble max-w-[80%] rounded-2xl px-3.5 py-2 text-sm shadow-sm">
+                            <p class="whitespace-pre-line" x-text="m.text"></p>
+                            <p class="mt-1 text-right text-[11px]"
+                               :class="m.role === 'user' ? 'text-white/70' : 'text-slate-400'"
+                               x-text="m.time"></p>
+                        </div>
                     </div>
                 </template>
 

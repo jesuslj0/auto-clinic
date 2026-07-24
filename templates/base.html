@@ -114,6 +114,29 @@
         /* Títulos con la tipografía display de la marca */
         h1, h2, h3, h4 { font-family: '"Space Grotesk"', 'Space Grotesk', 'Inter', sans-serif; }
 
+        /* Burbujas de chat con pico tipo bocadillo, en la esquina superior.
+           Cada burbuja fija su color en --bubble-tail; si no, hereda el fondo. */
+        .chat-bubble { position: relative; }
+        .chat-bubble::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            width: 7px;
+            height: 10px;
+            background: var(--bubble-tail, inherit);
+        }
+        /* Recibidos: pico arriba a la izquierda. El -6px con 7px de ancho deja
+           1px de solape para que no se vea costura por el antialiasing. */
+        .chat-bubble-in::before {
+            left: -6px;
+            clip-path: polygon(0 0, 100% 0, 100% 100%);
+        }
+        /* Enviados: el mismo pico reflejado, arriba a la derecha */
+        .chat-bubble-out::before {
+            right: -6px;
+            clip-path: polygon(0 0, 100% 0, 0 100%);
+        }
+
         .sidebar-enter {
             transform: translateX(-100%);
         }

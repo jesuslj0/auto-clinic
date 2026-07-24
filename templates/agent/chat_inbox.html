@@ -201,10 +201,11 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
                 {% endifchanged %}
 
                 <div class="flex {% if message.direction == 'inbound' %}justify-start{% else %}justify-end{% endif %}">
-                    <div class="max-w-[85%] rounded-2xl px-4 py-2.5 shadow-sm sm:max-w-[70%]
-                        {% if message.direction == 'inbound' %}rounded-tl-sm bg-white text-slate-800 ring-1 ring-white/70
-                        {% elif message.sender == 'staff' %}rounded-tr-sm bg-tertiary-600 text-white
-                        {% else %}rounded-tr-sm bg-brand-600 text-white{% endif %}">
+                    <div class="chat-bubble max-w-[85%] rounded-2xl px-4 py-2.5 shadow-sm sm:max-w-[70%]
+                        {% if message.direction == 'inbound' %}chat-bubble-in rounded-tl-sm bg-white text-slate-800 ring-1 ring-white/70
+                        {% elif message.sender == 'staff' %}chat-bubble-out rounded-tr-sm bg-tertiary-600 text-white
+                        {% else %}chat-bubble-out rounded-tr-sm bg-brand-600 text-white{% endif %}"
+                        style="--bubble-tail: {% if message.direction == 'inbound' %}#ffffff{% elif message.sender == 'staff' %}#4c1d95{% else %}#7c3aed{% endif %}">
 
                         {% if message.sender == 'staff' or message.sender == 'agent' %}
                         <p class="mb-1 text-xs font-semibold {% if message.sender == 'staff' %}text-accent-100{% else %}text-brand-100{% endif %}">
