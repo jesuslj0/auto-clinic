@@ -50,6 +50,8 @@ python manage.py runserver    # Uses config.settings.dev by default
 | `agent` | WhatsApp bot state: `AgentMemory` (contexto del LLM), `ConversationSession` (hilo), `ChatMessage` (historial append-only), `WorkflowError` |
 | `knowledge` | Clinic knowledge base: `ClinicKnowledgeBase`, `ClinicInfoQuery`, `ClinicInfoCache` |
 | `audit` | Append-only audit trail: `ChangeLog` (writes, via signals) and `AccessLog` (reads, instrumented per view) |
+| `clinical` | Clinical core: `MedicalHistory`, `Episode`, `Visit`, `ClinicalNote` (SOAP), `Addendum`. Immutable after signing; soft-delete only |
+| `core.models.SoftDeleteModel` | Reusable soft-delete mixin (`deleted_at`, `objects`/`all_objects`, `can_be_deleted()`) |
 
 ### Auditing (mandatory for clinical data)
 
@@ -68,6 +70,26 @@ clinical layer:
 Bulk ORM operations (`bulk_create`, `queryset.update()`, `queryset.delete()`)
 skip signals and are **not** audited — never use them on a registered model.
 See `audit/README.md`.
+
+### Clinical layer (`clinical`)
+
+The clinical core (`MedicalHistory`, `Episode`, `Visit`, `ClinicalNote`,
+`Addendum`) is the most legally-sensitive part of the project. Rules for anyone
+touching it — see `clinical/README.md` for the full picture:
+
+- **Immutable after signing.** A signed `ClinicalNote` accepts no content
+  `UPDATE` and no `DELETE`, ever — enforced both in `save()`/`can_be_deleted()`
+  and by a PostgreSQL trigger (`clinical/migrations/0002`). The only possible
+  change is adding an `Addendum` (append-only). Never weaken this.
+- **Nothing is physically deleted.** Every model uses `SoftDeleteModel`; deletion
+  is logical and cascades manually (`delete()` overrides). `Addendum` is
+  append-only.
+- **Off-limits to the n8n token.** This layer has **no REST API** on purpose, so
+  the agent's `Api-Key` cannot reach clinical data. `Visit` links *to*
+  `Appointment`, never the reverse. **Any new endpoint over this layer must
+  instrument `AccessLog` and stay denied to the agent.**
+- **Retention is not fixed in code.** `CLINICAL_RETENTION_YEARS` is a setting with
+  a conservative default; there is no automatic purge (pending autonomic law).
 
 ### Multi-tenancy
 

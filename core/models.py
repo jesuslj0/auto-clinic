@@ -3,6 +3,13 @@ import uuid
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
+
+from core.managers import (
+    AllObjectsManager,
+    ProtectedRecordError,
+    SoftDeleteManager,
+)
 
 
 class TimeStampedModel(models.Model):
@@ -11,6 +18,75 @@ class TimeStampedModel(models.Model):
 
     class Meta:
         abstract = True
+
+
+class SoftDeleteModel(models.Model):
+    """Base abstracta para modelos que se borran lógicamente.
+
+    En este proyecto hay datos que no se borran físicamente jamás (historia
+    clínica: Ley 41/2002, RGPD art. 9). Este mixin, reutilizable por cualquier
+    capa clínica futura, implementa el borrado lógico:
+
+    - `deleted_at` es la ÚNICA fuente de verdad; `is_deleted` es property (no un
+      campo booleano que pueda desincronizarse).
+    - `objects` excluye los borrados; `all_objects` los incluye y es el
+      `base_manager`, para que Django y las señales de `audit` nunca pierdan de
+      vista una fila borrada.
+    - `delete()` de instancia hace borrado lógico salvo que `can_be_deleted()`
+      lo vete, y entonces lanza `ProtectedRecordError` (un veto NO se degrada a
+      borrado lógico).
+    - `can_be_deleted()` es el gancho de política que cada modelo sobreescribe.
+
+    Django NO cascadea el borrado lógico: cada modelo con hijos que deban
+    seguirle debe recorrerlos en su propio `delete()`.
+    """
+
+    deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    objects = SoftDeleteManager()
+    all_objects = AllObjectsManager()
+
+    class Meta:
+        abstract = True
+        base_manager_name = 'all_objects'
+        default_manager_name = 'objects'
+
+    @property
+    def is_deleted(self) -> bool:
+        return self.deleted_at is not None
+
+    def can_be_deleted(self) -> bool:
+        """Gancho de política. `True` por defecto; los modelos lo restringen."""
+        return True
+
+    def _soft_delete_update_fields(self):
+        # `updated_at` solo existe si el modelo hereda de TimeStampedModel; con
+        # update_fields Django no refresca los auto_now por su cuenta, hay que
+        # nombrarlos. Se añade solo si el campo existe.
+        fields = ['deleted_at']
+        if any(f.name == 'updated_at' for f in self._meta.fields):
+            fields.append('updated_at')
+        return fields
+
+    def delete(self, using=None, keep_parents=False):
+        """Borrado lógico. Un veto NO se degrada: lanza excepción."""
+        if not self.can_be_deleted():
+            raise ProtectedRecordError(
+                f'{type(self).__name__}(pk={self.pk}) no se puede borrar.'
+            )
+        if self.deleted_at is None:
+            self.deleted_at = timezone.now()
+            self.save(update_fields=self._soft_delete_update_fields())
+
+    def restore(self):
+        """Deshace un borrado lógico."""
+        if self.deleted_at is not None:
+            self.deleted_at = None
+            self.save(update_fields=self._soft_delete_update_fields())
+
+    def hard_delete(self, using=None, keep_parents=False):
+        """Borrado físico real. Sin uso en la capa clínica; reservado a la purga."""
+        return super().delete(using=using, keep_parents=keep_parents)
 
 
 class Clinic(models.Model):

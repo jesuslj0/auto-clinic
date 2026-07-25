@@ -10,6 +10,7 @@ from rest_framework.test import APIClient
 
 from appointments.models import Appointment, Professional, ProfessionalSchedule
 from billing.models import Subscription
+from clinical.models import ClinicalNote, Episode, Visit
 from core.models import Clinic, User
 from notifications.models import Reminder
 from patients.models import Patient
@@ -217,6 +218,41 @@ def appointment_b(db, clinic_b, patient_b, service_b):
         scheduled_at=now,
         end_at=now + timedelta(minutes=60),
         status=Appointment.Status.PENDING,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Clinical layer fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def history_a(db, patient_a):
+    """Historia clínica de patient_a (creada automáticamente al alta)."""
+    return patient_a.medical_history
+
+
+@pytest.fixture
+def episode_a(db, history_a, professional_a):
+    return Episode.objects.create(
+        history=history_a,
+        reason="Dolor en el talón derecho",
+        responsible_professional=professional_a,
+    )
+
+
+@pytest.fixture
+def visit_a(db, episode_a, professional_a):
+    return Visit.objects.create(episode=episode_a, professional=professional_a)
+
+
+@pytest.fixture
+def draft_note_a(db, visit_a):
+    return ClinicalNote.objects.create(
+        visit=visit_a,
+        subjective="Refiere dolor al caminar",
+        objective="Hiperqueratosis en zona de apoyo",
+        assessment="Callosidad plantar",
+        plan="Deslaminado y revisión en 4 semanas",
     )
 
 

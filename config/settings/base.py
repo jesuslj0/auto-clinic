@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'knowledge',
     'agent',
     'audit',
+    'clinical',
 ]
 
 MIDDLEWARE = [
@@ -189,6 +190,13 @@ WHATSAPP_TEST_WEBHOOK_URL = config(
 #   fail_open   → la operación se completa y el fallo se anota en el logger
 #     `audit` a nivel CRITICAL. Válvula de escape para una incidencia.
 AUDIT_FAILURE_POLICY = config('AUDIT_FAILURE_POLICY', default='fail_closed')
+
+# Plazo de conservación de la historia clínica, en AÑOS, contado desde el alta
+# del episodio. Valor por defecto conservador (por encima del mínimo legal de 5
+# años de la Ley 41/2002 art. 17); el aplicable depende de la normativa
+# autonómica, pendiente de confirmar. Es solo andamiaje de cálculo: no hay purga
+# automática. Ver `clinical/conf.py` y el README de la app `clinical`.
+CLINICAL_RETENTION_YEARS = config('CLINICAL_RETENTION_YEARS', default=15, cast=int)
 
 LOGGING = {
     'version': 1,
