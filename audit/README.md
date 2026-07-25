@@ -242,29 +242,45 @@ en la configuración de la base de datos. Está sin decidir.
 
 ## Integridad referencial
 
-Los FK `user` y `patient` de ambos registros son `SET_NULL` y llevan
-`db_constraint=False`. Lo segundo tiene un motivo concreto: en un borrado en
-cascada, el `post_delete` de un hijo se emite mientras el padre todavía existe,
-de modo que el registro de esa baja puede apuntar a un usuario o a un paciente
-que morirán unas filas más tarde en la misma transacción. Con la restricción
-activa, escribir la auditoría haría fallar el borrado entero.
+Los FK `user`, `patient` y `content_type` de ambos registros son `DO_NOTHING` y
+llevan `db_constraint=False`. Al borrar un usuario, un paciente o un ContentType
+**no se emite ningún `UPDATE`** sobre las tablas de auditoría: el FK queda
+apuntando a un id que ya no existe, y la identidad legible sobrevive en los
+campos denormalizados (`user_repr`, `object_repr`, `model_label`).
 
-La consecuencia es que un log puede quedar apuntando a un id que ya no existe.
-Es aceptable —y previsto— porque `user_repr` y `object_repr` conservan la
-identidad legible. Es la misma razón por la que esos campos existen.
+Ese `DO_NOTHING` no es cosmético: es lo que hace compatible la inmutabilidad a
+nivel de base de datos (ver más abajo) con el borrado de las entidades
+referenciadas. Un `SET_NULL` obligaría a Django a lanzar un
+`UPDATE ... SET user_id = NULL` al dar de baja al usuario, y el trigger de
+inmutabilidad —que rechaza **todo** `UPDATE`— tumbaría el borrado entero.
 
-Ningún modelo debe apuntar a estas tablas con `on_delete=CASCADE`.
+Que un log apunte a un id difunto es aceptable y previsto: para eso existen los
+campos `*_repr`. Ningún modelo debe apuntar a estas tablas con
+`on_delete=CASCADE`.
 
-La inmutabilidad que ofrece la app es la del ORM. Frente a SQL crudo o acceso
-directo a la base de datos no protege nada: para eso hacen falta permisos del
-rol de PostgreSQL o un trigger `BEFORE UPDATE OR DELETE`. **Pendiente.**
+## Inmutabilidad — tres capas
+
+1. **ORM** (`AppendOnlyModel`, `managers.py`): `update()`, `delete()`,
+   `bulk_update()` y el `save()` de una instancia persistida lanzan
+   `AuditLogImmutable`.
+2. **Trigger de PostgreSQL** (`migración 0002`,
+   `audit_prevent_modification()`): un `BEFORE UPDATE OR DELETE` sobre las dos
+   tablas. Un `UPDATE` falla **siempre**, incluso con la válvula puesta. Un
+   `DELETE` falla salvo que la transacción traiga
+   `SET LOCAL audit.purga = 'on'`, que es la única forma legítima de borrar y la
+   pone en exclusiva el comando de purga.
+3. **Rol de PostgreSQL** — pendiente: revocar `UPDATE`/`DELETE` sobre estas
+   tablas al rol de la aplicación cerraría la última rendija (un `SET audit.purga`
+   ejecutado a mano fuera del comando). El trigger ya cubre el grueso.
+
+El trigger no sabe nada de plazos de retención: distingue únicamente «purga
+autorizada sí/no». El «qué se puede borrar» vive en el comando.
 
 ---
 
-## Retención — pendiente de fijar
+## Retención y purga
 
-No hay política de retención implementada y **hay que decidirla**. Los plazos no
-son libres:
+Los plazos no son libres:
 
 - La Ley 41/2002 (art. 17) obliga a conservar la historia clínica un mínimo de
   **5 años** desde el alta de cada proceso asistencial; varias comunidades
@@ -272,10 +288,28 @@ son libres:
 - El RGPD exige lo contrario para lo que ya no haga falta: limitación del plazo
   de conservación (art. 5.1.e).
 
-Los dos registros no tienen por qué compartir plazo: `AccessLog` crece mucho más
-rápido y su valor probatorio decae antes que el de `ChangeLog`. Cuando se
-decida, la purga debe ser un comando de gestión explícito y auditado, no un
-`queryset.delete()` —que además aquí lanza excepción a propósito—.
+Los plazos por defecto (`audit/conf.py`, en días) no coinciden entre los dos
+registros: `AccessLog` crece mucho más rápido y su valor probatorio decae antes
+que el de `ChangeLog`.
+
+- `AUDIT_RETENTION_DAYS` — override por tipo: `{'change': N, 'access': M}`.
+- `AUDIT_RETENTION_DAYS_BY_CLINIC` — override por clínica (resuelto a través de
+  `patient.clinic`): `{clinic_id: {'change': N, 'access': M}}`. Las filas sin
+  paciente caen siempre bajo el plazo por defecto de su tipo.
+
+La purga es un comando de gestión explícito y auditado, **nunca** un
+`queryset.delete()` (que aquí lanza excepción a propósito):
+
+```bash
+python manage.py purge_audit_logs --dry-run   # informa sin borrar
+python manage.py purge_audit_logs             # borra dentro de una transacción
+```
+
+El comando abre una transacción, pone `SET LOCAL audit.purga = 'on'`, borra en
+SQL crudo las filas fuera de plazo y deja un **meta-log** (`ChangeLog` de tipo
+baja) con el número de filas eliminadas y su rango temporal, para que el hueco en
+la línea temporal nunca sea silencioso. La válvula muere al cerrar la
+transacción: fuera de esa ventana, cualquier `DELETE` vuelve a estar bloqueado.
 
 ---
 
@@ -287,7 +321,11 @@ En `tests/audit/`, siguiendo la convención del repo (`pytest.ini` solo recoge
 - `test_change_log.py` — alta/modificación/baja, diff, enmascarado de campos
   sensibles, modelos no registrados, orígenes y política de fallo.
 - `test_access_log.py` — mixins de CBV y de viewset, y la función de bajo nivel.
-- `test_immutability.py` — las cuatro vías de modificación, todas cerradas.
+- `test_immutability.py` — las cuatro vías de modificación del ORM, cerradas.
+- `test_db_immutability.py` — el trigger de PostgreSQL: UPDATE/DELETE en SQL
+  crudo, la válvula de purga y que no persiste tras su transacción.
+- `test_purge.py` — el comando `purge_audit_logs`: dry-run, borrado por
+  retención y el meta-log de cada purga.
 - `test_context.py` — aislamiento del contexto entre peticiones y usuarios.
 
 ```bash

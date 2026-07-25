@@ -39,25 +39,34 @@ class Origin(models.TextChoices):
 class BaseLog(AppendOnlyModel):
     """Campos comunes a los dos registros.
 
-    Todos los FK son `SET_NULL`: dar de baja a un usuario o borrar un paciente
-    no puede llevarse por delante la prueba de lo que pasó. Por eso mismo cada
-    FK va acompañado de su campo denormalizado (`user_repr`, `object_repr`), que
-    conserva la identidad legible del momento del evento.
+    Todos los FK son `DO_NOTHING` + `db_constraint=False`: dar de baja a un
+    usuario o borrar un paciente no puede llevarse por delante la prueba de lo
+    que pasó, ni tocar su fila de auditoría. Por eso cada FK va acompañado de su
+    campo denormalizado (`user_repr`, `object_repr`), que conserva la identidad
+    legible del momento del evento.
 
-    Van además con `db_constraint=False`. No es una licencia: en un borrado en
-    cascada, el `post_delete` de un hijo se emite mientras el padre todavía
-    existe, así que el registro de esa baja puede apuntar legítimamente a un
-    usuario o un paciente que morirán unas filas después, en la misma
-    transacción. Con la restricción activa, escribir la auditoría haría fallar
-    el borrado entero. El log manda sobre la integridad referencial: para eso
-    están los campos denormalizados.
+    El motivo de `DO_NOTHING` es la inmutabilidad a nivel de base de datos. El
+    log es de solo inserción también bajo el ORM: el trigger
+    `audit_prevent_modification` rechaza CUALQUIER `UPDATE` sobre estas tablas.
+    Un `on_delete=SET_NULL` obligaría a Django a emitir un
+    `UPDATE ... SET user_id = NULL` al borrar el usuario, que el trigger
+    bloquearía, tumbando el borrado entero. Con `DO_NOTHING` no se emite ese
+    `UPDATE`: al morir el usuario o el paciente, el FK queda apuntando a un id
+    que ya no existe, y la identidad la conserva el campo `*_repr`. Un log que
+    apunta a un id difunto es aceptable y previsto; un log que se puede reescribir
+    no prueba nada.
+
+    `db_constraint=False` es lo que hace que ese id colgado no reviente por
+    integridad referencial: sin restricción en la base de datos, la columna
+    simplemente guarda el entero huérfano. Ningún modelo debe apuntar a estas
+    tablas con `on_delete=CASCADE`.
     """
 
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
+        on_delete=models.DO_NOTHING,
         null=True,
         blank=True,
         related_name='+',
@@ -75,7 +84,7 @@ class BaseLog(AppendOnlyModel):
 
     patient = models.ForeignKey(
         'patients.Patient',
-        on_delete=models.SET_NULL,
+        on_delete=models.DO_NOTHING,
         null=True,
         blank=True,
         related_name='+',
@@ -101,8 +110,13 @@ class ChangeLog(BaseLog):
         UPDATE = 'update', 'Modificación'
         DELETE = 'delete', 'Baja'
 
+    # DO_NOTHING + db_constraint=False por el mismo motivo que `user` y
+    # `patient`: borrar un ContentType no debe emitir un UPDATE sobre esta tabla,
+    # que el trigger de inmutabilidad rechazaría. `model_label` conserva la
+    # etiqueta legible aunque el ContentType desaparezca.
     content_type = models.ForeignKey(
-        ContentType, on_delete=models.SET_NULL, null=True, blank=True, related_name='+'
+        ContentType, on_delete=models.DO_NOTHING, null=True, blank=True,
+        related_name='+', db_constraint=False,
     )
     # CharField y no entero: en este proyecto conviven PKs enteras (Patient) y
     # UUID (Appointment).
@@ -160,8 +174,10 @@ class AccessLog(BaseLog):
         DOWNLOAD_ATTACHMENT = 'download_attachment', 'Descargar adjunto'
 
     # Nulos en los listados: una búsqueda no apunta a un objeto concreto.
+    # DO_NOTHING + db_constraint=False: ver la nota en `ChangeLog.content_type`.
     content_type = models.ForeignKey(
-        ContentType, on_delete=models.SET_NULL, null=True, blank=True, related_name='+'
+        ContentType, on_delete=models.DO_NOTHING, null=True, blank=True,
+        related_name='+', db_constraint=False,
     )
     object_id = models.CharField(max_length=255, blank=True, db_index=True)
     content_object = GenericForeignKey('content_type', 'object_id')

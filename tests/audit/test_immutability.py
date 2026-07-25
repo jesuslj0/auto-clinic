@@ -81,7 +81,15 @@ class TestAccessLogIsAppendOnly:
 
 @pytest.mark.django_db
 class TestUserDeletionKeepsTheLog:
-    def test_deleting_the_user_nulls_the_fk_but_keeps_the_identity(self, admin_user, clinic_a):
+    def test_deleting_the_user_keeps_the_dangling_id_and_the_identity(self, admin_user, clinic_a):
+        """Borrar al usuario no toca su fila de auditoría.
+
+        Los FK de los logs son `DO_NOTHING`: al morir el usuario, Django NO
+        emite el `UPDATE ... SET user_id = NULL` (que el trigger de
+        inmutabilidad rechazaría de todos modos). El FK queda apuntando a un id
+        que ya no existe —permitido por `db_constraint=False`— y la identidad
+        legible sobrevive en `user_repr`.
+        """
         from audit.context import audit_context
 
         with audit_context(user=admin_user):
@@ -92,10 +100,13 @@ class TestUserDeletionKeepsTheLog:
         log = ChangeLog.objects.filter(object_repr="Huella Persistente").get()
         assert log.user_id == admin_user.pk
 
+        user_pk = admin_user.pk
         admin_user.delete()
 
         log.refresh_from_db()
-        assert log.user_id is None
+        # El id sigue ahí, ahora huérfano: el log no se reescribe ni al borrar
+        # a quien lo generó.
+        assert log.user_id == user_pk
         assert log.user_repr == 'Admin Alpha <admin@alpha.test>'
 
 
