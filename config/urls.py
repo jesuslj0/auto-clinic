@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.http import HttpResponse
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.authtoken.views import obtain_auth_token
@@ -48,6 +49,12 @@ router.register(r'agent/sessions', ConversationSessionViewSet, basename='agent-s
 router.register(r'agent/messages', ChatMessageViewSet, basename='agent-message')
 
 urlpatterns = [
+    # Liveness probe para el healthcheck de Docker/Coolify. A propósito no toca
+    # la base de datos: sólo dice que Daphne acepta peticiones y que Django
+    # arrancó (es decir, que las migraciones del `command` no reventaron). Si
+    # consultara Postgres, un parpadeo de la base tumbaría el contenedor.
+    path('healthz/', lambda request: HttpResponse('ok', content_type='text/plain'), name='healthz'),
+
     # Django admin
     path('admin/', admin.site.urls),
 

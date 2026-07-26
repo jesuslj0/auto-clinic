@@ -24,11 +24,30 @@ services:
       retries: 5
 
   web:
+    # Única imagen del proyecto: celery y celery-beat la reutilizan en lugar de
+    # construir la suya. Sin esto, cada despliegue construía el mismo Dockerfile
+    # tres veces.
     build: .
+    image: auto-clinic:latest
     restart: unless-stopped
     command: >
       bash -c "python manage.py migrate --noinput &&
                daphne -b 0.0.0.0 -p 8000 config.asgi:application"
+    healthcheck:
+      # El Host se toma de ALLOWED_HOSTS porque Django rechaza con 400 cualquier
+      # cabecera que no esté en la lista, y 127.0.0.1 no lo está en producción.
+      test:
+        - CMD-SHELL
+        - >
+          python -c "import os, sys, urllib.request;
+          host = os.environ.get('ALLOWED_HOSTS', 'localhost').split(',')[0].strip();
+          req = urllib.request.Request('http://127.0.0.1:8000/healthz/', headers={'Host': host});
+          sys.exit(0 if urllib.request.urlopen(req, timeout=5).status == 200 else 1)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # Margen para que corran las migraciones antes de empezar a contar fallos
+      start_period: 90s
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
       SECRET_KEY: ${SECRET_KEY}
@@ -56,6 +75,12 @@ services:
   nginx:
     build: ./nginx
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/nginx-health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     volumes:
       - media_files:/app/media:ro
     networks:
@@ -69,10 +94,14 @@ services:
       - traefik.http.routers.autoclinic-web.tls.certresolver=letsencrypt
       - traefik.http.services.autoclinic-web.loadbalancer.server.port=80
     depends_on:
-      - web
+      # service_healthy y no service_started: si nginx abre antes de que las
+      # migraciones terminen, Traefik enruta tráfico a un backend que devuelve 502.
+      web:
+        condition: service_healthy
 
   celery:
-    build: .
+    # Reutiliza la imagen que construye `web`; sin `build` para no repetirla.
+    image: auto-clinic:latest
     restart: unless-stopped
     command: celery -A config worker -l info
     environment:
@@ -96,7 +125,7 @@ services:
         condition: service_healthy
 
   celery-beat:
-    build: .
+    image: auto-clinic:latest
     restart: unless-stopped
     command: celery -A config beat -l info
     environment:

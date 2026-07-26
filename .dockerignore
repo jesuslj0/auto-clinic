@@ -1,0 +1,47 @@
+# Todo lo que no necesita la imagen. Reduce el contexto que se envía al daemon
+# y, sobre todo, evita que cambios irrelevantes invaliden la caché de capas en
+# cada despliegue.
+
+# Entornos virtuales (255 MB en local; nunca deben acabar en la imagen)
+venv/
+.venv/
+env/
+
+# Control de versiones y metadatos
+.git/
+.gitignore
+.github/
+
+# Bytecode y cachés
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Secretos y configuración local
+.env
+.env.*
+
+# Datos locales: en producción son volúmenes, no contenido de la imagen
+media/
+staticfiles/
+celerybeat-schedule
+*.sqlite3
+
+# Herramientas del editor
+.vscode/
+.idea/
+.claude/
+
+# Documentación y material que no interviene en el build. Los tests sí se
+# copian: permiten lanzar pytest dentro del contenedor si hace falta.
+*.md
+*.pdf
+pyrightconfig.json
+
+# Compose: la imagen no se construye a sí misma
+docker-compose*.yml
+Dockerfile
+.dockerignore
