@@ -26,7 +26,7 @@ class ServiceCategoryViewSet(ExportMixin, viewsets.ModelViewSet):
         user = self.request.user
         if isinstance(user, ClinicAgent):
             return queryset.filter(clinic=user.clinic)
-        if user.is_superuser or not user.clinic_id:
+        if not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
 
@@ -44,7 +44,7 @@ class ServiceViewSet(ExportMixin, viewsets.ModelViewSet):
         user = self.request.user
         if isinstance(user, ClinicAgent):
             return queryset.filter(clinic=user.clinic)
-        if user.is_superuser or not user.clinic_id:
+        if not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
 
@@ -68,7 +68,7 @@ class ServiceListView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         queryset = Service.objects.select_related('clinic', 'category').order_by(*self.ordering)
         user = self.request.user
-        if user.is_superuser or not user.clinic_id:
+        if not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
 
@@ -115,7 +115,7 @@ class ServiceUpdateView(LoginRequiredMixin, UpdateView):
     def get_queryset(self):
         queryset = Service.objects.select_related('clinic', 'category')
         user = self.request.user
-        if user.is_superuser or not user.clinic_id:
+        if not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
 

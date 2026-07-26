@@ -29,7 +29,10 @@ class ProfessionalForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.request_user = request_user
 
-        if not request_user or request_user.is_superuser:
+        # Alcance de plataforma (todas las clínicas) solo sin usuario de contexto
+        # o para un superusuario SIN clínica. Un superusuario con clínica queda
+        # acotado a ella igual que el staff.
+        if request_user is None or (request_user.is_superuser and not request_user.clinic_id):
             self.fields['user'].queryset = User.objects.order_by('first_name', 'last_name', 'email')
             self.fields['services'].queryset = Service.objects.order_by('name')
             return
@@ -50,7 +53,7 @@ class ProfessionalForm(forms.ModelForm):
 
     def clean_user(self):
         user = self.cleaned_data['user']
-        if self.request_user and not self.request_user.is_superuser and self.request_user.clinic_id:
+        if self.request_user and self.request_user.clinic_id:
             if user.clinic_id != self.request_user.clinic_id:
                 raise forms.ValidationError('El usuario seleccionado no pertenece a tu clínica.')
         return user

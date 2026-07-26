@@ -27,12 +27,13 @@ from core.permissions import IsAgentClinicKey, IsClinicAdminOrReadOnly, IsStaffO
 def scope_to_clinic(queryset, user):
     """Restringe un queryset a la clínica del solicitante.
 
-    El agente de n8n ve solo la suya. El staff, la suya. Superusuarios y
-    usuarios sin clínica asignada ven todo.
+    El agente de n8n ve solo la suya. El staff, la suya. Un superusuario con
+    clínica asignada queda acotado a ella igual que el staff; solo los usuarios
+    SIN clínica (el equipo de plataforma) ven todo.
     """
     if isinstance(user, ClinicAgent):
         return queryset.filter(clinic=user.clinic)
-    if user.is_superuser or not user.clinic_id:
+    if not user.clinic_id:
         return queryset
     return queryset.filter(clinic=user.clinic)
 

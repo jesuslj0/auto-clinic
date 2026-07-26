@@ -79,7 +79,7 @@ class AppointmentViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets
         user = self.request.user
         if isinstance(user, ClinicAgent):
             return queryset.filter(clinic=user.clinic)
-        if user.is_superuser or not user.clinic_id:
+        if not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
 
@@ -229,7 +229,7 @@ class ProfessionalViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if isinstance(user, ClinicAgent):
             return queryset.filter(clinic=user.clinic)
-        if user.is_superuser or not user.clinic_id:
+        if not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
 
@@ -334,7 +334,7 @@ class ProfessionalScheduleViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if isinstance(user, ClinicAgent):
             return queryset.filter(professional__clinic=user.clinic)
-        if user.is_superuser or not user.clinic_id:
+        if not user.clinic_id:
             return queryset
         return queryset.filter(professional__clinic=user.clinic)
 
@@ -365,13 +365,13 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
             # Vista personal: solo sus citas y su horario
             appointments_qs = appointments_qs.filter(professional=professional)
             schedules_qs = schedules_qs.filter(professional=professional)
-        elif user.is_superuser:
-            # Superusuario: ve todas las clínicas
-            pass
         elif user.clinic_id:
-            # Admin de clínica: toda la clínica
+            # Admin de clínica (o superusuario con clínica): toda su clínica
             appointments_qs = appointments_qs.filter(clinic=user.clinic)
             schedules_qs = schedules_qs.filter(professional__clinic=user.clinic)
+        elif user.is_superuser:
+            # Superusuario de plataforma (sin clínica): ve todas las clínicas
+            pass
         else:
             # Usuario autenticado sin clínica ni perfil: no ve nada de otras clínicas
             appointments_qs = appointments_qs.none()
@@ -523,12 +523,13 @@ class AppointmentListView(LoginRequiredMixin, TemplateView):
         appointments = Appointment.objects.select_related('patient', 'service', 'professional__user')
 
         # Aislamiento multitenant: cada usuario solo ve las citas de su clínica.
+        # Un superusuario con clínica asignada queda acotado a ella; solo el
+        # superusuario SIN clínica (equipo de plataforma) ve todas.
         user = self.request.user
-        if not user.is_superuser:
-            if user.clinic_id:
-                appointments = appointments.filter(clinic=user.clinic)
-            else:
-                appointments = appointments.none()
+        if user.clinic_id:
+            appointments = appointments.filter(clinic=user.clinic)
+        elif not user.is_superuser:
+            appointments = appointments.none()
 
         # Por defecto (sin `date` en la query string) mostramos las citas de
         # hoy. Si el usuario limpia el campo de fecha a propósito, `date`
@@ -740,7 +741,7 @@ class ProfessionalListView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         queryset = Professional.objects.select_related('user', 'clinic').prefetch_related('services').order_by(*self.ordering)
         user = self.request.user
-        if user.is_superuser or not user.clinic_id:
+        if not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
 
@@ -768,10 +769,10 @@ class ProfessionalCreateView(LoginRequiredMixin, CreateView):
         return kwargs
 
     def form_valid(self, form):
-        if self.request.user.is_superuser:
-            form.instance.clinic = form.cleaned_data['user'].clinic
-        else:
+        if self.request.user.clinic_id:
             form.instance.clinic = self.request.user.clinic
+        else:
+            form.instance.clinic = form.cleaned_data['user'].clinic
         messages.success(self.request, 'Profesional creado correctamente.')
         return super().form_valid(form)
 
@@ -816,7 +817,7 @@ class ProfessionalUpdateView(LoginRequiredMixin, UpdateView):
     def get_queryset(self):
         queryset = Professional.objects.select_related('user', 'clinic').prefetch_related('services')
         user = self.request.user
-        if user.is_superuser or not user.clinic_id:
+        if not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
 
@@ -854,10 +855,10 @@ class ProfessionalUpdateView(LoginRequiredMixin, UpdateView):
         return context
 
     def form_valid(self, form):
-        if self.request.user.is_superuser:
-            form.instance.clinic = form.cleaned_data['user'].clinic
-        else:
+        if self.request.user.clinic_id:
             form.instance.clinic = self.request.user.clinic
+        else:
+            form.instance.clinic = form.cleaned_data['user'].clinic
 
         formsets = self._build_formsets(self.request.POST)
         if not all(fs.is_valid() for fs in formsets.values()):

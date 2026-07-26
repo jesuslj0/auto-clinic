@@ -9,8 +9,9 @@ class ClinicScopedSerializerMixin:
     """Aislamiento multitenant en ESCRITURA.
 
     Un usuario con clínica asignada (o un `ClinicAgent`) siempre opera sobre la
-    suya, aunque el payload traiga otro `clinic`. Solo el superusuario (o un
-    usuario sin clínica) puede fijar la clínica libremente desde el payload.
+    suya, aunque el payload traiga otro `clinic` — y un superusuario con clínica
+    asignada queda acotado igual. Solo un usuario SIN clínica (el equipo de
+    plataforma) puede fijar la clínica libremente desde el payload.
 
     Se aplica en el serializer —no en `perform_create` del viewset— porque los
     bulk endpoints (`bulk-create`/`bulk-update` de `core.mixins`) llaman a
@@ -32,7 +33,7 @@ class ClinicScopedSerializerMixin:
             return None
         if isinstance(user, ClinicAgent):
             return user.clinic
-        if not user.is_superuser and getattr(user, 'clinic_id', None):
+        if getattr(user, 'clinic_id', None):
             return user.clinic
         return None
 

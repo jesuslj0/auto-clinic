@@ -60,7 +60,7 @@ class UserViewSet(ExportMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         queryset = User.objects.select_related('clinic', 'professional_profile')
-        if user.is_superuser or not user.clinic_id:
+        if not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
 
@@ -300,7 +300,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         today = timezone.localdate()
         appointments = Appointment.objects.select_related('patient', 'service').order_by('scheduled_at')
         user = self.request.user
-        if not user.is_superuser and user.clinic_id:
+        if user.clinic_id:
             appointments = appointments.filter(clinic=user.clinic)
 
         today_schedule = appointments.filter(scheduled_at__date=today)
@@ -314,7 +314,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
         # Nuevos pacientes registrados este mes (scopeados por clínica)
         patients_qs = Patient.objects.all()
-        if not user.is_superuser and user.clinic_id:
+        if user.clinic_id:
             patients_qs = patients_qs.filter(clinic=user.clinic)
         new_patients_month = patients_qs.filter(created_at__date__gte=month_start).count()
 
@@ -361,7 +361,7 @@ class SearchView(LoginRequiredMixin, TemplateView):
             patients = Patient.objects.all()
             appointments = Appointment.objects.select_related('patient', 'service', 'professional__user')
 
-            if not user.is_superuser and user.clinic_id:
+            if user.clinic_id:
                 patients = patients.filter(clinic=user.clinic)
                 appointments = appointments.filter(clinic=user.clinic)
 
@@ -397,10 +397,13 @@ class DashboardAppointmentActionView(LoginRequiredMixin, View):
         appointment = get_object_or_404(Appointment, pk=appointment_id)
 
         user = request.user
-        if not user.is_superuser:
-            if not user.clinic_id or appointment.clinic_id != user.clinic_id:
-                messages.error(request, 'No tienes permiso para gestionar esta cita.')
-                return redirect('core:dashboard')
+        # Un superusuario con clínica queda acotado a ella; solo el superusuario
+        # sin clínica (equipo de plataforma) puede gestionar cualquier cita.
+        if (user.clinic_id and appointment.clinic_id != user.clinic_id) or (
+            not user.clinic_id and not user.is_superuser
+        ):
+            messages.error(request, 'No tienes permiso para gestionar esta cita.')
+            return redirect('core:dashboard')
 
         action = request.POST.get('action')
         actor_label = user.get_full_name() or user.email
@@ -478,7 +481,7 @@ class DashboardAppointmentManageView(LoginRequiredMixin, TemplateView):
         )
 
         user = self.request.user
-        if not user.is_superuser and (not user.clinic_id or appointment.clinic_id != user.clinic_id):
+        if (user.clinic_id and appointment.clinic_id != user.clinic_id) or (not user.clinic_id and not user.is_superuser):
             raise PermissionDenied('No tienes permiso para gestionar esta cita.')
 
         return appointment
@@ -494,7 +497,7 @@ class AppointmentQuickDetailView(LoginRequiredMixin, View):
             pk=appointment_id,
         )
         user = request.user
-        if not user.is_superuser and (not user.clinic_id or appointment.clinic_id != user.clinic_id):
+        if (user.clinic_id and appointment.clinic_id != user.clinic_id) or (not user.clinic_id and not user.is_superuser):
             raise PermissionDenied
         from django.http import HttpResponse
         html = render_to_string(

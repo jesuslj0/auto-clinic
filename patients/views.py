@@ -35,7 +35,7 @@ class PatientViewSet(
         user = self.request.user
         if isinstance(user, ClinicAgent):
             return queryset.filter(clinic=user.clinic)
-        if user.is_superuser or not user.clinic_id:
+        if not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
 
@@ -54,7 +54,7 @@ class PatientListView(AccessLogMixin, LoginRequiredMixin, ListView):
         query = self.request.GET.get('q', '').strip()
         user = self.request.user
         queryset = Patient.objects.annotate(appointment_count=Count('appointments')).prefetch_related('appointments')
-        if not (user.is_superuser or not user.clinic_id):
+        if user.clinic_id:
             queryset = queryset.filter(clinic=user.clinic)
         if query:
             queryset = queryset.filter(
@@ -81,7 +81,7 @@ class PatientDetailView(AccessLogMixin, LoginRequiredMixin, DetailView):
         user = self.request.user
         appointment_queryset = Appointment.objects.select_related('service', 'professional__user').order_by('-scheduled_at')
         queryset = Patient.objects.prefetch_related(Prefetch('appointments', queryset=appointment_queryset))
-        if user.is_superuser or not user.clinic_id:
+        if not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
 
@@ -134,7 +134,7 @@ class PatientEditView(LoginRequiredMixin, UpdateView):
     def get_queryset(self):
         user = self.request.user
         queryset = Patient.objects.select_related('clinic')
-        if user.is_superuser or not user.clinic_id:
+        if not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
     

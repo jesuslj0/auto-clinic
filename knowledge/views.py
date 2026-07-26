@@ -98,7 +98,7 @@ class ClinicKnowledgeBaseViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, 
         user = self.request.user
         if isinstance(user, ClinicAgent):
             return queryset.filter(clinic=user.clinic)
-        if user.is_superuser or not user.clinic_id:
+        if not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
 
@@ -116,7 +116,7 @@ class ClinicInfoQueryViewSet(ExportMixin, BulkCreateMixin, viewsets.ModelViewSet
         user = self.request.user
         if isinstance(user, ClinicAgent):
             return queryset.filter(clinic=user.clinic)
-        if user.is_superuser or not user.clinic_id:
+        if not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
 
@@ -134,6 +134,6 @@ class ClinicInfoCacheViewSet(ExportMixin, viewsets.ModelViewSet):
         user = self.request.user
         if isinstance(user, ClinicAgent):
             return queryset.filter(clinic=user.clinic)
-        if user.is_superuser or not user.clinic_id:
+        if not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
