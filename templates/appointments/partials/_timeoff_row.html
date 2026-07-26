@@ -1,28 +1,28 @@
 {# Una fila del formset de ausencias. Recibe `form` (un subform o el empty_form). #}
-<div class="formset-row rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
+<div class="formset-row rounded-2xl bg-muted p-4 ring-1 ring-line">
     {{ form.id }}
     <div class="hidden">{{ form.DELETE }}</div>
 
     <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
-            <label class="mb-1 block text-xs font-medium text-slate-500">Desde</label>
+            <label class="mb-1 block text-xs font-medium text-content-subtle">Desde</label>
             {{ form.starts_at }}
         </div>
         <div>
-            <label class="mb-1 block text-xs font-medium text-slate-500">Hasta</label>
+            <label class="mb-1 block text-xs font-medium text-content-subtle">Hasta</label>
             {{ form.ends_at }}
         </div>
         <div>
-            <label class="mb-1 block text-xs font-medium text-slate-500">Motivo</label>
+            <label class="mb-1 block text-xs font-medium text-content-subtle">Motivo</label>
             {{ form.reason }}
         </div>
         <div class="flex items-end gap-3">
             <div class="flex-1">
-                <label class="mb-1 block text-xs font-medium text-slate-500">Nota</label>
+                <label class="mb-1 block text-xs font-medium text-content-subtle">Nota</label>
                 {{ form.note }}
             </div>
             <button type="button" data-formset-remove
-                class="mb-1 text-slate-400 transition hover:text-red-600" title="Eliminar ausencia">
+                class="mb-1 text-content-faint transition hover:text-danger" title="Eliminar ausencia">
                 <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -30,8 +30,8 @@
         </div>
     </div>
 
-    {% for error in form.non_field_errors %}<p class="mt-2 text-xs text-red-600">{{ error }}</p>{% endfor %}
+    {% for error in form.non_field_errors %}<p class="mt-2 text-xs text-danger">{{ error }}</p>{% endfor %}
     {% for field in form.visible_fields %}
-        {% for error in field.errors %}<p class="mt-1 text-xs text-red-600">{{ field.label }}: {{ error }}</p>{% endfor %}
+        {% for error in field.errors %}<p class="mt-1 text-xs text-danger">{{ field.label }}: {{ error }}</p>{% endfor %}
     {% endfor %}
 </div>

@@ -5,66 +5,66 @@
 
 {% block content %}
 <div class="mx-auto max-w-2xl">
-    <div class="rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
+    <div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
 
-        <div class="border-b border-slate-200 px-4 py-6 sm:px-8">
-            <h2 class="text-lg font-semibold text-slate-900">Datos de la clínica</h2>
-            <p class="mt-1 text-sm text-slate-500">Actualiza la información de tu clínica.</p>
+        <div class="border-b border-line px-4 py-6 sm:px-8">
+            <h2 class="text-lg font-semibold text-content">Datos de la clínica</h2>
+            <p class="mt-1 text-sm text-content-subtle">Actualiza la información de tu clínica.</p>
         </div>
 
         <form method="post" enctype="multipart/form-data" novalidate class="px-4 py-7 sm:px-8 space-y-6">
             {% csrf_token %}
 
             {% if form.non_field_errors %}
-            <div class="rounded-xl bg-red-50 px-4 py-3 ring-1 ring-red-200">
+            <div class="rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line">
                 {% for error in form.non_field_errors %}
-                <p class="text-sm text-red-700">{{ error }}</p>
+                <p class="text-sm text-danger">{{ error }}</p>
                 {% endfor %}
             </div>
             {% endif %}
 
             {# ── Datos básicos ── #}
             <div class="space-y-4">
-                <h3 class="text-xs font-semibold uppercase tracking-widest text-slate-400">Datos básicos</h3>
+                <h3 class="text-xs font-semibold uppercase tracking-widest text-content-faint">Datos básicos</h3>
 
                 <div>
-                    <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">{{ form.name.label }}</label>
+                    <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">{{ form.name.label }}</label>
                     <input
                         type="text"
                         name="{{ form.name.html_name }}"
                         id="{{ form.name.id_for_label }}"
                         value="{{ form.name.value|default:'' }}"
-                        class="block w-full rounded-xl border {% if form.name.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                        class="block w-full rounded-xl border {% if form.name.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
                     >
-                    {% if form.name.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.name.errors|join:", " }}</p>{% endif %}
+                    {% if form.name.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.name.errors|join:", " }}</p>{% endif %}
                 </div>
 
                 <div>
-                    <label for="{{ form.timezone.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">{{ form.timezone.label }}</label>
+                    <label for="{{ form.timezone.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">{{ form.timezone.label }}</label>
                     <select
                         name="{{ form.timezone.html_name }}"
                         id="{{ form.timezone.id_for_label }}"
-                        class="block w-full rounded-xl border {% if form.timezone.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                        class="block w-full rounded-xl border {% if form.timezone.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
                     >
                         {% for value, label in form.timezone.field.choices %}
                         <option value="{{ value }}" {% if form.timezone.value == value %}selected{% endif %}>{{ label }}</option>
                         {% endfor %}
                     </select>
-                    {% if form.timezone.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.timezone.errors|join:", " }}</p>{% endif %}
+                    {% if form.timezone.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.timezone.errors|join:", " }}</p>{% endif %}
                 </div>
 
                 <div>
-                    <label for="{{ form.description.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">
+                    <label for="{{ form.description.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">
                         {{ form.description.label }}
-                        <span class="ml-1 font-normal text-slate-400">(opcional)</span>
+                        <span class="ml-1 font-normal text-content-faint">(opcional)</span>
                     </label>
                     <textarea
                         name="{{ form.description.html_name }}"
                         id="{{ form.description.id_for_label }}"
                         rows="3"
-                        class="block w-full resize-none rounded-xl border {% if form.description.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                        class="block w-full resize-none rounded-xl border {% if form.description.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
                     >{{ form.description.value|default:'' }}</textarea>
-                    {% if form.description.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.description.errors|join:", " }}</p>{% endif %}
+                    {% if form.description.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.description.errors|join:", " }}</p>{% endif %}
                 </div>
 
                 {# Logo #}
@@ -75,29 +75,29 @@
                         if (file) this.preview = URL.createObjectURL(file);
                     }
                 }">
-                    <label class="block text-sm font-medium text-slate-700 mb-1.5">
+                    <label class="block text-sm font-medium text-content-muted mb-1.5">
                         {{ form.logo.label }}
-                        <span class="ml-1 font-normal text-slate-400">(opcional)</span>
+                        <span class="ml-1 font-normal text-content-faint">(opcional)</span>
                     </label>
                     <div class="flex items-center gap-4">
                         {# Thumbnail #}
-                        <div class="flex-shrink-0 h-20 w-20 rounded-2xl bg-slate-100 ring-1 ring-slate-200 overflow-hidden flex items-center justify-center">
+                        <div class="flex-shrink-0 h-20 w-20 rounded-2xl bg-muted-strong ring-1 ring-line overflow-hidden flex items-center justify-center">
                             <template x-if="preview">
                                 <img :src="preview" class="h-full w-full object-contain p-1" alt="Logo">
                             </template>
                             <template x-if="!preview">
-                                <svg class="h-8 w-8 text-slate-300" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <svg class="h-8 w-8 text-content-faint" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
                                 </svg>
                             </template>
                         </div>
                         {# Input zona de clic #}
-                        <label for="{{ form.logo.id_for_label }}" class="flex-1 cursor-pointer rounded-xl border-2 border-dashed {% if form.logo.errors %}border-red-400{% else %}border-slate-300 hover:border-brand-400{% endif %} bg-white px-4 py-4 text-center transition">
-                            <svg class="mx-auto h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <label for="{{ form.logo.id_for_label }}" class="flex-1 cursor-pointer rounded-xl border-2 border-dashed {% if form.logo.errors %}border-danger{% else %}border-line-strong hover:border-brand-400{% endif %} bg-surface px-4 py-4 text-center transition">
+                            <svg class="mx-auto h-6 w-6 text-content-faint" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
                             </svg>
-                            <p class="mt-1 text-sm text-slate-500">Haz clic para seleccionar imagen</p>
-                            <p class="mt-0.5 text-xs text-slate-400">PNG, JPG, SVG, WEBP</p>
+                            <p class="mt-1 text-sm text-content-subtle">Haz clic para seleccionar imagen</p>
+                            <p class="mt-0.5 text-xs text-content-faint">PNG, JPG, SVG, WEBP</p>
                             <input
                                 type="file"
                                 name="{{ form.logo.html_name }}"
@@ -108,134 +108,134 @@
                             >
                         </label>
                     </div>
-                    {% if form.logo.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.logo.errors|join:", " }}</p>{% endif %}
+                    {% if form.logo.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.logo.errors|join:", " }}</p>{% endif %}
                 </div>
             </div>
 
             {# ── Contacto ── #}
             <div class="space-y-4">
-                <h3 class="text-xs font-semibold uppercase tracking-widest text-slate-400">Contacto</h3>
+                <h3 class="text-xs font-semibold uppercase tracking-widest text-content-faint">Contacto</h3>
                 <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
-                        <label for="{{ form.phone.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">{{ form.phone.label }}</label>
+                        <label for="{{ form.phone.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">{{ form.phone.label }}</label>
                         <input
                             type="text"
                             name="{{ form.phone.html_name }}"
                             id="{{ form.phone.id_for_label }}"
                             value="{{ form.phone.value|default:'' }}"
-                            class="block w-full rounded-xl border {% if form.phone.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                            class="block w-full rounded-xl border {% if form.phone.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
                         >
-                        {% if form.phone.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.phone.errors|join:", " }}</p>{% endif %}
+                        {% if form.phone.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.phone.errors|join:", " }}</p>{% endif %}
                     </div>
                     <div>
-                        <label for="{{ form.email.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">{{ form.email.label }}</label>
+                        <label for="{{ form.email.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">{{ form.email.label }}</label>
                         <input
                             type="email"
                             name="{{ form.email.html_name }}"
                             id="{{ form.email.id_for_label }}"
                             value="{{ form.email.value|default:'' }}"
-                            class="block w-full rounded-xl border {% if form.email.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                            class="block w-full rounded-xl border {% if form.email.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
                         >
-                        {% if form.email.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.email.errors|join:", " }}</p>{% endif %}
+                        {% if form.email.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.email.errors|join:", " }}</p>{% endif %}
                     </div>
                 </div>
                 <div>
-                    <label for="{{ form.website.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">{{ form.website.label }}</label>
+                    <label for="{{ form.website.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">{{ form.website.label }}</label>
                     <input
                         type="url"
                         name="{{ form.website.html_name }}"
                         id="{{ form.website.id_for_label }}"
                         value="{{ form.website.value|default:'' }}"
                         placeholder="https://..."
-                        class="block w-full rounded-xl border {% if form.website.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                        class="block w-full rounded-xl border {% if form.website.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
                     >
-                    {% if form.website.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.website.errors|join:", " }}</p>{% endif %}
+                    {% if form.website.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.website.errors|join:", " }}</p>{% endif %}
                 </div>
             </div>
 
             {# ── Dirección ── #}
             <div class="space-y-4">
-                <h3 class="text-xs font-semibold uppercase tracking-widest text-slate-400">Dirección</h3>
+                <h3 class="text-xs font-semibold uppercase tracking-widest text-content-faint">Dirección</h3>
 
                 <div>
-                    <label for="{{ form.address.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">{{ form.address.label }}</label>
+                    <label for="{{ form.address.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">{{ form.address.label }}</label>
                     <input
                         type="text"
                         name="{{ form.address.html_name }}"
                         id="{{ form.address.id_for_label }}"
                         value="{{ form.address.value|default:'' }}"
-                        class="block w-full rounded-xl border {% if form.address.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                        class="block w-full rounded-xl border {% if form.address.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
                     >
-                    {% if form.address.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.address.errors|join:", " }}</p>{% endif %}
+                    {% if form.address.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.address.errors|join:", " }}</p>{% endif %}
                 </div>
 
                 <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <div>
-                        <label for="{{ form.city.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">{{ form.city.label }}</label>
+                        <label for="{{ form.city.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">{{ form.city.label }}</label>
                         <input
                             type="text"
                             name="{{ form.city.html_name }}"
                             id="{{ form.city.id_for_label }}"
                             value="{{ form.city.value|default:'' }}"
-                            class="block w-full rounded-xl border {% if form.city.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                            class="block w-full rounded-xl border {% if form.city.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
                         >
-                        {% if form.city.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.city.errors|join:", " }}</p>{% endif %}
+                        {% if form.city.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.city.errors|join:", " }}</p>{% endif %}
                     </div>
                     <div>
-                        <label for="{{ form.province.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">{{ form.province.label }}</label>
+                        <label for="{{ form.province.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">{{ form.province.label }}</label>
                         <input
                             type="text"
                             name="{{ form.province.html_name }}"
                             id="{{ form.province.id_for_label }}"
                             value="{{ form.province.value|default:'' }}"
-                            class="block w-full rounded-xl border {% if form.province.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                            class="block w-full rounded-xl border {% if form.province.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
                         >
-                        {% if form.province.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.province.errors|join:", " }}</p>{% endif %}
+                        {% if form.province.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.province.errors|join:", " }}</p>{% endif %}
                     </div>
                     <div>
-                        <label for="{{ form.postal_code.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">{{ form.postal_code.label }}</label>
+                        <label for="{{ form.postal_code.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">{{ form.postal_code.label }}</label>
                         <input
                             type="text"
                             name="{{ form.postal_code.html_name }}"
                             id="{{ form.postal_code.id_for_label }}"
                             value="{{ form.postal_code.value|default:'' }}"
-                            class="block w-full rounded-xl border {% if form.postal_code.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                            class="block w-full rounded-xl border {% if form.postal_code.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
                         >
-                        {% if form.postal_code.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.postal_code.errors|join:", " }}</p>{% endif %}
+                        {% if form.postal_code.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.postal_code.errors|join:", " }}</p>{% endif %}
                     </div>
                 </div>
             </div>
 
             {# ── Integración externa ── #}
             <div class="space-y-4">
-                <h3 class="text-xs font-semibold uppercase tracking-widest text-slate-400">Integración externa</h3>
+                <h3 class="text-xs font-semibold uppercase tracking-widest text-content-faint">Integración externa</h3>
 
                 <div>
-                    <label for="{{ form.api_type.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">{{ form.api_type.label }}</label>
+                    <label for="{{ form.api_type.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">{{ form.api_type.label }}</label>
                     <select
                         name="{{ form.api_type.html_name }}"
                         id="{{ form.api_type.id_for_label }}"
-                        class="block w-full rounded-xl border {% if form.api_type.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                        class="block w-full rounded-xl border {% if form.api_type.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
                     >
                         <option value="">— Sin integración —</option>
                         {% for value, label in form.api_type.field.choices %}
                         {% if value %}<option value="{{ value }}" {% if form.api_type.value == value %}selected{% endif %}>{{ label }}</option>{% endif %}
                         {% endfor %}
                     </select>
-                    {% if form.api_type.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.api_type.errors|join:", " }}</p>{% endif %}
+                    {% if form.api_type.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.api_type.errors|join:", " }}</p>{% endif %}
                 </div>
 
                 <div id="api-url-field" style="display:none;">
-                    <label for="{{ form.api_url.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">{{ form.api_url.label }}</label>
+                    <label for="{{ form.api_url.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">{{ form.api_url.label }}</label>
                     <input
                         type="url"
                         name="{{ form.api_url.html_name }}"
                         id="{{ form.api_url.id_for_label }}"
                         value="{{ form.api_url.value|default:'' }}"
                         placeholder="https://…"
-                        class="block w-full rounded-xl border {% if form.api_url.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                        class="block w-full rounded-xl border {% if form.api_url.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
                     >
-                    {% if form.api_url.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.api_url.errors|join:", " }}</p>{% endif %}
+                    {% if form.api_url.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.api_url.errors|join:", " }}</p>{% endif %}
                 </div>
             </div>
 

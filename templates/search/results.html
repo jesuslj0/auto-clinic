@@ -5,9 +5,9 @@
 {% block page_heading %}Resultados de búsqueda{% endblock %}
 {% block page_subheading %}
 {% if query %}
-<p class="mt-0.5 text-sm text-slate-500">Mostrando coincidencias para «<span class="font-medium text-slate-700">{{ query }}</span>».</p>
+<p class="mt-0.5 text-sm text-content-subtle">Mostrando coincidencias para «<span class="font-medium text-content-muted">{{ query }}</span>».</p>
 {% else %}
-<p class="mt-0.5 text-sm text-slate-500">Escribe un término en el buscador para empezar.</p>
+<p class="mt-0.5 text-sm text-content-subtle">Escribe un término en el buscador para empezar.</p>
 {% endif %}
 {% endblock %}
 
@@ -15,49 +15,49 @@
 <div class="space-y-8">
 
     {% if not query %}
-        <div class="rounded-3xl bg-white px-6 py-12 text-center shadow-soft ring-1 ring-slate-200">
-            <p class="text-base font-medium text-slate-900">Sin término de búsqueda</p>
-            <p class="mt-2 text-sm text-slate-500">Busca pacientes y citas por nombre, email, teléfono o servicio.</p>
+        <div class="rounded-3xl bg-surface px-6 py-12 text-center shadow-soft ring-1 ring-line">
+            <p class="text-base font-medium text-content">Sin término de búsqueda</p>
+            <p class="mt-2 text-sm text-content-subtle">Busca pacientes y citas por nombre, email, teléfono o servicio.</p>
         </div>
     {% else %}
 
     <!-- Pacientes -->
-    <section class="rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
-        <div class="flex items-center justify-between border-b border-slate-200 px-6 py-5">
-            <h3 class="text-lg font-semibold text-slate-900">Pacientes</h3>
-            <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{{ patients|length }}</span>
+    <section class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+        <div class="flex items-center justify-between border-b border-line px-6 py-5">
+            <h3 class="text-lg font-semibold text-content">Pacientes</h3>
+            <span class="rounded-full bg-muted-strong px-3 py-1 text-xs font-semibold text-content-muted">{{ patients|length }}</span>
         </div>
-        <div class="divide-y divide-slate-100">
+        <div class="divide-y divide-line">
             {% for patient in patients %}
-                <a href="{% url 'patients:detail' patient.id %}" class="flex items-center justify-between px-6 py-4 transition hover:bg-slate-50">
+                <a href="{% url 'patients:detail' patient.id %}" class="flex items-center justify-between px-6 py-4 transition hover:bg-muted">
                     <div>
-                        <p class="text-base font-semibold text-slate-900">{{ patient }}</p>
-                        <p class="mt-1 text-sm text-slate-500">
+                        <p class="text-base font-semibold text-content">{{ patient }}</p>
+                        <p class="mt-1 text-sm text-content-subtle">
                             {{ patient.email|default:"Sin email" }}{% if patient.phone %} · {{ patient.phone }}{% endif %}
                         </p>
                     </div>
-                    <svg class="h-5 w-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <svg class="h-5 w-5 text-content-faint" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                     </svg>
                 </a>
             {% empty %}
-                <p class="px-6 py-8 text-center text-sm text-slate-500">No se encontraron pacientes.</p>
+                <p class="px-6 py-8 text-center text-sm text-content-subtle">No se encontraron pacientes.</p>
             {% endfor %}
         </div>
     </section>
 
     <!-- Citas -->
-    <section class="rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
-        <div class="flex items-center justify-between border-b border-slate-200 px-6 py-5">
-            <h3 class="text-lg font-semibold text-slate-900">Citas</h3>
-            <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{{ appointments|length }}</span>
+    <section class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+        <div class="flex items-center justify-between border-b border-line px-6 py-5">
+            <h3 class="text-lg font-semibold text-content">Citas</h3>
+            <span class="rounded-full bg-muted-strong px-3 py-1 text-xs font-semibold text-content-muted">{{ appointments|length }}</span>
         </div>
-        <div class="divide-y divide-slate-100">
+        <div class="divide-y divide-line">
             {% for appointment in appointments %}
                 <article class="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                        <p class="text-base font-semibold text-slate-900">{{ appointment.patient|default:appointment.patient_name|default:"Sin paciente" }}</p>
-                        <p class="mt-1 text-sm text-slate-500">
+                        <p class="text-base font-semibold text-content">{{ appointment.patient|default:appointment.patient_name|default:"Sin paciente" }}</p>
+                        <p class="mt-1 text-sm text-content-subtle">
                             {{ appointment.service|default:appointment.service_name|default:"Servicio" }} · {{ appointment.scheduled_at|date:"j M Y, g:i A" }}
                         </p>
                     </div>
@@ -66,11 +66,11 @@
                             {{ appointment.status|status_icon:"h-3.5 w-3.5" }}
                             {{ appointment.get_status_display|default:appointment.status|title }}
                         </span>
-                        <a href="{% url 'core:dashboard-manage-appointment' appointment.id %}" class="text-sm font-medium text-brand-600 hover:text-brand-700">Detalles</a>
+                        <a href="{% url 'core:dashboard-manage-appointment' appointment.id %}" class="text-sm font-medium text-brand-fg hover:text-brand-fg">Detalles</a>
                     </div>
                 </article>
             {% empty %}
-                <p class="px-6 py-8 text-center text-sm text-slate-500">No se encontraron citas.</p>
+                <p class="px-6 py-8 text-center text-sm text-content-subtle">No se encontraron citas.</p>
             {% endfor %}
         </div>
     </section>

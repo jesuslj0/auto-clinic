@@ -7,24 +7,24 @@
 <div class="mx-auto max-w-6xl space-y-6" x-data="{ copied: '' }">
 
     {# ── Cabecera + estado de conexión ── #}
-    <div class="flex flex-col gap-4 rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+    <div class="flex flex-col gap-4 rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:flex-row sm:items-center sm:justify-between sm:p-6">
         <div class="flex items-start gap-4">
-            <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
+            <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-success-soft text-success ring-1 ring-success-line">
                 <svg class="h-6 w-6" fill="currentColor" viewBox="0 0 448 512" aria-hidden="true">
                     <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.2-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z" />
                 </svg>
             </span>
             <div>
-                <h2 class="text-lg font-semibold text-slate-900">Conecta tu WhatsApp</h2>
-                <p class="mt-0.5 text-sm text-slate-500">Sigue los pasos para que el asistente atienda y agende citas por WhatsApp.</p>
+                <h2 class="text-lg font-semibold text-content">Conecta tu WhatsApp</h2>
+                <p class="mt-0.5 text-sm text-content-subtle">Sigue los pasos para que el asistente atienda y agende citas por WhatsApp.</p>
             </div>
         </div>
         {% if is_connected %}
-        <span class="inline-flex flex-shrink-0 items-center gap-2 self-start rounded-full bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-200 sm:self-center">
+        <span class="inline-flex flex-shrink-0 items-center gap-2 self-start rounded-full bg-success-soft px-3 py-1.5 text-sm font-semibold text-success ring-1 ring-success-line sm:self-center">
             <span class="h-2 w-2 rounded-full bg-emerald-500"></span>Conectado
         </span>
         {% else %}
-        <span class="inline-flex flex-shrink-0 items-center gap-2 self-start rounded-full bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-700 ring-1 ring-amber-200 sm:self-center">
+        <span class="inline-flex flex-shrink-0 items-center gap-2 self-start rounded-full bg-warning-soft px-3 py-1.5 text-sm font-semibold text-warning ring-1 ring-warning-line sm:self-center">
             <span class="h-2 w-2 rounded-full bg-amber-500"></span>Sin configurar
         </span>
         {% endif %}
@@ -68,23 +68,23 @@
                },
                scroll() { const el = this.$refs.thread; if (el) el.scrollTop = el.scrollHeight; }
            }">
-        <div class="flex h-[32rem] flex-col overflow-hidden rounded-3xl bg-white shadow-soft ring-1 ring-slate-200 lg:h-[40rem] xl:h-[44rem]">
+        <div class="flex h-[32rem] flex-col overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line lg:h-[40rem] xl:h-[44rem]">
             {# Cabecera del chat #}
-            <div class="flex items-center gap-3 border-b border-slate-100 px-5 py-4">
+            <div class="flex items-center gap-3 border-b border-line px-5 py-4">
                 <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
                     <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 448 512" aria-hidden="true">
                         <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.2-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z" />
                     </svg>
                 </span>
                 <div class="min-w-0 flex-1">
-                    <p class="text-sm font-semibold text-slate-900">Chat de prueba</p>
-                    <p class="truncate text-xs text-slate-500">
+                    <p class="text-sm font-semibold text-content">Chat de prueba</p>
+                    <p class="truncate text-xs text-content-subtle">
                         Escribes como
                         {% if clinic_obj.test_patient %}{{ clinic_obj.test_patient }}, el paciente de prueba{% else %}un paciente de la clínica{% endif %}
                     </p>
                 </div>
                 {% if not is_connected %}
-                <span class="flex-shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">Sin configurar</span>
+                <span class="flex-shrink-0 rounded-full bg-warning-soft px-2 py-0.5 text-xs font-semibold text-warning">Sin configurar</span>
                 {% endif %}
             </div>
 
@@ -93,11 +93,11 @@
                 {# Estado vacío #}
                 <template x-if="messages.length === 0 && !loading">
                     <div class="flex h-full flex-col items-center justify-center px-4 text-center">
-                        <p class="text-sm font-semibold text-slate-700">Ponte en la piel de un paciente</p>
-                        <p class="mt-1 text-sm text-slate-500">
+                        <p class="text-sm font-semibold text-content-muted">Ponte en la piel de un paciente</p>
+                        <p class="mt-1 text-sm text-content-subtle">
                             Pregunta lo que te preguntarían por WhatsApp —una cita, los horarios, los precios— y comprueba qué contesta el agente.
                         </p>
-                        <button type="button" @click="send('Hola!')" class="mt-3 rounded-full bg-white px-4 py-1.5 text-sm font-medium text-brand-600 shadow-sm ring-1 ring-white/70 transition hover:ring-brand-300">
+                        <button type="button" @click="send('Hola!')" class="mt-3 rounded-full bg-surface px-4 py-1.5 text-sm font-medium text-brand-fg shadow-sm ring-1 ring-line transition hover:ring-brand-line">
                             Empezar con “Hola!”
                         </button>
                     </div>
@@ -107,15 +107,15 @@
                     <div :class="m.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
                         <div :class="{
                                  'bg-brand-gradient text-white chat-bubble-out rounded-tr-sm': m.role === 'user',
-                                 'bg-white text-slate-700 ring-1 ring-white/70 chat-bubble-in rounded-tl-sm': m.role === 'agent',
-                                 'bg-rose-50 text-rose-700 ring-1 ring-rose-200 chat-bubble-in rounded-tl-sm': m.role === 'error'
+                                 'bg-surface text-content-muted ring-1 ring-line chat-bubble-in rounded-tl-sm': m.role === 'agent',
+                                 'bg-danger-soft text-danger ring-1 ring-danger-line chat-bubble-in rounded-tl-sm': m.role === 'error'
                              }"
                              {# El pico no puede heredar el degradado: toma el tono del gradiente a la altura de la esquina #}
                              :style="m.role === 'user' ? '--bubble-tail: #b25aca' : (m.role === 'error' ? '--bubble-tail: #fff1f2' : '--bubble-tail: #ffffff')"
                              class="chat-bubble max-w-[80%] rounded-2xl px-3.5 py-2 text-sm shadow-sm">
                             <p class="whitespace-pre-line" x-text="m.text"></p>
                             <p class="mt-1 text-right text-[11px]"
-                               :class="m.role === 'user' ? 'text-white/70' : 'text-slate-400'"
+                               :class="m.role === 'user' ? 'text-white/70' : 'text-content-faint'"
                                x-text="m.time"></p>
                         </div>
                     </div>
@@ -124,23 +124,23 @@
                 {# Indicador de escritura #}
                 <template x-if="loading">
                     <div class="flex justify-start">
-                        <div class="flex items-center gap-1 rounded-2xl bg-white px-3.5 py-3 shadow-sm ring-1 ring-white/70">
-                            <span class="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400" style="animation-delay:0ms"></span>
-                            <span class="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400" style="animation-delay:150ms"></span>
-                            <span class="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400" style="animation-delay:300ms"></span>
+                        <div class="flex items-center gap-1 rounded-2xl bg-surface px-3.5 py-3 shadow-sm ring-1 ring-line">
+                            <span class="h-1.5 w-1.5 animate-bounce rounded-full bg-content-faint" style="animation-delay:0ms"></span>
+                            <span class="h-1.5 w-1.5 animate-bounce rounded-full bg-content-faint" style="animation-delay:150ms"></span>
+                            <span class="h-1.5 w-1.5 animate-bounce rounded-full bg-content-faint" style="animation-delay:300ms"></span>
                         </div>
                     </div>
                 </template>
             </div>
 
             {# Barra de entrada #}
-            <div class="border-t border-slate-100 p-3">
+            <div class="border-t border-line p-3">
                 <div class="flex items-end gap-2">
                     <textarea x-model="input"
                               @keydown.enter.prevent="send()"
                               rows="1"
                               placeholder="Escribe lo que quieras…"
-                              class="max-h-24 min-h-[2.5rem] flex-1 resize-none rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500 transition"></textarea>
+                              class="max-h-24 min-h-[2.5rem] flex-1 resize-none rounded-xl border border-line-strong bg-surface px-3.5 py-2 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500 transition"></textarea>
                     <button type="button" @click="send()" :disabled="loading || !input.trim()"
                             class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand-gradient text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">
                         <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
@@ -148,7 +148,7 @@
                         </svg>
                     </button>
                 </div>
-                <p class="mt-2 px-1 text-xs text-slate-400">
+                <p class="mt-2 px-1 text-xs text-content-faint">
                     Es un simulacro: no se envía ningún WhatsApp real y la conversación se queda aquí guardada. 
                 </p>
             </div>
@@ -180,51 +180,51 @@
         {# Columna izquierda: número + línea #}
         <div class="flex flex-col items-center">
             <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-brand-gradient text-sm font-semibold text-white shadow-sm">1</span>
-            <span class="mt-1 w-px flex-1 bg-slate-200" aria-hidden="true"></span>
+            <span class="mt-1 w-px flex-1 bg-line" aria-hidden="true"></span>
         </div>
         {# Contenido #}
         <div class="flex-1 pb-8">
-            <div class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6">
+            <div class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
                 <button type="button" @click="open = !open" class="flex w-full items-center justify-between gap-3 text-left">
                     <div>
-                        <h3 class="text-base font-semibold text-slate-900">Credenciales de WhatsApp Cloud API</h3>
-                        <p class="mt-1 text-sm text-slate-500">
+                        <h3 class="text-base font-semibold text-content">Credenciales de WhatsApp Cloud API</h3>
+                        <p class="mt-1 text-sm text-content-subtle">
                             Copia estos datos desde
-                            <span class="font-medium text-slate-700">Meta for Developers → tu app → WhatsApp → API Setup</span>.
+                            <span class="font-medium text-content-muted">Meta for Developers → tu app → WhatsApp → API Setup</span>.
                         </p>
                     </div>
-                    <svg class="h-5 w-5 flex-shrink-0 text-slate-400 transition-transform duration-200" :class="open && 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <svg class="h-5 w-5 flex-shrink-0 text-content-faint transition-transform duration-200" :class="open && 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                     </svg>
                 </button>
 
                 <div x-show="open" x-collapse>
                 {% if form.non_field_errors %}
-                <div class="mt-4 rounded-xl bg-rose-50 px-4 py-3 ring-1 ring-rose-200">
-                    {% for error in form.non_field_errors %}<p class="text-sm text-rose-700">{{ error }}</p>{% endfor %}
+                <div class="mt-4 rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line">
+                    {% for error in form.non_field_errors %}<p class="text-sm text-danger">{{ error }}</p>{% endfor %}
                 </div>
                 {% endif %}
 
                 <div class="mt-5 space-y-4">
                     {# Phone Number ID #}
                     <div>
-                        <label for="{{ form.whatsapp_phone_number_id.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">{{ form.whatsapp_phone_number_id.label }}</label>
+                        <label for="{{ form.whatsapp_phone_number_id.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">{{ form.whatsapp_phone_number_id.label }}</label>
                         <input type="text"
                                name="{{ form.whatsapp_phone_number_id.html_name }}"
                                id="{{ form.whatsapp_phone_number_id.id_for_label }}"
                                value="{{ form.whatsapp_phone_number_id.value|default:'' }}"
                                placeholder="Ej. 123456789012345"
-                               class="block w-full rounded-xl border {% if form.whatsapp_phone_number_id.errors %}border-rose-400 focus:ring-rose-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
-                        <p class="mt-1.5 text-xs text-slate-400">{{ form.whatsapp_phone_number_id.help_text }}</p>
-                        {% if form.whatsapp_phone_number_id.errors %}<p class="mt-1 text-xs text-rose-600">{{ form.whatsapp_phone_number_id.errors|join:", " }}</p>{% endif %}
+                               class="block w-full rounded-xl border {% if form.whatsapp_phone_number_id.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                        <p class="mt-1.5 text-xs text-content-faint">{{ form.whatsapp_phone_number_id.help_text }}</p>
+                        {% if form.whatsapp_phone_number_id.errors %}<p class="mt-1 text-xs text-danger">{{ form.whatsapp_phone_number_id.errors|join:", " }}</p>{% endif %}
                     </div>
 
                     {# Token permanente #}
                     <div>
                         <div class="flex items-center justify-between mb-1.5">
-                            <label for="{{ form.whatsapp_token.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ form.whatsapp_token.label }}</label>
+                            <label for="{{ form.whatsapp_token.id_for_label }}" class="block text-sm font-medium text-content-muted">{{ form.whatsapp_token.label }}</label>
                             {% if has_token %}
-                            <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                            <span class="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-xs font-semibold text-success">
                                 <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
                                 Configurado
                             </span>
@@ -236,19 +236,19 @@
                                    id="{{ form.whatsapp_token.id_for_label }}"
                                    placeholder="{% if has_token %}•••••••••••••  (déjalo en blanco para conservarlo){% else %}EAAG...{% endif %}"
                                    autocomplete="off"
-                                   class="block w-full rounded-xl border {% if form.whatsapp_token.errors %}border-rose-400 focus:ring-rose-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 pr-11 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
-                            <button type="button" @click="showToken = !showToken" class="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-600" :aria-label="showToken ? 'Ocultar' : 'Mostrar'">
+                                   class="block w-full rounded-xl border {% if form.whatsapp_token.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 pr-11 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                            <button type="button" @click="showToken = !showToken" class="absolute inset-y-0 right-0 flex items-center px-3 text-content-faint hover:text-content-muted" :aria-label="showToken ? 'Ocultar' : 'Mostrar'">
                                 <svg x-show="!showToken" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                                 <svg x-show="showToken" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="display:none"><path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.243 4.243L9.88 9.88" /></svg>
                             </button>
                         </div>
-                        <p class="mt-1.5 text-xs text-slate-400">{{ form.whatsapp_token.help_text }}</p>
-                        {% if form.whatsapp_token.errors %}<p class="mt-1 text-xs text-rose-600">{{ form.whatsapp_token.errors|join:", " }}</p>{% endif %}
+                        <p class="mt-1.5 text-xs text-content-faint">{{ form.whatsapp_token.help_text }}</p>
+                        {% if form.whatsapp_token.errors %}<p class="mt-1 text-xs text-danger">{{ form.whatsapp_token.errors|join:", " }}</p>{% endif %}
                     </div>
 
                     {# Verify token #}
                     <div>
-                        <label for="{{ form.whatsapp_verify_token.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">{{ form.whatsapp_verify_token.label }}</label>
+                        <label for="{{ form.whatsapp_verify_token.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">{{ form.whatsapp_verify_token.label }}</label>
                         <div class="flex gap-2">
                             <input type="text"
                                    x-ref="verify"
@@ -256,16 +256,16 @@
                                    id="{{ form.whatsapp_verify_token.id_for_label }}"
                                    value="{{ form.whatsapp_verify_token.value|default:'' }}"
                                    placeholder="Elige una cadena secreta"
-                                   class="block w-full rounded-xl border {% if form.whatsapp_verify_token.errors %}border-rose-400 focus:ring-rose-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                                   class="block w-full rounded-xl border {% if form.whatsapp_verify_token.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
                             <button type="button" @click="genVerify()" class="btn-secondary flex-shrink-0 whitespace-nowrap">Generar</button>
                         </div>
-                        <p class="mt-1.5 text-xs text-slate-400">{{ form.whatsapp_verify_token.help_text }}</p>
-                        {% if form.whatsapp_verify_token.errors %}<p class="mt-1 text-xs text-rose-600">{{ form.whatsapp_verify_token.errors|join:", " }}</p>{% endif %}
+                        <p class="mt-1.5 text-xs text-content-faint">{{ form.whatsapp_verify_token.help_text }}</p>
+                        {% if form.whatsapp_verify_token.errors %}<p class="mt-1 text-xs text-danger">{{ form.whatsapp_verify_token.errors|join:", " }}</p>{% endif %}
                     </div>
                 </div>
 
                 <div class="mt-6 flex items-center justify-end gap-3">
-                    <p x-show="dirty" style="display:none" class="text-xs font-medium text-amber-600">Cambios sin guardar</p>
+                    <p x-show="dirty" style="display:none" class="text-xs font-medium text-warning">Cambios sin guardar</p>
                     {# El `disabled` del markup evita que el botón parpadee activo antes de que Alpine tome el control. #}
                     <button type="submit"
                             :disabled="!dirty"
@@ -285,16 +285,16 @@
             <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-brand-gradient text-sm font-semibold text-white shadow-sm">2</span>
         </div>
         <div class="flex-1">
-            <div class="rounded-3xl bg-white p-5 shadow-soft ring-1 ring-slate-200 sm:p-6" x-data="{ open: false }">
+            <div class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6" x-data="{ open: false }">
                 <button type="button" @click="open = !open" class="flex w-full items-center justify-between gap-3 text-left">
                     <div>
-                        <h3 class="text-base font-semibold text-slate-900">Configura el webhook en Meta</h3>
-                        <p class="mt-1 text-sm text-slate-500">
-                            En <span class="font-medium text-slate-700">WhatsApp → Configuration → Webhook</span>, pega estos dos valores y
-                            suscríbete al campo <span class="font-medium text-slate-700">messages</span>.
+                        <h3 class="text-base font-semibold text-content">Configura el webhook en Meta</h3>
+                        <p class="mt-1 text-sm text-content-subtle">
+                            En <span class="font-medium text-content-muted">WhatsApp → Configuration → Webhook</span>, pega estos dos valores y
+                            suscríbete al campo <span class="font-medium text-content-muted">messages</span>.
                         </p>
                     </div>
-                    <svg class="h-5 w-5 flex-shrink-0 text-slate-400 transition-transform duration-200" :class="open && 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <svg class="h-5 w-5 flex-shrink-0 text-content-faint transition-transform duration-200" :class="open && 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                     </svg>
                 </button>
@@ -303,33 +303,33 @@
                 <div class="mt-5 space-y-4">
                     {# Callback URL #}
                     <div>
-                        <span class="block text-sm font-medium text-slate-700 mb-1.5">Callback URL</span>
+                        <span class="block text-sm font-medium text-content-muted mb-1.5">Callback URL</span>
                         <div class="flex gap-2">
-                            <code class="flex-1 truncate rounded-xl bg-slate-50 px-4 py-2.5 text-sm text-slate-700 ring-1 ring-slate-200">{{ webhook_url }}</code>
+                            <code class="flex-1 truncate rounded-xl bg-muted px-4 py-2.5 text-sm text-content-muted ring-1 ring-line">{{ webhook_url }}</code>
                             <button type="button"
                                     @click="navigator.clipboard.writeText('{{ webhook_url }}'); copied='webhook'; setTimeout(() => copied='', 1500)"
                                     class="btn-secondary flex-shrink-0 whitespace-nowrap">
                                 <span x-show="copied !== 'webhook'">Copiar</span>
-                                <span x-show="copied === 'webhook'" class="text-emerald-600" style="display:none">¡Copiado!</span>
+                                <span x-show="copied === 'webhook'" class="text-success" style="display:none">¡Copiado!</span>
                             </button>
                         </div>
                     </div>
 
                     {# Verify token (eco de lo guardado) #}
                     <div>
-                        <span class="block text-sm font-medium text-slate-700 mb-1.5">Verify token</span>
+                        <span class="block text-sm font-medium text-content-muted mb-1.5">Verify token</span>
                         {% if clinic_obj.whatsapp_verify_token %}
                         <div class="flex gap-2">
-                            <code class="flex-1 truncate rounded-xl bg-slate-50 px-4 py-2.5 text-sm text-slate-700 ring-1 ring-slate-200">{{ clinic_obj.whatsapp_verify_token }}</code>
+                            <code class="flex-1 truncate rounded-xl bg-muted px-4 py-2.5 text-sm text-content-muted ring-1 ring-line">{{ clinic_obj.whatsapp_verify_token }}</code>
                             <button type="button"
                                     @click="navigator.clipboard.writeText('{{ clinic_obj.whatsapp_verify_token }}'); copied='verify'; setTimeout(() => copied='', 1500)"
                                     class="btn-secondary flex-shrink-0 whitespace-nowrap">
                                 <span x-show="copied !== 'verify'">Copiar</span>
-                                <span x-show="copied === 'verify'" class="text-emerald-600" style="display:none">¡Copiado!</span>
+                                <span x-show="copied === 'verify'" class="text-success" style="display:none">¡Copiado!</span>
                             </button>
                         </div>
                         {% else %}
-                        <p class="rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-700 ring-1 ring-amber-200">Guarda primero el token de verificación en el paso 1.</p>
+                        <p class="rounded-xl bg-warning-soft px-4 py-2.5 text-sm text-warning ring-1 ring-warning-line">Guarda primero el token de verificación en el paso 1.</p>
                         {% endif %}
                     </div>
                 </div>

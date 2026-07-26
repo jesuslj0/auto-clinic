@@ -1,6 +1,6 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="es" class="h-full bg-[#f6f5fb]">
+<html lang="es" class="h-full bg-canvas">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,162 +8,13 @@
     <link rel="icon" type="image/png" sizes="32x32" href="{% static 'img/favicon/favicon-32x32.png' %}">
     <link rel="icon" type="image/png" sizes="16x16" href="{% static 'img/favicon/favicon-16x16.png' %}">
     <title>{% block title %}{{ clinic.name|default:"Auto Clinic" }}{% endblock %}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    {% include "partials/_head_theme.html" %}
     <script defer src="https://unpkg.com/htmx.org@1.9.12"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-                        display: ['"Space Grotesk"', 'Inter', 'ui-sans-serif', 'sans-serif'],
-                    },
-                    colors: {
-                        // Marca: violeta moderno
-                        brand: {
-                            50: '#f5f3ff',
-                            100: '#ede9fe',
-                            200: '#ddd6fe',
-                            300: '#c4b5fd',
-                            400: '#a78bfa',
-                            500: '#8b5cf6',
-                            600: '#7c3aed',
-                            700: '#6d28d9',
-                            800: '#5b21b6',
-                            900: '#4c1d95',
-                        },
-                        // Secundario / acento: rosa suave (menos potente)
-                        accent: {
-                            50: '#fdf3f8',
-                            100: '#fbe6f0',
-                            400: '#f0a6c8',
-                            500: '#e879a6',
-                            600: '#d4628f',
-                        },
-                        // Terciario: violeta profundo (#4C1D95)
-                        tertiary: {
-                            500: '#5b21b6',
-                            600: '#4c1d95',
-                            700: '#3b1577',
-                        },
-                        // Inverted / tinta oscura para botones
-                        ink: {
-                            700: '#1e293b',
-                            800: '#172033',
-                            900: '#0f172a',
-                        },
-                    },
-                    boxShadow: {
-                        soft: '0 12px 32px rgba(76, 29, 149, 0.10)',
-                        sidebar: '4px 0 24px rgba(76, 29, 149, 0.10)',
-                        glow: '0 8px 24px -6px rgba(124, 58, 237, 0.45)',
-                    },
-                    backgroundImage: {
-                        'brand-gradient': 'linear-gradient(135deg, #7c3aed 0%, #e879a6 100%)',
-                        // Los mismos dos tonos rebajados sobre blanco, para
-                        // fondos amplios donde el degradado pleno cansaría.
-                        'brand-gradient-soft': 'linear-gradient(135deg, #e7dbfc 0%, #fbe7ef 100%)',
-                    },
-                    transitionProperty: {
-                        sidebar: 'transform, opacity, visibility',
-                    },
-                },
-            },
-        };
-    </script>
-    <!-- Componentes reutilizables (botones e iconos del sistema de diseño) -->
-    <style type="text/tailwindcss">
-        /* Botones */
-        .btn {
-            @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-2 active:scale-[0.98];
-        }
-        .btn-primary {
-            @apply btn bg-brand-600 text-white shadow-sm hover:bg-brand-700 focus:ring-brand-500;
-        }
-        .btn-gradient {
-            @apply btn bg-brand-gradient text-white shadow-glow hover:opacity-95 focus:ring-brand-500;
-        }
-        .btn-secondary {
-            @apply btn bg-white text-slate-700 ring-1 ring-inset ring-slate-200 hover:bg-slate-50 focus:ring-brand-500;
-        }
-        .btn-inverted {
-            @apply btn bg-ink-700 text-white hover:bg-ink-800 focus:ring-ink-700;
-        }
-        .btn-outlined {
-            @apply btn border border-brand-300 bg-transparent text-brand-700 hover:bg-brand-50 focus:ring-brand-500;
-        }
-
-        /* Botones de icono (circulares) */
-        .icon-btn {
-            @apply inline-flex h-10 w-10 items-center justify-center rounded-full transition focus:outline-none focus:ring-2 focus:ring-offset-2 active:scale-95;
-        }
-        .icon-btn-primary { @apply icon-btn bg-brand-600 text-white hover:bg-brand-700 focus:ring-brand-500; }
-        .icon-btn-ghost   { @apply icon-btn text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus:ring-slate-300; }
-        .icon-btn-accent  { @apply icon-btn bg-accent-500 text-white hover:bg-accent-600 focus:ring-accent-500; }
-        .icon-btn-tertiary{ @apply icon-btn bg-tertiary-600 text-white hover:bg-tertiary-700 focus:ring-tertiary-600; }
-        .icon-btn-danger  { @apply icon-btn bg-rose-500 text-white hover:bg-rose-600 focus:ring-rose-500; }
-    </style>
-    <style>
-        [x-cloak] { display: none !important; }
-
-        /* Títulos con la tipografía display de la marca */
-        h1, h2, h3, h4 { font-family: '"Space Grotesk"', 'Space Grotesk', 'Inter', sans-serif; }
-
-        /* Burbujas de chat con pico tipo bocadillo, en la esquina superior.
-           Cada burbuja fija su color en --bubble-tail; si no, hereda el fondo. */
-        .chat-bubble { position: relative; }
-        .chat-bubble::before {
-            content: "";
-            position: absolute;
-            top: 0;
-            width: 7px;
-            height: 10px;
-            background: var(--bubble-tail, inherit);
-        }
-        /* Recibidos: pico arriba a la izquierda. El -6px con 7px de ancho deja
-           1px de solape para que no se vea costura por el antialiasing. */
-        .chat-bubble-in::before {
-            left: -6px;
-            clip-path: polygon(0 0, 100% 0, 100% 100%);
-        }
-        /* Enviados: el mismo pico reflejado, arriba a la derecha */
-        .chat-bubble-out::before {
-            right: -6px;
-            clip-path: polygon(0 0, 100% 0, 0 100%);
-        }
-
-        .sidebar-enter {
-            transform: translateX(-100%);
-        }
-        .sidebar-enter-active {
-            transform: translateX(0);
-            transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
-        }
-        .sidebar-leave-active {
-            transform: translateX(-100%);
-            transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1);
-        }
-
-        .overlay-enter {
-            opacity: 0;
-        }
-        .overlay-enter-active {
-            opacity: 1;
-            transition: opacity 0.28s ease;
-        }
-        .overlay-leave-active {
-            opacity: 0;
-            transition: opacity 0.22s ease;
-        }
-    </style>
     {% block extra_head %}{% endblock %}
 </head>
-<body class="h-full text-slate-800 antialiased" x-data="{ sidebarOpen: false }" @keydown.escape.window="sidebarOpen = false">
+<body class="h-full text-content antialiased" x-data="{ sidebarOpen: false }" @keydown.escape.window="sidebarOpen = false">
 
     <!-- Mobile overlay -->
     {% if request.user.is_authenticated %}
@@ -191,27 +42,29 @@
         x-transition:leave="transition ease-in duration-200"
         x-transition:leave-start="translate-x-0"
         x-transition:leave-end="-translate-x-full"
-        class="fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-white shadow-[4px_0_24px_rgba(15,23,42,0.12)] lg:hidden"
+        class="fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-surface shadow-sidebar lg:hidden"
         aria-label="Navegación principal"
     >
-        <div class="border-b border-slate-200 px-6 py-6">
+        <div class="border-b border-line px-6 py-6">
             <div class="flex items-center justify-between">
                 <a href="/" class="flex items-center gap-3">
                     {% if request.user.clinic.logo %}
-                    <div class="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white p-1 ring-1 ring-slate-200">
+                    {% comment %}Fondo blanco fijo, no bg-surface: los logos de clínica suelen
+                    venir en PNG transparente con tinta oscura y desaparecerían en modo oscuro.{% endcomment %}
+                    <div class="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white p-1 ring-1 ring-line">
                         <img src="{{ request.user.clinic.logo.url }}" alt="Logo de la clínica" class="h-full w-full object-contain">
                     </div>
                     {% else %}
                     <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-gradient text-lg font-semibold text-white shadow-glow">{{ request.user.clinic.name|default:"Auto Clinic"|slice:":1"|upper }}</span>
                     {% endif %}
                     <div>
-                        <h1 class="text-lg font-semibold leading-tight text-slate-900 break-words">{{ request.user.clinic.name|default:"Auto Clinic" }}</h1>
-                        <p class="text-[10px] font-medium uppercase tracking-[0.22em] text-slate-400">Auto Clinic</p>
+                        <h1 class="text-lg font-semibold leading-tight text-content break-words">{{ request.user.clinic.name|default:"Auto Clinic" }}</h1>
+                        <p class="text-[10px] font-medium uppercase tracking-[0.22em] text-content-faint">Auto Clinic</p>
                     </div>
                 </a>
                 <button
                     @click="sidebarOpen = false"
-                    class="ml-2 rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+                    class="ml-2 rounded-lg p-2 text-content-faint hover:bg-muted-strong hover:text-content-muted transition"
                     aria-label="Cerrar menú"
                 >
                     <!-- X icon -->
@@ -226,10 +79,11 @@
             {% include "partials/_sidebar_nav.html" %}
         </nav>
 
-        <div class="border-t border-slate-200 px-4 py-4">
+        <div class="space-y-1 border-t border-line px-4 py-4">
+            {% include "partials/_theme_toggle.html" %}
             <form method="post" action="{% url 'core:logout' %}">
                 {% csrf_token %}
-                <button type="submit" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition">
+                <button type="submit" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-content-subtle hover:bg-muted-strong hover:text-content-muted transition">
                     <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
                     </svg>
@@ -243,31 +97,36 @@
     <div class="min-h-full lg:flex">
         <!-- Desktop sidebar (always visible for authenticated users) -->
         {% if request.user.is_authenticated %}
-        <aside class="hidden w-72 flex-shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col">
-            <div class="border-b border-slate-200 px-6 py-6">
+        <aside class="hidden w-72 flex-shrink-0 border-r border-line bg-surface lg:flex lg:flex-col">
+            <div class="border-b border-line px-6 py-6">
                 <a href="/" class="flex items-center gap-3">
                     {% if request.user.clinic.logo %}
-                    <div class="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white p-1 ring-1 ring-slate-200">
+                    {% comment %}Fondo blanco fijo, no bg-surface: los logos de clínica suelen
+                    venir en PNG transparente con tinta oscura y desaparecerían en modo oscuro.{% endcomment %}
+                    <div class="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white p-1 ring-1 ring-line">
                         <img src="{{ request.user.clinic.logo.url }}" alt="Logo de la clínica" class="h-full w-full object-contain">
                     </div>
                     {% else %}
                     <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-gradient text-lg font-semibold text-white shadow-glow">{{ request.user.clinic.name|default:"Auto Clinic"|slice:":1"|upper }}</span>
                     {% endif %}
                     <div>
-                        <h1 class="text-lg font-semibold leading-tight text-slate-900 break-words">{{ request.user.clinic.name|default:"Auto Clinic" }}</h1>
-                        <p class="text-[10px] font-medium uppercase tracking-[0.22em] text-slate-400">Auto Clinic</p>
+                        <h1 class="text-lg font-semibold leading-tight text-content break-words">{{ request.user.clinic.name|default:"Auto Clinic" }}</h1>
+                        <p class="text-[10px] font-medium uppercase tracking-[0.22em] text-content-faint">Auto Clinic</p>
                     </div>
                 </a>
             </div>
             <nav class="flex-1 space-y-1 px-4 py-6 text-sm font-medium">
             {% include "partials/_sidebar_nav.html" %}
         </nav>
-            <div class="border-t border-slate-200 px-6 py-5">
-                <p class="text-sm font-medium text-slate-900">{{ request.user.get_full_name|default:request.user.email }}</p>
-                <p class="mt-1 text-xs text-slate-500">{{ request.user.get_role_display|default:"Personal" }}</p>
-                <form method="post" action="{% url 'core:logout' %}" class="mt-3">
+            <div class="border-t border-line px-6 py-5">
+                <p class="text-sm font-medium text-content">{{ request.user.get_full_name|default:request.user.email }}</p>
+                <p class="mt-1 text-xs text-content-subtle">{{ request.user.get_role_display|default:"Personal" }}</p>
+                <div class="mt-3 -mx-3">
+                    {% include "partials/_theme_toggle.html" %}
+                </div>
+                <form method="post" action="{% url 'core:logout' %}" class="mt-1 -mx-3">
                     {% csrf_token %}
-                    <button type="submit" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition">
+                    <button type="submit" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-content-subtle hover:bg-muted-strong hover:text-content-muted transition">
                         <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
                         </svg>
@@ -280,7 +139,7 @@
 
         <div class="flex min-h-screen flex-1 flex-col">
             {% block topbar %}{% if request.user.is_authenticated %}{% include 'partials/_topbar.html' %}{% endif %}{% endblock %}
-            <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
+            <header class="sticky top-0 z-30 border-b border-line bg-surface/90 backdrop-blur">
                 <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4 lg:px-8">
                     <div class="flex min-w-0 items-center gap-2 sm:gap-3">
                         {% if request.user.is_authenticated %}
@@ -288,7 +147,7 @@
                         <button
                             @click="sidebarOpen = true"
                             type="button"
-                            class="rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition lg:hidden"
+                            class="rounded-xl p-2 text-content-subtle hover:bg-muted-strong hover:text-content-muted transition lg:hidden"
                             aria-label="Abrir menú"
                             aria-expanded="false"
                             :aria-expanded="sidebarOpen"
@@ -300,7 +159,7 @@
                         {% endif %}
                         {% include 'partials/_section_icon.html' %}
                         <div class="min-w-0">
-                            <h2 class="truncate text-lg font-semibold text-slate-900 sm:text-xl">{% block page_heading %}Panel de la clínica{% endblock %}</h2>
+                            <h2 class="truncate text-lg font-semibold text-content sm:text-xl">{% block page_heading %}Panel de la clínica{% endblock %}</h2>
                             {% block page_subheading %}{% endblock %}
                         </div>
                     </div>
@@ -338,8 +197,8 @@
                 x-transition:leave-start="opacity-100 translate-y-0 scale-100"
                 x-transition:leave-end="opacity-0 translate-y-2 scale-95"
                 :class="toast.type === 'error'
-                    ? 'bg-rose-50 ring-rose-200 text-rose-700'
-                    : 'bg-emerald-50 ring-emerald-200 text-emerald-700'"
+                    ? 'bg-danger-soft ring-danger-line text-danger'
+                    : 'bg-success-soft ring-success-line text-success'"
                 class="flex w-80 items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium shadow-soft ring-1"
                 role="alert"
             >

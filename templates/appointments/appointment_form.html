@@ -5,20 +5,20 @@
 
 {% block content %}
 <div class="mx-auto max-w-2xl">
-    <div class="rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
+    <div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
 
-        <div class="border-b border-slate-200 px-4 py-6 sm:px-8">
-            <h2 class="text-lg font-semibold text-slate-900">Datos de la cita</h2>
-            <p class="mt-1 text-sm text-slate-500">La cita se crea en estado pendiente. La hora se interpreta en el horario de la clínica.</p>
+        <div class="border-b border-line px-4 py-6 sm:px-8">
+            <h2 class="text-lg font-semibold text-content">Datos de la cita</h2>
+            <p class="mt-1 text-sm text-content-subtle">La cita se crea en estado pendiente. La hora se interpreta en el horario de la clínica.</p>
         </div>
 
         <form method="post" novalidate class="space-y-6 px-4 py-7 sm:px-8">
             {% csrf_token %}
 
             {% if form.non_field_errors %}
-            <div class="rounded-xl bg-red-50 px-4 py-3 ring-1 ring-red-200">
+            <div class="rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line">
                 {% for error in form.non_field_errors %}
-                <p class="text-sm text-red-700">{{ error }}</p>
+                <p class="text-sm text-danger">{{ error }}</p>
                 {% endfor %}
             </div>
             {% endif %}
@@ -30,34 +30,34 @@
                 class="relative"
             >
                 <div class="mb-1.5 flex items-center justify-between">
-                    <label for="{{ form.patient.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ form.patient.label }}</label>
-                    <a href="{{ new_patient_url }}" class="text-xs font-medium text-brand-600 hover:text-brand-700">+ Nuevo paciente</a>
+                    <label for="{{ form.patient.id_for_label }}" class="block text-sm font-medium text-content-muted">{{ form.patient.label }}</label>
+                    <a href="{{ new_patient_url }}" class="text-xs font-medium text-brand-fg hover:text-brand-fg">+ Nuevo paciente</a>
                 </div>
                 <div class="relative">
                     <input type="text" name="patient_search" id="{{ form.patient.id_for_label }}"
                         x-model="query" @input="onInput" @keydown="onKeydown" @focus="if (results.length) open = true" @blur="setTimeout(() => open = false, 150)"
                         autocomplete="off" placeholder="Busca por nombre, email o teléfono..."
-                        class="block w-full rounded-xl border {% if form.patient.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 pr-9 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                        class="block w-full rounded-xl border {% if form.patient.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 pr-9 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
                     <input type="hidden" name="{{ form.patient.html_name }}" :value="selectedId">
                     <button type="button" x-show="query" x-cloak @click="clear()"
-                        class="absolute inset-y-0 right-2 flex items-center px-1 text-slate-400 hover:text-slate-600" aria-label="Limpiar">
+                        class="absolute inset-y-0 right-2 flex items-center px-1 text-content-faint hover:text-content-muted" aria-label="Limpiar">
                         <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
                     <ul x-show="open" x-cloak
-                        class="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-xl bg-white py-1 shadow-soft ring-1 ring-slate-200">
+                        class="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-xl bg-surface py-1 shadow-soft ring-1 ring-line">
                         <template x-for="(item, index) in results" :key="item.id">
                             <li @click="select(item)" @mouseenter="highlighted = index"
-                                :class="index === highlighted ? 'bg-brand-50 text-brand-700' : 'text-slate-700'"
+                                :class="index === highlighted ? 'bg-brand-soft text-brand-fg' : 'text-content-muted'"
                                 class="cursor-pointer px-4 py-2 text-sm" x-text="format(item)"></li>
                         </template>
-                        <li x-show="!loading && results.length === 0 && query.trim().length >= 2" class="px-4 py-2 text-sm text-slate-400">
+                        <li x-show="!loading && results.length === 0 && query.trim().length >= 2" class="px-4 py-2 text-sm text-content-faint">
                             Sin resultados
                         </li>
                     </ul>
                 </div>
-                {% if form.patient.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.patient.errors|join:", " }}</p>{% endif %}
+                {% if form.patient.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.patient.errors|join:", " }}</p>{% endif %}
             </div>
 
             {# Servicio #}
@@ -66,69 +66,69 @@
                 @click.outside="open = false"
                 class="relative"
             >
-                <label for="{{ form.service.id_for_label }}" class="mb-1.5 block text-sm font-medium text-slate-700">{{ form.service.label }}</label>
+                <label for="{{ form.service.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.service.label }}</label>
                 <div class="relative">
                     <input type="text" name="service_search" id="{{ form.service.id_for_label }}"
                         x-model="query" @input="onInput" @keydown="onKeydown" @focus="if (results.length) open = true" @blur="setTimeout(() => open = false, 150)"
                         autocomplete="off" placeholder="Busca un servicio por nombre..."
-                        class="block w-full rounded-xl border {% if form.service.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 pr-9 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                        class="block w-full rounded-xl border {% if form.service.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 pr-9 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
                     <input type="hidden" name="{{ form.service.html_name }}" :value="selectedId">
                     <button type="button" x-show="query" x-cloak @click="clear()"
-                        class="absolute inset-y-0 right-2 flex items-center px-1 text-slate-400 hover:text-slate-600" aria-label="Limpiar">
+                        class="absolute inset-y-0 right-2 flex items-center px-1 text-content-faint hover:text-content-muted" aria-label="Limpiar">
                         <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
                     <ul x-show="open" x-cloak
-                        class="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-xl bg-white py-1 shadow-soft ring-1 ring-slate-200">
+                        class="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-xl bg-surface py-1 shadow-soft ring-1 ring-line">
                         <template x-for="(item, index) in results" :key="item.id">
                             <li @click="select(item)" @mouseenter="highlighted = index"
-                                :class="index === highlighted ? 'bg-brand-50 text-brand-700' : 'text-slate-700'"
+                                :class="index === highlighted ? 'bg-brand-soft text-brand-fg' : 'text-content-muted'"
                                 class="cursor-pointer px-4 py-2 text-sm" x-text="format(item)"></li>
                         </template>
-                        <li x-show="!loading && results.length === 0 && query.trim().length >= 2" class="px-4 py-2 text-sm text-slate-400">
+                        <li x-show="!loading && results.length === 0 && query.trim().length >= 2" class="px-4 py-2 text-sm text-content-faint">
                             Sin resultados
                         </li>
                     </ul>
                 </div>
-                {% if form.service.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.service.errors|join:", " }}</p>{% endif %}
+                {% if form.service.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.service.errors|join:", " }}</p>{% endif %}
             </div>
 
             {# Profesional #}
             <div>
-                <label for="{{ form.professional.id_for_label }}" class="mb-1.5 block text-sm font-medium text-slate-700">{{ form.professional.label }}</label>
+                <label for="{{ form.professional.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.professional.label }}</label>
                 <select name="{{ form.professional.html_name }}" id="{{ form.professional.id_for_label }}"
-                    class="block w-full rounded-xl border {% if form.professional.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                    class="block w-full rounded-xl border {% if form.professional.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
                     <option value="">{{ form.professional.field.empty_label }}</option>
                     {% for value, label in form.professional.field.choices %}
                     {% if value %}<option value="{{ value }}" {% if form.professional.value|stringformat:"s" == value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>{% endif %}
                     {% endfor %}
                 </select>
-                {% if form.professional.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.professional.errors|join:", " }}</p>{% endif %}
+                {% if form.professional.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.professional.errors|join:", " }}</p>{% endif %}
             </div>
 
             {# Fecha y hora #}
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                    <label for="{{ form.date.id_for_label }}" class="mb-1.5 block text-sm font-medium text-slate-700">{{ form.date.label }}</label>
+                    <label for="{{ form.date.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.date.label }}</label>
                     <input type="date" name="{{ form.date.html_name }}" id="{{ form.date.id_for_label }}" value="{{ form.date.value|default:'' }}"
-                        class="block w-full rounded-xl border {% if form.date.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
-                    {% if form.date.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.date.errors|join:", " }}</p>{% endif %}
+                        class="block w-full rounded-xl border {% if form.date.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                    {% if form.date.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.date.errors|join:", " }}</p>{% endif %}
                 </div>
                 <div>
-                    <label for="{{ form.time.id_for_label }}" class="mb-1.5 block text-sm font-medium text-slate-700">{{ form.time.label }}</label>
+                    <label for="{{ form.time.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.time.label }}</label>
                     <input type="time" name="{{ form.time.html_name }}" id="{{ form.time.id_for_label }}" value="{{ form.time.value|default:'' }}"
-                        class="block w-full rounded-xl border {% if form.time.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
-                    {% if form.time.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.time.errors|join:", " }}</p>{% endif %}
+                        class="block w-full rounded-xl border {% if form.time.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                    {% if form.time.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.time.errors|join:", " }}</p>{% endif %}
                 </div>
             </div>
 
             {# Notas #}
             <div>
-                <label for="{{ form.notes.id_for_label }}" class="mb-1.5 block text-sm font-medium text-slate-700">{{ form.notes.label }}</label>
+                <label for="{{ form.notes.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.notes.label }}</label>
                 <textarea name="{{ form.notes.html_name }}" id="{{ form.notes.id_for_label }}" rows="3" placeholder="Notas internas de la cita..."
-                    class="block w-full rounded-xl border {% if form.notes.errors %}border-red-400 focus:ring-red-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition resize-none">{{ form.notes.value|default:'' }}</textarea>
-                {% if form.notes.errors %}<p class="mt-1.5 text-xs text-red-600">{{ form.notes.errors|join:", " }}</p>{% endif %}
+                    class="block w-full rounded-xl border {% if form.notes.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition resize-none">{{ form.notes.value|default:'' }}</textarea>
+                {% if form.notes.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.notes.errors|join:", " }}</p>{% endif %}
             </div>
 
             <div class="flex items-center justify-between pt-2">

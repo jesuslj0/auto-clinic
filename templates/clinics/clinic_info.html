@@ -12,11 +12,11 @@
     <div class="flex items-center justify-between">
         <div class="flex items-center gap-4">
             {% if clinic_obj.logo %}
-            <div class="h-16 w-16 flex-shrink-0 overflow-hidden rounded-2xl bg-white shadow-soft ring-1 ring-slate-200 flex items-center justify-center p-1">
+            <div class="h-16 w-16 flex-shrink-0 overflow-hidden rounded-2xl bg-surface shadow-soft ring-1 ring-line flex items-center justify-center p-1">
                 <img src="{{ clinic_obj.logo.url }}" alt="Logo {{ clinic_obj.name }}" class="h-full w-full object-contain">
             </div>
             {% endif %}
-            <h3 class="text-lg font-semibold text-slate-900">Datos de la clínica</h3>
+            <h3 class="text-lg font-semibold text-content">Datos de la clínica</h3>
         </div>
         <a
             href="{% url 'core:clinic-edit' %}"
@@ -30,11 +30,11 @@
     </div>
 
     {# Ficha principal #}
-    <div class="rounded-3xl bg-white shadow-soft ring-1 ring-slate-200 divide-y divide-slate-100">
+    <div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line divide-y divide-line">
 
         {# Identificación #}
         <div class="px-6 py-5">
-            <h4 class="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
+            <h4 class="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-content-faint">
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5zm6-10.125a1.875 1.875 0 11-3.75 0 1.875 1.875 0 013.75 0zm1.294 6.336a6.721 6.721 0 01-3.17.789 6.721 6.721 0 01-3.168-.789 3.376 3.376 0 016.338 0z" />
                 </svg>
@@ -42,37 +42,37 @@
             </h4>
             <div class="flex items-start gap-6">
                 {# Logo grande #}
-                <div class="flex-shrink-0 h-24 w-24 rounded-3xl {% if clinic_obj.logo %}bg-white ring-1 ring-slate-200 shadow-soft{% else %}bg-slate-100 ring-1 ring-slate-200{% endif %} flex items-center justify-center overflow-hidden p-2">
+                <div class="flex-shrink-0 h-24 w-24 rounded-3xl {% if clinic_obj.logo %}bg-surface ring-1 ring-line shadow-soft{% else %}bg-muted-strong ring-1 ring-line{% endif %} flex items-center justify-center overflow-hidden p-2">
                     {% if clinic_obj.logo %}
                     <img src="{{ clinic_obj.logo.url }}" alt="Logo {{ clinic_obj.name }}" class="h-full w-full object-contain">
                     {% else %}
-                    <svg class="h-10 w-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <svg class="h-10 w-10 text-content-faint" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
                     </svg>
                     {% endif %}
                 </div>
                 <dl class="grid flex-1 gap-4 sm:grid-cols-2">
                     <div>
-                        <dt class="text-xs font-medium text-slate-500">Nombre</dt>
-                        <dd class="mt-1 text-sm font-semibold text-slate-900">{{ clinic_obj.name|default:"—" }}</dd>
+                        <dt class="text-xs font-medium text-content-subtle">Nombre</dt>
+                        <dd class="mt-1 text-sm font-semibold text-content">{{ clinic_obj.name|default:"—" }}</dd>
                     </div>
                     <div>
-                        <dt class="text-xs font-medium text-slate-500">Estado</dt>
+                        <dt class="text-xs font-medium text-content-subtle">Estado</dt>
                         <dd class="mt-1">
                             {% if clinic_obj.is_active %}
-                            <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                            <span class="inline-flex items-center gap-1 rounded-full bg-success-soft px-2.5 py-0.5 text-xs font-semibold text-success">
                                 <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Activa
                             </span>
                             {% else %}
-                            <span class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-500">
-                                <span class="h-1.5 w-1.5 rounded-full bg-slate-300"></span>Inactiva
+                            <span class="inline-flex items-center gap-1 rounded-full bg-muted-strong px-2.5 py-0.5 text-xs font-semibold text-content-subtle">
+                                <span class="h-1.5 w-1.5 rounded-full bg-line-strong"></span>Inactiva
                             </span>
                             {% endif %}
                         </dd>
                     </div>
                     <div>
-                        <dt class="text-xs font-medium text-slate-500">Zona horaria</dt>
-                        <dd class="mt-1 text-sm text-slate-700">{{ clinic_obj.timezone|default:"—" }}</dd>
+                        <dt class="text-xs font-medium text-content-subtle">Zona horaria</dt>
+                        <dd class="mt-1 text-sm text-content-muted">{{ clinic_obj.timezone|default:"—" }}</dd>
                     </div>
                 </dl>
             </div>
@@ -80,7 +80,7 @@
 
         {# Contacto #}
         <div class="px-6 py-5">
-            <h4 class="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
+            <h4 class="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-content-faint">
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
                 </svg>
@@ -88,26 +88,26 @@
             </h4>
             <dl class="grid gap-4 sm:grid-cols-2">
                 <div>
-                    <dt class="text-xs font-medium text-slate-500">Teléfono</dt>
-                    <dd class="mt-1 text-sm text-slate-700">{{ clinic_obj.phone|default:"—" }}</dd>
+                    <dt class="text-xs font-medium text-content-subtle">Teléfono</dt>
+                    <dd class="mt-1 text-sm text-content-muted">{{ clinic_obj.phone|default:"—" }}</dd>
                 </div>
                 <div>
-                    <dt class="text-xs font-medium text-slate-500">Correo electrónico</dt>
-                    <dd class="mt-1 text-sm text-slate-700">{{ clinic_obj.email|default:"—" }}</dd>
+                    <dt class="text-xs font-medium text-content-subtle">Correo electrónico</dt>
+                    <dd class="mt-1 text-sm text-content-muted">{{ clinic_obj.email|default:"—" }}</dd>
                 </div>
                 <div>
-                    <dt class="text-xs font-medium text-slate-500">Sitio web</dt>
+                    <dt class="text-xs font-medium text-content-subtle">Sitio web</dt>
                     <dd class="mt-1 text-sm">
                         {% if clinic_obj.website %}
                         <a href="{{ clinic_obj.website }}" target="_blank" rel="noopener noreferrer"
-                           class="inline-flex items-center gap-1.5 font-medium text-brand-600 hover:text-brand-700 hover:underline break-all">
+                           class="inline-flex items-center gap-1.5 font-medium text-brand-fg hover:text-brand-fg hover:underline break-all">
                             {{ clinic_obj.website }}
                             <svg class="h-3.5 w-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
                             </svg>
                         </a>
                         {% else %}
-                        <span class="text-slate-700">—</span>
+                        <span class="text-content-muted">—</span>
                         {% endif %}
                     </dd>
                 </div>
@@ -116,7 +116,7 @@
 
         {# Dirección #}
         <div class="px-6 py-5">
-            <h4 class="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
+            <h4 class="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-content-faint">
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
                     <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
@@ -125,20 +125,20 @@
             </h4>
             <dl class="grid gap-4 sm:grid-cols-2">
                 <div class="sm:col-span-2">
-                    <dt class="text-xs font-medium text-slate-500">Dirección</dt>
-                    <dd class="mt-1 text-sm text-slate-700">{{ clinic_obj.address|default:"—" }}</dd>
+                    <dt class="text-xs font-medium text-content-subtle">Dirección</dt>
+                    <dd class="mt-1 text-sm text-content-muted">{{ clinic_obj.address|default:"—" }}</dd>
                 </div>
                 <div>
-                    <dt class="text-xs font-medium text-slate-500">Ciudad</dt>
-                    <dd class="mt-1 text-sm text-slate-700">{{ clinic_obj.city|default:"—" }}</dd>
+                    <dt class="text-xs font-medium text-content-subtle">Ciudad</dt>
+                    <dd class="mt-1 text-sm text-content-muted">{{ clinic_obj.city|default:"—" }}</dd>
                 </div>
                 <div>
-                    <dt class="text-xs font-medium text-slate-500">Provincia</dt>
-                    <dd class="mt-1 text-sm text-slate-700">{{ clinic_obj.province|default:"—" }}</dd>
+                    <dt class="text-xs font-medium text-content-subtle">Provincia</dt>
+                    <dd class="mt-1 text-sm text-content-muted">{{ clinic_obj.province|default:"—" }}</dd>
                 </div>
                 <div>
-                    <dt class="text-xs font-medium text-slate-500">Código postal</dt>
-                    <dd class="mt-1 text-sm text-slate-700">{{ clinic_obj.postal_code|default:"—" }}</dd>
+                    <dt class="text-xs font-medium text-content-subtle">Código postal</dt>
+                    <dd class="mt-1 text-sm text-content-muted">{{ clinic_obj.postal_code|default:"—" }}</dd>
                 </div>
             </dl>
         </div>
@@ -146,19 +146,19 @@
         {# Descripción #}
         {% if clinic_obj.description %}
         <div class="px-6 py-5">
-            <h4 class="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
+            <h4 class="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-content-faint">
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                 </svg>
                 Descripción
             </h4>
-            <p class="text-sm text-slate-700 whitespace-pre-line">{{ clinic_obj.description }}</p>
+            <p class="text-sm text-content-muted whitespace-pre-line">{{ clinic_obj.description }}</p>
         </div>
         {% endif %}
 
         {# Integración externa #}
         <div class="px-6 py-5">
-            <h4 class="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
+            <h4 class="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-content-faint">
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
                 </svg>
@@ -166,12 +166,12 @@
             </h4>
             <dl class="grid gap-4 sm:grid-cols-2">
                 <div>
-                    <dt class="text-xs font-medium text-slate-500">Tipo</dt>
-                    <dd class="mt-1 text-sm font-medium text-slate-700">{{ clinic_obj.get_api_type_display|default:"Sin configurar" }}</dd>
+                    <dt class="text-xs font-medium text-content-subtle">Tipo</dt>
+                    <dd class="mt-1 text-sm font-medium text-content-muted">{{ clinic_obj.get_api_type_display|default:"Sin configurar" }}</dd>
                 </div>
                 <div>
-                    <dt class="text-xs font-medium text-slate-500">URL de la API</dt>
-                    <dd class="mt-1 text-sm text-slate-700 break-all">{{ clinic_obj.api_url|default:"—" }}</dd>
+                    <dt class="text-xs font-medium text-content-subtle">URL de la API</dt>
+                    <dd class="mt-1 text-sm text-content-muted break-all">{{ clinic_obj.api_url|default:"—" }}</dd>
                 </div>
             </dl>
         </div>

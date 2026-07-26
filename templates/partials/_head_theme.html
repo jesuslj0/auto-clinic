@@ -1,0 +1,398 @@
+{% comment %}
+Sistema de diseño y tema (claro/oscuro). Lo incluyen todas las plantillas raíz:
+base.html, registration/login.html, 404.html y 500.html. No dupliques la
+configuración de Tailwind en ninguna otra parte: se edita aquí.
+
+El tema no se implementa con variantes `dark:` en cada elemento, sino con una
+paleta semántica sobre variables CSS: una tarjeta es `bg-surface`, no
+`bg-white dark:bg-slate-800`. Cambiar de tema reasigna las variables de `.dark`
+y el markup no se entera. Al añadir markup nuevo, usa los tokens semánticos
+(surface, muted, line, content…), nunca `slate-*` ni `white` directamente.
+{% endcomment %}
+<meta name="color-scheme" content="light dark">
+
+{% comment %}
+Anti-FOUC: síncrono y lo antes posible en el <head>, antes de que se pinte nada.
+Si esto se retrasa (defer, final del body), se ve un fogonazo blanco al cargar
+en modo oscuro.
+{% endcomment %}
+<script>
+    (function () {
+        var KEY = 'ac-theme';
+        var root = document.documentElement;
+
+        function prefersDark() {
+            return window.matchMedia('(prefers-color-scheme: dark)').matches;
+        }
+        function stored() {
+            try { return localStorage.getItem(KEY); } catch (e) { return null; }
+        }
+        function syncButtons(dark) {
+            document.querySelectorAll('[data-theme-toggle]').forEach(function (el) {
+                el.setAttribute('aria-pressed', dark ? 'true' : 'false');
+            });
+        }
+        function apply(dark) {
+            root.classList.toggle('dark', dark);
+            syncButtons(dark);
+        }
+
+        // Sin elección previa manda el sistema operativo.
+        apply(stored() ? stored() === 'dark' : prefersDark());
+
+        window.acTheme = {
+            isDark: function () { return root.classList.contains('dark'); },
+            toggle: function () {
+                var dark = !this.isDark();
+                try { localStorage.setItem(KEY, dark ? 'dark' : 'light'); } catch (e) {}
+                apply(dark);
+            }
+        };
+
+        // Mientras el usuario no haya elegido, seguimos al sistema en vivo.
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function (e) {
+            if (!stored()) apply(e.matches);
+        });
+
+        // Delegado: los botones de tema aún no existen cuando corre este script,
+        // y hay uno por cada sidebar (escritorio y móvil).
+        document.addEventListener('click', function (e) {
+            if (e.target.closest('[data-theme-toggle]')) window.acTheme.toggle();
+        });
+        document.addEventListener('DOMContentLoaded', function () {
+            syncButtons(root.classList.contains('dark'));
+        });
+    })();
+</script>
+
+{% comment %}
+Tokens de tema. En formato "R G B" suelto para que Tailwind pueda componer
+opacidades sobre ellos (bg-surface/90, ring-line/70…).
+{% endcomment %}
+<style>
+    :root {
+        /* Superficies */
+        --c-canvas: 246 245 251;
+        --c-surface: 255 255 255;
+        --c-surface-raised: 255 255 255;
+        --c-muted: 248 250 252;
+        --c-muted-strong: 241 245 249;
+
+        /* Líneas */
+        --c-line: 226 232 240;
+        --c-line-strong: 203 213 225;
+
+        /* Texto */
+        --c-content: 15 23 42;
+        --c-content-muted: 51 65 85;
+        --c-content-subtle: 100 116 139;
+        --c-content-faint: 148 163 184;
+
+        /* Marca aplicada (el violeta de identidad no cambia; sí cuál se usa) */
+        --c-brand-fg: 124 58 237;
+        --c-brand-soft: 247 245 255;
+        --c-brand-soft-strong: 237 233 254;
+        --c-brand-line: 221 214 254;
+
+        /* Estados */
+        --c-danger: 225 29 72;
+        --c-danger-soft: 255 241 242;
+        --c-danger-line: 254 205 211;
+        --c-success: 4 120 87;
+        --c-success-soft: 236 253 245;
+        --c-success-line: 167 243 208;
+        --c-warning: 180 83 9;
+        --c-warning-soft: 255 251 235;
+        --c-warning-line: 253 230 138;
+        --c-info: 3 105 161;
+        --c-info-soft: 240 249 255;
+        --c-info-line: 186 230 253;
+
+        --shadow-soft: 0 12px 32px rgba(76, 29, 149, 0.10);
+        --shadow-sidebar: 4px 0 24px rgba(76, 29, 149, 0.10);
+        --shadow-glow: 0 8px 24px -6px rgba(124, 58, 237, 0.45);
+        --brand-gradient-soft: linear-gradient(135deg, #e7dbfc 0%, #fbe7ef 100%);
+    }
+
+    .dark {
+        /* Neutros con un tinte violeta, para no perder la marca en oscuro */
+        --c-canvas: 15 13 24;
+        --c-surface: 25 21 39;
+        --c-surface-raised: 34 29 53;
+        --c-muted: 34 29 53;
+        --c-muted-strong: 44 37 66;
+
+        --c-line: 47 41 71;
+        --c-line-strong: 61 53 89;
+
+        --c-content: 241 238 250;
+        --c-content-muted: 201 194 224;
+        --c-content-subtle: 154 146 184;
+        --c-content-faint: 122 114 150;
+
+        /* brand-600 sobre fondo oscuro no llega a contraste: subimos a brand-400 */
+        --c-brand-fg: 167 139 250;
+        --c-brand-soft: 36 29 61;
+        --c-brand-soft-strong: 43 34 71;
+        --c-brand-line: 69 58 107;
+
+        --c-danger: 253 164 175;
+        --c-danger-soft: 59 31 43;
+        --c-danger-line: 92 47 63;
+        --c-success: 110 231 183;
+        --c-success-soft: 20 49 42;
+        --c-success-line: 31 77 63;
+        --c-warning: 252 211 77;
+        --c-warning-soft: 58 44 18;
+        --c-warning-line: 91 69 28;
+        --c-info: 125 211 252;
+        --c-info-soft: 16 41 59;
+        --c-info-line: 29 74 99;
+
+        /* Las sombras violeta se pierden sobre fondo oscuro */
+        --shadow-soft: 0 12px 32px rgba(0, 0, 0, 0.45);
+        --shadow-sidebar: 4px 0 24px rgba(0, 0, 0, 0.45);
+        --shadow-glow: 0 8px 24px -6px rgba(124, 58, 237, 0.55);
+        --brand-gradient-soft: linear-gradient(135deg, #241d3d 0%, #33203a 100%);
+    }
+
+    /* El CSS de Tailwind llega por CDN (asíncrono): sin esto el fondo parpadea
+       en blanco hasta que compila. */
+    html { background-color: rgb(var(--c-canvas)); }
+    .dark { color-scheme: dark; }
+</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<script>
+    tailwind.config = {
+        darkMode: 'class',
+        theme: {
+            extend: {
+                fontFamily: {
+                    sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                    display: ['"Space Grotesk"', 'Inter', 'ui-sans-serif', 'sans-serif'],
+                },
+                colors: {
+                    // Marca: violeta moderno. Fija en ambos temas (es identidad).
+                    brand: {
+                        50: '#f5f3ff',
+                        100: '#ede9fe',
+                        200: '#ddd6fe',
+                        300: '#c4b5fd',
+                        400: '#a78bfa',
+                        500: '#8b5cf6',
+                        600: '#7c3aed',
+                        700: '#6d28d9',
+                        800: '#5b21b6',
+                        900: '#4c1d95',
+                        // Variantes dependientes del tema
+                        fg: 'rgb(var(--c-brand-fg) / <alpha-value>)',
+                        soft: 'rgb(var(--c-brand-soft) / <alpha-value>)',
+                        'soft-strong': 'rgb(var(--c-brand-soft-strong) / <alpha-value>)',
+                        line: 'rgb(var(--c-brand-line) / <alpha-value>)',
+                    },
+                    // Secundario / acento: rosa suave (menos potente)
+                    accent: {
+                        50: '#fdf3f8',
+                        100: '#fbe6f0',
+                        400: '#f0a6c8',
+                        500: '#e879a6',
+                        600: '#d4628f',
+                    },
+                    // Terciario: violeta profundo (#4C1D95)
+                    tertiary: {
+                        500: '#5b21b6',
+                        600: '#4c1d95',
+                        700: '#3b1577',
+                    },
+                    // Inverted / tinta oscura para botones
+                    ink: {
+                        700: '#1e293b',
+                        800: '#172033',
+                        900: '#0f172a',
+                    },
+
+                    // --- Paleta semántica (cambia con el tema) ---
+                    canvas: 'rgb(var(--c-canvas) / <alpha-value>)',
+                    surface: {
+                        DEFAULT: 'rgb(var(--c-surface) / <alpha-value>)',
+                        raised: 'rgb(var(--c-surface-raised) / <alpha-value>)',
+                    },
+                    muted: {
+                        DEFAULT: 'rgb(var(--c-muted) / <alpha-value>)',
+                        strong: 'rgb(var(--c-muted-strong) / <alpha-value>)',
+                    },
+                    line: {
+                        DEFAULT: 'rgb(var(--c-line) / <alpha-value>)',
+                        strong: 'rgb(var(--c-line-strong) / <alpha-value>)',
+                    },
+                    content: {
+                        DEFAULT: 'rgb(var(--c-content) / <alpha-value>)',
+                        muted: 'rgb(var(--c-content-muted) / <alpha-value>)',
+                        subtle: 'rgb(var(--c-content-subtle) / <alpha-value>)',
+                        faint: 'rgb(var(--c-content-faint) / <alpha-value>)',
+                    },
+                    danger: {
+                        DEFAULT: 'rgb(var(--c-danger) / <alpha-value>)',
+                        soft: 'rgb(var(--c-danger-soft) / <alpha-value>)',
+                        line: 'rgb(var(--c-danger-line) / <alpha-value>)',
+                    },
+                    success: {
+                        DEFAULT: 'rgb(var(--c-success) / <alpha-value>)',
+                        soft: 'rgb(var(--c-success-soft) / <alpha-value>)',
+                        line: 'rgb(var(--c-success-line) / <alpha-value>)',
+                    },
+                    warning: {
+                        DEFAULT: 'rgb(var(--c-warning) / <alpha-value>)',
+                        soft: 'rgb(var(--c-warning-soft) / <alpha-value>)',
+                        line: 'rgb(var(--c-warning-line) / <alpha-value>)',
+                    },
+                    info: {
+                        DEFAULT: 'rgb(var(--c-info) / <alpha-value>)',
+                        soft: 'rgb(var(--c-info-soft) / <alpha-value>)',
+                        line: 'rgb(var(--c-info-line) / <alpha-value>)',
+                    },
+                },
+                boxShadow: {
+                    soft: 'var(--shadow-soft)',
+                    sidebar: 'var(--shadow-sidebar)',
+                    glow: 'var(--shadow-glow)',
+                },
+                backgroundImage: {
+                    'brand-gradient': 'linear-gradient(135deg, #7c3aed 0%, #e879a6 100%)',
+                    // Los mismos dos tonos rebajados, para fondos amplios donde
+                    // el degradado pleno cansaría.
+                    'brand-gradient-soft': 'var(--brand-gradient-soft)',
+                },
+                transitionProperty: {
+                    sidebar: 'transform, opacity, visibility',
+                },
+            },
+        },
+    };
+</script>
+
+<!-- Componentes reutilizables (botones e iconos del sistema de diseño) -->
+<style type="text/tailwindcss">
+    /* Botones */
+    .btn {
+        @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface active:scale-[0.98];
+    }
+    .btn-primary {
+        @apply btn bg-brand-600 text-white shadow-sm hover:bg-brand-700 focus:ring-brand-500;
+    }
+    .btn-gradient {
+        @apply btn bg-brand-gradient text-white shadow-glow hover:opacity-95 focus:ring-brand-500;
+    }
+    .btn-secondary {
+        @apply btn bg-surface text-content-muted ring-1 ring-inset ring-line hover:bg-muted focus:ring-brand-500;
+    }
+    .btn-inverted {
+        @apply btn bg-ink-700 text-white hover:bg-ink-800 focus:ring-ink-700 dark:bg-brand-600 dark:hover:bg-brand-700;
+    }
+    .btn-outlined {
+        @apply btn border border-brand-line bg-transparent text-brand-fg hover:bg-brand-soft focus:ring-brand-500;
+    }
+
+    /* Botones de icono (circulares) */
+    .icon-btn {
+        @apply inline-flex h-10 w-10 items-center justify-center rounded-full transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface active:scale-95;
+    }
+    .icon-btn-primary { @apply icon-btn bg-brand-600 text-white hover:bg-brand-700 focus:ring-brand-500; }
+    .icon-btn-ghost   { @apply icon-btn text-content-subtle hover:bg-muted-strong hover:text-content-muted focus:ring-line-strong; }
+    .icon-btn-accent  { @apply icon-btn bg-accent-500 text-white hover:bg-accent-600 focus:ring-accent-500; }
+    .icon-btn-tertiary{ @apply icon-btn bg-tertiary-600 text-white hover:bg-tertiary-700 focus:ring-tertiary-600; }
+    .icon-btn-danger  { @apply icon-btn bg-rose-500 text-white hover:bg-rose-600 focus:ring-rose-500; }
+
+    /* Formularios en oscuro. El plugin @tailwindcss/forms fuerza fondo blanco y
+       borde gris en el reset, así que hay que revertirlo en la capa base: en
+       utilities, cualquier bg-* de la plantilla sigue ganando. El :where()
+       mantiene la especificidad en (0,1,0) para no pisar esas utilidades. */
+    @layer base {
+        .dark :where(input:not([type='checkbox']):not([type='radio']):not([type='range']), select, textarea) {
+            background-color: rgb(var(--c-surface-raised));
+            border-color: rgb(var(--c-line-strong));
+            color: rgb(var(--c-content));
+        }
+        .dark :where(input, select, textarea)::placeholder {
+            color: rgb(var(--c-content-faint));
+        }
+        /* Desplegable nativo del <select> */
+        .dark :where(option) {
+            background-color: rgb(var(--c-surface-raised));
+            color: rgb(var(--c-content));
+        }
+        /* Los selectores nativos de fecha/hora vienen con icono negro */
+        .dark :where(input)::-webkit-calendar-picker-indicator {
+            filter: invert(1) opacity(0.6);
+        }
+        /* El autorrelleno del navegador pinta un amarillo fijo que ignora todo
+           lo anterior; solo se puede tapar con un inset shadow. */
+        .dark :where(input):-webkit-autofill,
+        .dark :where(input):-webkit-autofill:hover,
+        .dark :where(input):-webkit-autofill:focus {
+            -webkit-text-fill-color: rgb(var(--c-content));
+            -webkit-box-shadow: 0 0 0 1000px rgb(var(--c-surface-raised)) inset;
+            caret-color: rgb(var(--c-content));
+        }
+    }
+</style>
+
+<style>
+    [x-cloak] { display: none !important; }
+
+    /* Títulos con la tipografía display de la marca */
+    h1, h2, h3, h4 { font-family: '"Space Grotesk"', 'Space Grotesk', 'Inter', sans-serif; }
+
+    /* Burbujas de chat con pico tipo bocadillo, en la esquina superior.
+       Cada burbuja fija su color en --bubble-tail; si no, hereda el fondo. */
+    .chat-bubble { position: relative; }
+    .chat-bubble::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        width: 7px;
+        height: 10px;
+        background: var(--bubble-tail, inherit);
+    }
+    /* Recibidos: pico arriba a la izquierda. El -6px con 7px de ancho deja
+       1px de solape para que no se vea costura por el antialiasing. */
+    .chat-bubble-in::before {
+        left: -6px;
+        clip-path: polygon(0 0, 100% 0, 100% 100%);
+    }
+    /* Enviados: el mismo pico reflejado, arriba a la derecha */
+    .chat-bubble-out::before {
+        right: -6px;
+        clip-path: polygon(0 0, 100% 0, 0 100%);
+    }
+    /* Las burbujas recibidas van sobre la superficie del tema, no sobre blanco */
+    .chat-bubble-in { --bubble-tail: rgb(var(--c-surface)); }
+
+    .sidebar-enter {
+        transform: translateX(-100%);
+    }
+    .sidebar-enter-active {
+        transform: translateX(0);
+        transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .sidebar-leave-active {
+        transform: translateX(-100%);
+        transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+
+    .overlay-enter {
+        opacity: 0;
+    }
+    .overlay-enter-active {
+        opacity: 1;
+        transition: opacity 0.28s ease;
+    }
+    .overlay-leave-active {
+        opacity: 0;
+        transition: opacity 0.22s ease;
+    }
+</style>

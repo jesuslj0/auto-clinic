@@ -107,6 +107,39 @@ DRF `ModelViewSet` + `DefaultRouter` at `/api/`. Custom permissions:
 
 Filtering via `DjangoFilterBackend`, `SearchFilter`, `OrderingFilter`.
 
+### Front-end theming (light/dark)
+
+Tailwind runs from the Play CDN — there is no build step and no CSS file. The
+whole design system lives in `templates/partials/_head_theme.html`, included by
+the four root templates (`base.html`, `registration/login.html`, `404.html`,
+`500.html`). **Never duplicate `tailwind.config` anywhere else.**
+
+Dark mode is *not* done with a `dark:` variant on every element. It uses a
+**semantic palette over CSS variables**: a card is `bg-surface`, not
+`bg-white dark:bg-slate-800`. Switching theme reassigns the variables under
+`.dark` and the markup is untouched.
+
+When writing new markup, use the tokens, never `slate-*` / `white` directly:
+
+| Purpose | Tokens |
+|---|---|
+| Backgrounds | `canvas` (page), `surface`, `surface-raised`, `muted`, `muted-strong` |
+| Borders | `line`, `line-strong` |
+| Text | `content`, `content-muted`, `content-subtle`, `content-faint` |
+| Brand | `brand-fg` (text/icons), `brand-soft`, `brand-soft-strong`, `brand-line` |
+| States | `danger`, `success`, `warning`, `info` — each with `-soft` and `-line` |
+
+Exceptions that stay literal: `text-white` on brand-coloured buttons, the
+`bg-slate-900/50` modal overlays, and the white backdrop behind clinic logos
+(transparent PNGs would vanish in dark mode). Status classes rendered from
+Python (`appointments/templatetags/appointment_extras.py`, form widgets in
+`appointments/forms.py`) must use tokens too.
+
+The theme is stored in `localStorage` under `ac-theme`, defaults to the OS
+preference, and is toggled by `partials/_theme_toggle.html` (included once per
+sidebar). Its state lives in `window.acTheme`, wired up with a delegated click
+listener, so the partial can be included any number of times.
+
 ### Real-time (WebSockets)
 
 `Django Channels 4.1` + `channels-redis` + `Daphne` ASGI server. The `AppointmentConsumer` (`appointments/consumers.py`) is an `AsyncWebsocketConsumer` that joins a clinic-scoped group. Appointment changes broadcast via a `post_save` signal in `appointments/signals.py`.

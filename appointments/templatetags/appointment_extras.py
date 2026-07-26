@@ -24,41 +24,43 @@ STATUS_ICON_PATHS = {
     'no_show': 'M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z',  # menos en círculo
 }
 
-# Clases de color (Tailwind) por estado de cita.
+# Clases de color (Tailwind) por estado de cita. Usan los tokens semánticos de
+# partials/_head_theme.html, no la paleta cruda: así siguen al tema claro/oscuro.
 STATUS_BADGE_CLASSES = {
-    'pending': 'bg-amber-50 text-amber-700',
-    'confirmed': 'bg-emerald-50 text-emerald-700',
-    'completed': 'bg-brand-50 text-brand-700',
-    'cancelled': 'bg-rose-50 text-rose-700',
-    'rescheduled': 'bg-sky-50 text-sky-700',
-    'no_show': 'bg-slate-100 text-slate-600',
+    'pending': 'bg-warning-soft text-warning',
+    'confirmed': 'bg-success-soft text-success',
+    'completed': 'bg-brand-soft text-brand-fg',
+    'cancelled': 'bg-danger-soft text-danger',
+    'rescheduled': 'bg-info-soft text-info',
+    'no_show': 'bg-muted-strong text-content-muted',
 }
 
 # Borde + fondo para celdas del calendario.
 STATUS_CELL_CLASSES = {
-    'pending': 'border-amber-200 bg-amber-50',
-    'confirmed': 'border-emerald-200 bg-emerald-50',
-    'completed': 'border-brand-200 bg-brand-50',
-    'cancelled': 'border-rose-200 bg-rose-50',
-    'rescheduled': 'border-sky-200 bg-sky-50',
-    'no_show': 'border-slate-300 bg-slate-100',
+    'pending': 'border-warning-line bg-warning-soft',
+    'confirmed': 'border-success-line bg-success-soft',
+    'completed': 'border-brand-line bg-brand-soft',
+    'cancelled': 'border-danger-line bg-danger-soft',
+    'rescheduled': 'border-info-line bg-info-soft',
+    'no_show': 'border-line-strong bg-muted-strong',
 }
 
-# Color sólido para puntos/indicadores (calendario).
+# Color sólido para puntos/indicadores (calendario). Los tonos 500 tienen
+# contraste suficiente sobre ambas superficies, así que no dependen del tema.
 STATUS_DOT_CLASSES = {
     'pending': 'bg-amber-500',
     'confirmed': 'bg-emerald-500',
     'completed': 'bg-brand-500',
     'cancelled': 'bg-rose-500',
     'rescheduled': 'bg-sky-500',
-    'no_show': 'bg-slate-400',
+    'no_show': 'bg-content-faint',
 }
 
 
 @register.filter
 def status_badge(status):
     """Devuelve las clases Tailwind de fondo/texto para el badge de un estado."""
-    return STATUS_BADGE_CLASSES.get(status, 'bg-amber-50 text-amber-700')
+    return STATUS_BADGE_CLASSES.get(status, 'bg-warning-soft text-warning')
 
 
 @register.filter
@@ -86,7 +88,7 @@ def status_dot(status):
 @register.filter
 def status_cell(status):
     """Devuelve las clases borde+fondo para una celda de calendario."""
-    return STATUS_CELL_CLASSES.get(status, 'border-amber-200 bg-amber-50')
+    return STATUS_CELL_CLASSES.get(status, 'border-warning-line bg-warning-soft')
 
 
 @register.filter

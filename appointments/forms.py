@@ -192,8 +192,8 @@ class AppointmentForm(forms.Form):
 # el template) para poder usar `{{ campo }}` directo y que el widget ya venga
 # estilizado.
 _FIELD_CLASS = (
-    'block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm '
-    'text-slate-900 shadow-sm focus:border-transparent focus:outline-none '
+    'block w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm '
+    'text-content shadow-sm focus:border-transparent focus:outline-none '
     'focus:ring-2 focus:ring-brand-500 transition'
 )
 
@@ -214,7 +214,7 @@ class ProfessionalScheduleForm(forms.ModelForm):
             'start_time': forms.TimeInput(format='%H:%M', attrs={'type': 'time', 'class': _FIELD_CLASS}),
             'end_time': forms.TimeInput(format='%H:%M', attrs={'type': 'time', 'class': _FIELD_CLASS}),
             'is_active': forms.CheckboxInput(
-                attrs={'class': 'h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500'}
+                attrs={'class': 'h-4 w-4 rounded border-line-strong text-brand-600 focus:ring-brand-500'}
             ),
         }
 

@@ -1,9 +1,9 @@
 {% with professional=request.user.professional_profile %}
-<div class="border-b border-slate-200 bg-white">
+<div class="border-b border-line bg-surface">
     <div class="mx-auto flex max-w-7xl items-center gap-4 px-4 py-2.5 sm:px-6 lg:px-8">
         <!-- Buscador de pacientes -->
         <form method="get" action="{% url 'core:search' %}" role="search" class="relative flex-1">
-            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-content-faint">
                 <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                 </svg>
@@ -14,30 +14,30 @@
                 value="{{ request.GET.q|default:'' }}"
                 placeholder="Buscar pacientes y citas…"
                 autocomplete="off"
-                class="block w-full rounded-xl border-0 bg-slate-50 py-2 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 transition focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                class="block w-full rounded-xl border-0 bg-muted py-2 pl-10 pr-4 text-sm text-content placeholder-content-faint transition focus:bg-surface focus:outline-none focus:ring-2 focus:ring-brand-500"
             >
         </form>
 
         <!-- Separador -->
-        <div class="h-8 w-px flex-shrink-0 bg-slate-200" aria-hidden="true"></div>
+        <div class="h-8 w-px flex-shrink-0 bg-line" aria-hidden="true"></div>
 
         <!-- Perfil del profesional -->
         <a href="{% if professional %}{% url 'appointments:profile' %}{% else %}#{% endif %}"
            class="flex flex-shrink-0 items-center gap-3 rounded-xl transition {% if professional %}hover:opacity-80{% else %}pointer-events-none{% endif %}"
            {% if professional %}title="Ver mi perfil"{% endif %}>
             {% if professional.photo %}
-                <img src="{{ professional.photo.url }}" alt="Foto de perfil" class="h-9 w-9 flex-shrink-0 rounded-xl object-cover ring-2 ring-brand-100">
+                <img src="{{ professional.photo.url }}" alt="Foto de perfil" class="h-9 w-9 flex-shrink-0 rounded-xl object-cover ring-2 ring-brand-line">
             {% else %}
                 <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-gradient text-sm font-semibold text-white shadow-glow">
                     {{ request.user.get_full_name|default:request.user.email|make_list|first|upper }}
                 </span>
             {% endif %}
             <div class="hidden min-w-0 leading-tight sm:block">
-                <p class="truncate text-sm font-semibold text-slate-900">{{ request.user.get_full_name|default:request.user.email }}</p>
+                <p class="truncate text-sm font-semibold text-content">{{ request.user.get_full_name|default:request.user.email }}</p>
                 {% if professional %}
-                    <p class="truncate text-xs font-medium text-brand-700">{{ professional.get_professional_type_display }}</p>
+                    <p class="truncate text-xs font-medium text-brand-fg">{{ professional.get_professional_type_display }}</p>
                 {% else %}
-                    <p class="truncate text-xs text-slate-500">{{ request.user.get_role_display|default:"Personal" }}</p>
+                    <p class="truncate text-xs text-content-subtle">{{ request.user.get_role_display|default:"Personal" }}</p>
                 {% endif %}
             </div>
         </a>

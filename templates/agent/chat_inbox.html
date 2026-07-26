@@ -3,13 +3,13 @@
 {% block title %}Chats · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
 {% block page_heading %}Chats{% endblock %}
 {% block page_subheading %}
-<p class="mt-0.5 hidden text-sm text-slate-500 sm:block">Conversaciones de WhatsApp con el agente.</p>
+<p class="mt-0.5 hidden text-sm text-content-subtle sm:block">Conversaciones de WhatsApp con el agente.</p>
 {% endblock %}
 
 {% block page_actions %}
 <div class="flex items-center gap-2">
     {% if total_unread %}
-    <span class="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand-700">
+    <span class="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-3 py-1.5 text-sm font-semibold text-brand-fg">
         <span class="h-2 w-2 rounded-full bg-brand-500"></span>
         {{ total_unread }} sin leer
     </span>
@@ -25,15 +25,15 @@
         <input type="hidden" name="next" value="{{ request.get_full_path }}">
         {% if request.user.clinic.agent_enabled %}
         <button type="submit"
-                class="inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand-700 ring-1 ring-brand-200 transition hover:bg-brand-100"
+                class="inline-flex items-center gap-2 rounded-full bg-brand-soft px-3 py-1.5 text-sm font-semibold text-brand-fg ring-1 ring-brand-200 transition hover:bg-brand-soft-strong"
                 title="Desactivar el agente en toda la clínica">
             <span class="h-2 w-2 rounded-full bg-brand-500"></span>Agente activo
         </button>
         {% else %}
         <button type="submit"
-                class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-600 ring-1 ring-slate-300 transition hover:bg-slate-200"
+                class="inline-flex items-center gap-2 rounded-full bg-muted-strong px-3 py-1.5 text-sm font-semibold text-content-muted ring-1 ring-line-strong transition hover:bg-line"
                 title="Activar el agente en toda la clínica">
-            <span class="h-2 w-2 rounded-full bg-slate-400"></span>Agente apagado
+            <span class="h-2 w-2 rounded-full bg-content-faint"></span>Agente apagado
         </button>
         {% endif %}
     </form>
@@ -49,21 +49,21 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
 <section class="grid gap-4 lg:h-[calc(100vh-12rem)] lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
 
     <!-- Lista de conversaciones -->
-    <aside class="flex min-h-0 flex-col overflow-hidden rounded-3xl bg-white shadow-soft ring-1 ring-slate-200 {% if active_session %}max-lg:hidden{% endif %}">
-        <div class="border-b border-slate-200 p-4">
+    <aside class="flex min-h-0 flex-col overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line {% if active_session %}max-lg:hidden{% endif %}">
+        <div class="border-b border-line p-4">
             <form method="get" class="space-y-3">
                 <label class="relative block">
                     <span class="sr-only">Buscar conversación</span>
-                    <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-content-faint" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                     </svg>
                     <input type="search" name="q" value="{{ query }}" placeholder="Teléfono o paciente"
-                           class="block w-full rounded-2xl border-slate-200 pl-9 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
+                           class="block w-full rounded-2xl border-line pl-9 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
                 </label>
                 <div class="flex items-center gap-2">
-                    <label class="inline-flex items-center gap-2 text-sm text-slate-600">
+                    <label class="inline-flex items-center gap-2 text-sm text-content-muted">
                         <input type="checkbox" name="unread" value="1" {% if only_unread %}checked{% endif %}
-                               class="rounded border-slate-300 text-brand-600 focus:ring-brand-500">
+                               class="rounded border-line-strong text-brand-fg focus:ring-brand-500">
                         Solo sin leer
                     </label>
                     <button type="submit" class="btn-primary ml-auto px-3 py-1.5 text-xs">Filtrar</button>
@@ -74,11 +74,11 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
             </form>
         </div>
 
-        <div class="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto">
+        <div class="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
             {% for session in sessions %}
             <a href="{% url 'agent:chat-thread' session.id %}{% if query %}?q={{ query }}{% endif %}"
-               class="flex items-start gap-3 px-4 py-3 transition hover:bg-slate-50 {% if active_session.id == session.id %}bg-brand-50/60{% endif %}">
-                <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700">
+               class="flex items-start gap-3 px-4 py-3 transition hover:bg-muted {% if active_session.id == session.id %}bg-brand-50/60{% endif %}">
+                <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-soft-strong text-sm font-semibold text-brand-fg">
                     {% if session.patient %}{{ session.patient.first_name|first|upper }}{{ session.patient.last_name|first|upper }}{% else %}
                     <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
@@ -87,15 +87,15 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
                 </span>
                 <span class="min-w-0 flex-1">
                     <span class="flex items-baseline justify-between gap-2">
-                        <span class="truncate text-sm font-semibold text-slate-900">
+                        <span class="truncate text-sm font-semibold text-content">
                             {{ session.patient|default:session.phone }}
                         </span>
-                        <span class="flex-shrink-0 text-xs text-slate-400">
+                        <span class="flex-shrink-0 text-xs text-content-faint">
                             {% if session.last_message_at %}{{ session.last_message_at|date:"j M" }}{% endif %}
                         </span>
                     </span>
                     <span class="mt-0.5 flex items-center justify-between gap-2">
-                        <span class="truncate text-sm {% if session.unread_count %}font-medium text-slate-700{% else %}text-slate-500{% endif %}">
+                        <span class="truncate text-sm {% if session.unread_count %}font-medium text-content-muted{% else %}text-content-subtle{% endif %}">
                             {{ session.last_message_preview|default:"Sin mensajes todavía" }}
                         </span>
                         {% if session.unread_count %}
@@ -113,8 +113,8 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
             </a>
             {% empty %}
             <div class="px-6 py-12 text-center">
-                <p class="text-sm font-medium text-slate-900">No hay conversaciones.</p>
-                <p class="mt-2 text-sm text-slate-500">
+                <p class="text-sm font-medium text-content">No hay conversaciones.</p>
+                <p class="mt-2 text-sm text-content-subtle">
                     {% if query or only_unread %}Prueba a limpiar los filtros.{% else %}Aparecerán aquí en cuanto un paciente escriba al agente.{% endif %}
                 </p>
             </div>
@@ -123,21 +123,21 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
     </aside>
 
     <!-- Hilo -->
-    <section class="flex min-h-0 flex-col overflow-hidden rounded-3xl bg-white shadow-soft ring-1 ring-slate-200 {% if not active_session %}max-lg:hidden{% endif %}">
+    <section class="flex min-h-0 flex-col overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line {% if not active_session %}max-lg:hidden{% endif %}">
         {% if active_session %}
-        <header class="flex items-center gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
+        <header class="flex items-center gap-3 border-b border-line px-4 py-3 sm:px-5">
             <a href="{% url 'agent:chat-inbox' %}{% if query %}?q={{ query }}{% endif %}"
-               class="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 lg:hidden" aria-label="Volver a la lista">
+               class="rounded-xl p-2 text-content-subtle transition hover:bg-muted-strong lg:hidden" aria-label="Volver a la lista">
                 <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
                 </svg>
             </a>
-            <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700">
+            <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-soft-strong text-sm font-semibold text-brand-fg">
                 {% if active_session.patient %}{{ active_session.patient.first_name|first|upper }}{{ active_session.patient.last_name|first|upper }}{% else %}?{% endif %}
             </span>
             <div class="min-w-0 flex-1">
-                <p class="truncate text-sm font-semibold text-slate-900">{{ active_session.patient|default:active_session.phone }}</p>
-                <p class="truncate text-xs text-slate-500">
+                <p class="truncate text-sm font-semibold text-content">{{ active_session.patient|default:active_session.phone }}</p>
+                <p class="truncate text-xs text-content-subtle">
                     {{ active_session.phone }}
                     {% if active_session.last_interaction %} · último mensaje {{ active_session.last_interaction|timesince }} atrás{% endif %}
                 </p>
@@ -148,16 +148,16 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
                 activo es solo una etiqueta, no un botón.
                 {% endcomment %}
                 <form method="post" action="{% url 'agent:chat-toggle-agent' active_session.id %}"
-                      class="flex items-center gap-0.5 rounded-full bg-slate-100 p-0.5 ring-1 ring-slate-200">
+                      class="flex items-center gap-0.5 rounded-full bg-muted-strong p-0.5 ring-1 ring-line">
                     {% csrf_token %}
                     {% if active_session.agent_paused %}
-                    <button type="submit" class="rounded-full px-3 py-1 text-xs font-semibold text-slate-500 transition hover:text-brand-700">
+                    <button type="submit" class="rounded-full px-3 py-1 text-xs font-semibold text-content-subtle transition hover:text-brand-fg">
                         Agente IA
                     </button>
                     <span class="rounded-full bg-tertiary-600 px-3 py-1 text-xs font-semibold text-white">Modo humano</span>
                     {% else %}
                     <span class="rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white">Agente IA</span>
-                    <button type="submit" class="rounded-full px-3 py-1 text-xs font-semibold text-slate-500 transition hover:text-tertiary-600">
+                    <button type="submit" class="rounded-full px-3 py-1 text-xs font-semibold text-content-subtle transition hover:text-tertiary-600">
                         Modo humano
                     </button>
                     {% endif %}
@@ -173,7 +173,7 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
         gana sobre el modo del hilo, porque apagado no responde en ningún caso.
         {% endcomment %}
         {% if not active_session.clinic.agent_enabled %}
-        <p class="border-b border-slate-200 bg-slate-100 px-4 py-2 text-xs text-slate-600 sm:px-5">
+        <p class="border-b border-line bg-muted-strong px-4 py-2 text-xs text-content-muted sm:px-5">
             El agente está apagado en toda la clínica. Ningún chat recibe respuestas automáticas.
         </p>
         {% elif active_session.is_handoff_active %}
@@ -194,7 +194,7 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
             {% for message in chat_messages %}
                 {% ifchanged message.created_at|date:"Y-m-d" %}
                 <div class="flex justify-center py-1">
-                    <span class="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-500 shadow-sm ring-1 ring-white/70">
+                    <span class="rounded-full bg-surface px-3 py-1 text-xs font-medium text-content-subtle shadow-sm ring-1 ring-line">
                         {{ message.created_at|date:"j F Y" }}
                     </span>
                 </div>
@@ -202,10 +202,13 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
 
                 <div class="flex {% if message.direction == 'inbound' %}justify-start{% else %}justify-end{% endif %}">
                     <div class="chat-bubble max-w-[85%] rounded-2xl px-4 py-2.5 shadow-sm sm:max-w-[70%]
-                        {% if message.direction == 'inbound' %}chat-bubble-in rounded-tl-sm bg-white text-slate-800 ring-1 ring-white/70
+                        {% if message.direction == 'inbound' %}chat-bubble-in rounded-tl-sm bg-surface text-content ring-1 ring-line
                         {% elif message.sender == 'staff' %}chat-bubble-out rounded-tr-sm bg-tertiary-600 text-white
                         {% else %}chat-bubble-out rounded-tr-sm bg-brand-600 text-white{% endif %}"
-                        style="--bubble-tail: {% if message.direction == 'inbound' %}#ffffff{% elif message.sender == 'staff' %}#4c1d95{% else %}#7c3aed{% endif %}">
+                        {% comment %}Las recibidas van sobre la superficie del tema: su pico lo
+                        fija .chat-bubble-in en CSS, no aquí. Las enviadas usan colores de marca,
+                        iguales en claro y oscuro.{% endcomment %}
+                        {% if message.direction != 'inbound' %}style="--bubble-tail: {% if message.sender == 'staff' %}#4c1d95{% else %}#7c3aed{% endif %}"{% endif %}>
 
                         {% if message.sender == 'staff' or message.sender == 'agent' %}
                         <p class="mb-1 text-xs font-semibold {% if message.sender == 'staff' %}text-accent-100{% else %}text-brand-100{% endif %}">
@@ -233,7 +236,7 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
                         <p class="whitespace-pre-line break-words text-sm">{{ message.body }}</p>
                         {% endif %}
 
-                        <p class="mt-1 flex items-center justify-end gap-1.5 text-[11px] {% if message.direction == 'inbound' %}text-slate-400{% else %}text-white/70{% endif %}">
+                        <p class="mt-1 flex items-center justify-end gap-1.5 text-[11px] {% if message.direction == 'inbound' %}text-content-faint{% else %}text-white/70{% endif %}">
                             {{ message.sent_at|default:message.created_at|date:"H:i" }}
                             {% if message.direction == 'outbound' and message.status %}
                                 · {{ message.get_status_display|lower }}
@@ -243,12 +246,12 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
                 </div>
             {% empty %}
                 <div class="flex h-full items-center justify-center">
-                    <p class="text-sm text-slate-500">Esta conversación aún no tiene mensajes.</p>
+                    <p class="text-sm text-content-subtle">Esta conversación aún no tiene mensajes.</p>
                 </div>
             {% endfor %}
         </div>
 
-        <footer class="border-t border-slate-200 bg-white px-4 py-3 sm:px-6">
+        <footer class="border-t border-line bg-surface px-4 py-3 sm:px-6">
             {% if active_session.can_send_free_text %}
             {% comment %}
             Enviar aparta al agente automáticamente: no hace falta poner antes el
@@ -259,7 +262,7 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
                 <label class="sr-only" for="chat-body">Mensaje</label>
                 <textarea id="chat-body" name="body" rows="1" required maxlength="4096"
                           placeholder="Escribe un mensaje…"
-                          class="min-h-[2.75rem] flex-1 resize-y rounded-2xl border-slate-200 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"></textarea>
+                          class="min-h-[2.75rem] flex-1 resize-y rounded-2xl border-line text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"></textarea>
                 <button type="submit" class="btn-primary flex-shrink-0 px-4 py-2.5 text-sm">
                     <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
@@ -267,7 +270,7 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
                     <span class="ml-1.5 hidden sm:inline">Enviar</span>
                 </button>
             </form>
-            <p class="mt-2 text-xs text-slate-400">
+            <p class="mt-2 text-xs text-content-faint">
                 Al enviar, el agente deja de responder en este chat
                 {% if request.user.clinic.agent_handoff_timeout_seconds %}
                 y lo retoma tras {{ request.user.clinic.agent_handoff_timeout_seconds }} segundos sin que escribas.
@@ -276,9 +279,9 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
                 {% endif %}
             </p>
             {% else %}
-            <div class="rounded-2xl bg-slate-50 px-4 py-3 text-center ring-1 ring-slate-200">
-                <p class="text-xs font-medium text-slate-700">No se puede escribir en esta conversación.</p>
-                <p class="mt-1 text-xs text-slate-500">
+            <div class="rounded-2xl bg-muted px-4 py-3 text-center ring-1 ring-line">
+                <p class="text-xs font-medium text-content-muted">No se puede escribir en esta conversación.</p>
+                <p class="mt-1 text-xs text-content-subtle">
                     {% if active_session.last_interaction %}
                     WhatsApp solo permite responder con texto libre durante las 24 horas siguientes al
                     mensaje del paciente, y ya han pasado. Habrá que esperar a que vuelva a escribir.
@@ -294,13 +297,13 @@ se muestra a pantalla completa, como en cualquier cliente de chat.
         {% else %}
         <div class="flex flex-1 items-center justify-center px-6 py-16 text-center">
             <div>
-                <span class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
+                <span class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-soft text-brand-fg">
                     <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
                     </svg>
                 </span>
-                <p class="mt-4 text-base font-semibold text-slate-900">Selecciona una conversación</p>
-                <p class="mt-1 text-sm text-slate-500">Elige un chat de la lista para ver el historial completo.</p>
+                <p class="mt-4 text-base font-semibold text-content">Selecciona una conversación</p>
+                <p class="mt-1 text-sm text-content-subtle">Elige un chat de la lista para ver el historial completo.</p>
             </div>
         </div>
         {% endif %}

@@ -1,6 +1,6 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="es" class="h-full bg-[#f6f5fb]">
+<html lang="es" class="h-full bg-canvas">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,55 +8,9 @@
     <link rel="icon" type="image/png" sizes="32x32" href="{% static 'img/favicon/favicon-32x32.png' %}">
     <link rel="icon" type="image/png" sizes="16x16" href="{% static 'img/favicon/favicon-16x16.png' %}">
     <title>Iniciar sesión — Auto Clinic</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-                        display: ['"Space Grotesk"', 'Inter', 'ui-sans-serif', 'sans-serif'],
-                    },
-                    colors: {
-                        brand: {
-                            50:  '#f5f3ff',
-                            100: '#ede9fe',
-                            300: '#c4b5fd',
-                            500: '#8b5cf6',
-                            600: '#7c3aed',
-                            700: '#6d28d9',
-                            900: '#4c1d95',
-                        },
-                        accent: { 500: '#e879a6' },
-                    },
-                    boxShadow: {
-                        soft: '0 12px 32px rgba(76, 29, 149, 0.10)',
-                        glow: '0 8px 24px -6px rgba(124, 58, 237, 0.45)',
-                    },
-                    backgroundImage: {
-                        'brand-gradient': 'linear-gradient(135deg, #7c3aed 0%, #e879a6 100%)',
-                    },
-                },
-            },
-        };
-    </script>
-    <style type="text/tailwindcss">
-        .btn {
-            @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-2 active:scale-[0.98];
-        }
-        .btn-primary {
-            @apply btn bg-brand-600 text-white shadow-sm hover:bg-brand-700 focus:ring-brand-500;
-        }
-    </style>
-    <style>
-        h1, h2, h3 { font-family: '"Space Grotesk"', 'Space Grotesk', 'Inter', sans-serif; }
-        [x-cloak] { display: none !important; }
-    </style>
+    {% include "partials/_head_theme.html" %}
 </head>
-<body class="h-full antialiased text-slate-800">
+<body class="h-full antialiased text-content">
     <div class="flex min-h-full">
 
         <!-- Panel de marca (izquierda) -->
@@ -96,19 +50,19 @@
 
             <div class="relative mx-auto w-full max-w-sm">
                 <div class="mb-8 flex flex-col items-center text-center">
-                    <h1 class="text-2xl font-semibold tracking-tight text-slate-900">Bienvenido de nuevo</h1>
-                    <p class="mt-1 text-sm text-slate-500">Introduce tus credenciales para acceder.</p>
+                    <h1 class="text-2xl font-semibold tracking-tight text-content">Bienvenido de nuevo</h1>
+                    <p class="mt-1 text-sm text-content-subtle">Introduce tus credenciales para acceder.</p>
                 </div>
 
                 <!-- Errores generales -->
                 {% if form.non_field_errors %}
-                <div class="mb-5 flex items-start gap-2 rounded-xl bg-rose-50 px-4 py-3 ring-1 ring-rose-200">
-                    <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-rose-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <div class="mb-5 flex items-start gap-2 rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line">
+                    <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-danger" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
                     </svg>
                     <div>
                         {% for error in form.non_field_errors %}
-                        <p class="text-sm text-rose-700">{{ error }}</p>
+                        <p class="text-sm text-danger">{{ error }}</p>
                         {% endfor %}
                     </div>
                 </div>
@@ -119,11 +73,11 @@
 
                     <!-- Email -->
                     <div>
-                        <label for="{{ form.username.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">
+                        <label for="{{ form.username.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">
                             {{ form.username.label }}
                         </label>
                         <div class="relative">
-                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-content-faint">
                                 <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
                                 </svg>
@@ -137,21 +91,21 @@
                                 autofocus
                                 required
                                 placeholder="tucorreo@ejemplo.com"
-                                class="block w-full rounded-xl border {% if form.username.errors %}border-rose-400 focus:ring-rose-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white py-2.5 pl-11 pr-4 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                                class="block w-full rounded-xl border {% if form.username.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface py-2.5 pl-11 pr-4 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
                             >
                         </div>
                         {% if form.username.errors %}
-                        <p class="mt-1.5 text-xs text-rose-600">{{ form.username.errors|join:", " }}</p>
+                        <p class="mt-1.5 text-xs text-danger">{{ form.username.errors|join:", " }}</p>
                         {% endif %}
                     </div>
 
                     <!-- Password -->
                     <div x-data="{ show: false }">
-                        <label for="{{ form.password.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1.5">
+                        <label for="{{ form.password.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">
                             {{ form.password.label }}
                         </label>
                         <div class="relative">
-                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-content-faint">
                                 <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 00-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
                                 </svg>
@@ -163,9 +117,9 @@
                                 autocomplete="current-password"
                                 required
                                 placeholder="••••••••"
-                                class="block w-full rounded-xl border {% if form.password.errors %}border-rose-400 focus:ring-rose-500{% else %}border-slate-300 focus:ring-brand-500{% endif %} bg-white py-2.5 pl-11 pr-11 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                                class="block w-full rounded-xl border {% if form.password.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface py-2.5 pl-11 pr-11 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
                             >
-                            <button type="button" @click="show = !show" class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-400 hover:text-slate-600 transition" :aria-label="show ? 'Ocultar contraseña' : 'Mostrar contraseña'">
+                            <button type="button" @click="show = !show" class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-content-faint hover:text-content-muted transition" :aria-label="show ? 'Ocultar contraseña' : 'Mostrar contraseña'">
                                 <svg x-show="!show" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -176,7 +130,7 @@
                             </button>
                         </div>
                         {% if form.password.errors %}
-                        <p class="mt-1.5 text-xs text-rose-600">{{ form.password.errors|join:", " }}</p>
+                        <p class="mt-1.5 text-xs text-danger">{{ form.password.errors|join:", " }}</p>
                         {% endif %}
                     </div>
 
@@ -189,7 +143,7 @@
                     </button>
                 </form>
 
-                <p class="mt-8 text-center text-xs text-slate-400">© {% now "Y" %} Auto Clinic · Todos los derechos reservados</p>
+                <p class="mt-8 text-center text-xs text-content-faint">© {% now "Y" %} Auto Clinic · Todos los derechos reservados</p>
                 </div>
             </div>
         </div>

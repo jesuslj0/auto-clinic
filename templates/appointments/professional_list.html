@@ -14,10 +14,10 @@
         </a>
     </div>
 
-    <section class="overflow-hidden rounded-3xl bg-white shadow-soft ring-1 ring-slate-200">
+    <section class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
-                <thead class="bg-slate-50 text-slate-500">
+            <table class="min-w-full divide-y divide-line text-left text-sm">
+                <thead class="bg-muted text-content-subtle">
                     <tr>
                         <th class="px-6 py-4 font-semibold">Usuario</th>
                         <th class="px-6 py-4 font-semibold">Tipo</th>
@@ -25,14 +25,14 @@
                         <th class="px-6 py-4 font-semibold">Acciones</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-100 bg-white">
+                <tbody class="divide-y divide-line bg-surface">
                     {% for professional in professionals %}
                     <tr>
-                        <td class="px-6 py-4 text-slate-900">{{ professional.user.get_full_name|default:professional.user.email }}</td>
-                        <td class="px-6 py-4 text-slate-600">{{ professional.get_professional_type_display }}</td>
-                        <td class="px-6 py-4 text-slate-600">
+                        <td class="px-6 py-4 text-content">{{ professional.user.get_full_name|default:professional.user.email }}</td>
+                        <td class="px-6 py-4 text-content-muted">{{ professional.get_professional_type_display }}</td>
+                        <td class="px-6 py-4 text-content-muted">
                             {% for service in professional.services.all %}
-                                <span class="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs">{{ service.name }}</span>
+                                <span class="inline-flex rounded-full bg-muted-strong px-2 py-1 text-xs">{{ service.name }}</span>
                             {% empty %}
                                 Sin servicios
                             {% endfor %}
@@ -43,7 +43,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="4" class="px-6 py-12 text-center text-sm text-slate-500">No hay profesionales registrados.</td>
+                        <td colspan="4" class="px-6 py-12 text-center text-sm text-content-subtle">No hay profesionales registrados.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
