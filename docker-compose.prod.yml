@@ -104,6 +104,14 @@ services:
     image: auto-clinic:latest
     restart: unless-stopped
     command: celery -A config worker -l info
+    healthcheck:
+      # `inspect ping` va y vuelve por el broker, así que detecta el fallo real
+      # de un worker: proceso vivo pero desconectado de Redis.
+      test: ["CMD-SHELL", "celery -A config inspect ping -d celery@$$HOSTNAME -t 5 > /dev/null 2>&1 || exit 1"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
       SECRET_KEY: ${SECRET_KEY}
@@ -128,6 +136,20 @@ services:
     image: auto-clinic:latest
     restart: unless-stopped
     command: celery -A config beat -l info
+    healthcheck:
+      # beat no atiende consultas, pero reescribe su fichero de estado cada
+      # 180 s (celery.beat.Scheduler.sync_every). Si lleva 15 minutos sin
+      # tocarlo está colgado, aunque el proceso siga en pie.
+      test:
+        - CMD-SHELL
+        - >
+          python -c "import glob, os, sys, time;
+          f = glob.glob('/app/celerybeat-schedule*');
+          sys.exit(0 if f and time.time() - max(os.path.getmtime(x) for x in f) < 900 else 1)"
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
       SECRET_KEY: ${SECRET_KEY}
