@@ -17,6 +17,10 @@ class ClinicalConfig(AppConfig):
             ClinicalNote,
             Episode,
             MedicalHistory,
+            Question,
+            QuestionnaireResponse,
+            QuestionnaireTemplate,
+            TemplateVersion,
             Visit,
         )
         from clinical.signals import create_medical_history
@@ -47,6 +51,19 @@ class ClinicalConfig(AppConfig):
             Addendum,
             sensitive=['text'],
             patient_resolver=lambda a: a.note.visit.episode.history.patient,
+        )
+
+        # Anamnesis. El cuestionario y sus versiones NO son dato de paciente:
+        # son el documento en blanco, y su historial de cambios interesa entero
+        # (quién publicó qué versión y cuándo). La respuesta sí lo es: su
+        # `snapshot` lleva texto clínico literal y va como sensible.
+        registry.register(QuestionnaireTemplate)
+        registry.register(TemplateVersion)
+        registry.register(Question)
+        registry.register(
+            QuestionnaireResponse,
+            sensitive=['snapshot'],
+            patient_resolver=lambda r: r.patient,
         )
 
         # --- Auto-creación de la historia al alta del paciente ---------------

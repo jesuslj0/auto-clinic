@@ -1,5 +1,6 @@
 """El probador del agente (panel → Agente WhatsApp) deja rastro en el historial."""
 import json
+import re
 import urllib.error
 from contextlib import contextmanager
 from unittest.mock import patch
@@ -166,11 +167,15 @@ class TestTestThreadIsSeparateFromTheInbox:
         with _n8n_replies(json.dumps({'reply': 'Sí, a las 10:00'})):
             _send(client)
 
-        response = client.get(reverse('core:clinic-integrations'))
-        assert response.context['test_messages'] == [
-            {'role': 'user', 'text': '¿Tenéis hueco mañana?'},
-            {'role': 'agent', 'text': 'Sí, a las 10:00'},
+        history = client.get(reverse('core:clinic-integrations')).context['test_messages']
+
+        assert [(entry['role'], entry['text']) for entry in history] == [
+            ('user', '¿Tenéis hueco mañana?'),
+            ('agent', 'Sí, a las 10:00'),
         ]
+        # Cada mensaje lleva su hora local para pintarla en la burbuja. Se
+        # comprueba el formato, no el valor: el reloj no es parte del contrato.
+        assert all(re.fullmatch(r'\d{2}:\d{2}', entry['time']) for entry in history)
 
     def test_settings_chat_starts_empty_without_history(self, client, admin_user):
         client.force_login(admin_user)

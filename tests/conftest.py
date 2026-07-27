@@ -10,7 +10,14 @@ from rest_framework.test import APIClient
 
 from appointments.models import Appointment, Professional, ProfessionalSchedule
 from billing.models import Subscription
-from clinical.models import ClinicalNote, Episode, Visit
+from clinical.models import (
+    ClinicalNote,
+    Episode,
+    Question,
+    QuestionnaireTemplate,
+    TemplateVersion,
+    Visit,
+)
 from core.models import Clinic, User
 from notifications.models import Reminder
 from patients.models import Patient
@@ -254,6 +261,49 @@ def draft_note_a(db, visit_a):
         assessment="Callosidad plantar",
         plan="Deslaminado y revisión en 4 semanas",
     )
+
+
+@pytest.fixture
+def questionnaire_template_a(db, clinic_a):
+    return QuestionnaireTemplate.objects.create(
+        clinic=clinic_a,
+        name="Anamnesis podológica",
+        specialty="podología general",
+    )
+
+
+@pytest.fixture
+def draft_version_a(db, questionnaire_template_a):
+    """v1 en borrador, con las tres preguntas puestas pero sin publicar."""
+    version = TemplateVersion.objects.create(template=questionnaire_template_a)
+    Question.objects.create(
+        version=version,
+        text="¿Es usted diabético?",
+        answer_type=Question.AnswerType.BOOLEAN,
+        order=1,
+        is_required=True,
+    )
+    Question.objects.create(
+        version=version,
+        text="¿Qué medicación toma actualmente?",
+        answer_type=Question.AnswerType.TEXT,
+        order=2,
+    )
+    Question.objects.create(
+        version=version,
+        text="¿Qué calzado usa habitualmente?",
+        answer_type=Question.AnswerType.SINGLE_CHOICE,
+        order=3,
+        options=["Deportivo", "De vestir", "Sanitario"],
+    )
+    return version
+
+
+@pytest.fixture
+def published_version_a(db, draft_version_a):
+    """v1 publicada y vigente: es la que se puede responder."""
+    draft_version_a.publish()
+    return draft_version_a
 
 
 @pytest.fixture

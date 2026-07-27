@@ -22,6 +22,10 @@ from clinical.models import (
     ClinicalNote,
     Episode,
     MedicalHistory,
+    Question,
+    QuestionnaireResponse,
+    QuestionnaireTemplate,
+    TemplateVersion,
     Visit,
 )
 
@@ -116,6 +120,133 @@ class AddendumAdmin(AuditedAdminMixin, admin.ModelAdmin):
     def has_change_permission(self, request, obj=None):
         # De solo inserción: se puede crear y consultar, nunca editar.
         return obj is None
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Anamnesis
+# ---------------------------------------------------------------------------
+#
+# El admin es la tercera barrera de la inmutabilidad (modelo, trigger y aquí):
+# una versión publicada se muestra en solo lectura, sin borrar y sin poder tocar
+# sus preguntas. Si se colara un cambio, el `save()` del modelo lo rechazaría con
+# una excepción fea; esto es lo que hace que el admin ni lo ofrezca.
+
+
+@admin.register(QuestionnaireTemplate)
+class QuestionnaireTemplateAdmin(admin.ModelAdmin):
+    list_display = ('name', 'clinic', 'specialty', 'is_active', 'current_version')
+    list_filter = ('clinic', 'is_active')
+    search_fields = ('name', 'specialty')
+    readonly_fields = ('deleted_at',)
+
+    @admin.display(description='versión vigente')
+    def current_version(self, obj):
+        version = obj.current_version
+        return version.number if version else '—'
+
+
+class QuestionInline(admin.TabularInline):
+    model = Question
+    extra = 1
+    fields = ('order', 'text', 'answer_type', 'is_required', 'options')
+    ordering = ('order', 'id')
+
+    def _version_is_published(self, obj):
+        return obj is not None and obj.is_published
+
+    def get_readonly_fields(self, request, obj=None):
+        if self._version_is_published(obj):
+            return self.fields
+        return ()
+
+    def has_add_permission(self, request, obj=None):
+        return not self._version_is_published(obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return not self._version_is_published(obj)
+
+
+@admin.register(TemplateVersion)
+class TemplateVersionAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'template', 'number', 'is_published', 'is_current', 'published_at')
+    list_filter = ('is_published', 'is_current', 'template')
+    search_fields = ('template__name',)
+    raw_id_fields = ('template',)
+    inlines = [QuestionInline]
+    actions = ['publish_versions']
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is not None and obj.is_published:
+            # Publicada = congelada. `is_current` sigue siendo editable porque es
+            # ciclo de vida, no contenido: así se puede cambiar la vigente.
+            return ('template', 'number', 'is_published', 'published_at', 'deleted_at')
+        return ('number', 'is_published', 'published_at', 'deleted_at')
+
+    def has_delete_permission(self, request, obj=None):
+        # Una versión publicada pudo haber sido respondida: no se borra.
+        return not (obj is not None and obj.is_published)
+
+    @admin.action(description='Publicar las versiones seleccionadas')
+    def publish_versions(self, request, queryset):
+        published = 0
+        for version in queryset:
+            if version.is_published:
+                continue
+            try:
+                version.publish()
+            except Exception as exc:  # noqa: BLE001 — el motivo se muestra al usuario
+                self.message_user(request, f'{version}: {exc}', level='error')
+            else:
+                published += 1
+        if published:
+            self.message_user(request, f'{published} versión(es) publicada(s).')
+
+
+@admin.register(Question)
+class QuestionAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'version', 'order', 'answer_type', 'is_required')
+    list_filter = ('answer_type', 'is_required')
+    search_fields = ('text',)
+    raw_id_fields = ('version',)
+    readonly_fields = ('deleted_at',)
+
+    def _is_frozen(self, obj):
+        return obj is not None and obj.version.is_published
+
+    def get_readonly_fields(self, request, obj=None):
+        if self._is_frozen(obj):
+            return [f.name for f in self.model._meta.fields]
+        return self.readonly_fields
+
+    def has_delete_permission(self, request, obj=None):
+        return not self._is_frozen(obj)
+
+
+@admin.register(QuestionnaireResponse)
+class QuestionnaireResponseAdmin(AuditedAdminMixin, admin.ModelAdmin):
+    """Solo consulta: una respuesta se registra desde su canal, nunca a mano.
+
+    Muestra dato clínico (el snapshot), así que instrumenta `AccessLog` como el
+    resto de la capa.
+    """
+
+    list_display = ('__str__', 'patient', 'episode', 'version', 'source', 'created_by', 'filled_at')
+    list_filter = ('source', 'version__template')
+    search_fields = ('patient__first_name', 'patient__last_name')
+    raw_id_fields = ('version', 'patient', 'episode', 'created_by')
+    date_hierarchy = 'filled_at'
+
+    def get_readonly_fields(self, request, obj=None):
+        return [f.name for f in self.model._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
     def has_delete_permission(self, request, obj=None):
         return False

@@ -50,7 +50,7 @@ python manage.py runserver    # Uses config.settings.dev by default
 | `agent` | WhatsApp bot state: `AgentMemory` (contexto del LLM), `ConversationSession` (hilo), `ChatMessage` (historial append-only), `WorkflowError` |
 | `knowledge` | Clinic knowledge base: `ClinicKnowledgeBase`, `ClinicInfoQuery`, `ClinicInfoCache` |
 | `audit` | Append-only audit trail: `ChangeLog` (writes, via signals) and `AccessLog` (reads, instrumented per view) |
-| `clinical` | Clinical core: `MedicalHistory`, `Episode`, `Visit`, `ClinicalNote` (SOAP), `Addendum`. Immutable after signing; soft-delete only |
+| `clinical` | Clinical core: `MedicalHistory`, `Episode`, `Visit`, `ClinicalNote` (SOAP), `Addendum`. Immutable after signing; soft-delete only. Also versioned anamnesis: `QuestionnaireTemplate`, `TemplateVersion`, `Question`, `QuestionnaireResponse` (immutable literal snapshot) |
 | `core.models.SoftDeleteModel` | Reusable soft-delete mixin (`deleted_at`, `objects`/`all_objects`, `can_be_deleted()`) |
 
 ### Auditing (mandatory for clinical data)
@@ -81,6 +81,12 @@ touching it — see `clinical/README.md` for the full picture:
   `UPDATE` and no `DELETE`, ever — enforced both in `save()`/`can_be_deleted()`
   and by a PostgreSQL trigger (`clinical/migrations/0002`). The only possible
   change is adding an `Addendum` (append-only). Never weaken this.
+- **Anamnesis is versioned, and answers are frozen.** Publishing a
+  `TemplateVersion` freezes it and its `Question`s; changing a questionnaire
+  means publishing a new version, never editing the old one. A
+  `QuestionnaireResponse` stores a literal `snapshot` (question text + answer),
+  not FKs to `Question`, so later edits can never rewrite what a patient
+  answered. Same two levels (`clinical/migrations/0004`).
 - **Nothing is physically deleted.** Every model uses `SoftDeleteModel`; deletion
   is logical and cascades manually (`delete()` overrides). `Addendum` is
   append-only.

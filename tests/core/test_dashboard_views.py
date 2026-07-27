@@ -56,12 +56,16 @@ class TestDashboardView:
 
     def test_dashboard_manage_button_visible_for_pending(self, client, admin_user, clinic_a, patient_a, service_a):
         client.force_login(admin_user)
+        # Hora fija de HOY en local, no `now() + 1h`: el panel solo pinta la
+        # agenda del día, así que con la hora relativa el test se caía cada vez
+        # que se ejecutaba a última hora y la cita se iba al día siguiente.
+        start = timezone.localtime().replace(hour=12, minute=0, second=0, microsecond=0)
         appt = Appointment.objects.create(
             clinic=clinic_a,
             patient=patient_a,
             service=service_a,
-            scheduled_at=timezone.now() + timedelta(hours=1),
-            end_at=timezone.now() + timedelta(hours=2),
+            scheduled_at=start,
+            end_at=start + timedelta(hours=1),
             status=Appointment.Status.PENDING,
         )
 

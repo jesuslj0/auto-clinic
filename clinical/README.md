@@ -14,6 +14,10 @@ diseño manda sobre la comodidad.
 | `Visit` | Encuentro clínico que **ocurrió**. Distinta de `Appointment`. |
 | `ClinicalNote` | Nota SOAP (`subjective`/`objective`/`assessment`/`plan`). Borrador → firmada. |
 | `Addendum` | Añadido a una nota. De solo inserción. |
+| `QuestionnaireTemplate` | Cuestionario de anamnesis como entidad lógica. Agrupa versiones; no tiene preguntas. |
+| `TemplateVersion` | Versión concreta del cuestionario. Inmutable una vez publicada. Solo una vigente. |
+| `Question` | Pregunta de una versión. Congelada cuando la versión se publica. |
+| `QuestionnaireResponse` | Cuestionario contestado. Congela una copia literal de preguntas y respuestas. |
 
 ## Tres estados de dato
 
@@ -60,6 +64,71 @@ defiende a dos niveles, como la app `audit`:
    la fila aún es `draft`); sobre `clinical_addendum` bloquea todo `UPDATE`/
    `DELETE`.
 
+## Anamnesis: cuestionarios versionados
+
+Un cuestionario de anamnesis cambia con los años, pero lo que un paciente
+contestó en 2026 tiene que poder leerse en 2036 **tal cual se contestó**. Se
+resuelve con dos mecanismos que se complementan, y hacen falta los dos:
+
+1. **Versionado.** El cuestionario lógico (`QuestionnaireTemplate`) no tiene
+   preguntas: las tienen sus versiones. Publicar una versión la congela.
+   Cambiar el cuestionario es **publicar una versión nueva**, jamás editar la
+   anterior.
+2. **Snapshot literal.** `QuestionnaireResponse.snapshot` guarda el texto de cada
+   pregunta, su tipo, sus opciones y la respuesta dada. No son FK a `Question`:
+   son una copia. Aunque después se despublique la versión o se borre una
+   pregunta, la respuesta sigue siendo legible por sí sola.
+
+El versionado protege del cambio *previsto*; el snapshot, también del imprevisto.
+
+```
+QuestionnaireTemplate            "Anamnesis podológica"
+      │
+      ├── TemplateVersion v1 (publicada)  ── Question, Question, Question
+      │         └── QuestionnaireResponse ── snapshot: copia literal + respuestas
+      └── TemplateVersion v2 (vigente)    ── Question, Question, Question, Question
+```
+
+- `template.new_draft_version()` clona las preguntas de la vigente para retocar
+  el borrador; `version.publish()` lo congela y lo vuelve vigente, degradando la
+  anterior. **Una sola versión vigente por cuestionario**, garantizado por un
+  índice único parcial y no solo por el código.
+- Publicar v2 **no toca ninguna respuesta de v1**. Despublicar tampoco: cada
+  respuesta lleva su copia.
+- Una respuesta solo se registra sobre una versión **publicada**.
+- La vía de alta es `QuestionnaireResponse.record(version=…, patient=…,
+  episode=…, answers={question_id: respuesta}, source=…, created_by=…)`. El
+  congelado ocurre en el `save()`, así que da igual por dónde entre.
+
+### `source` y `created_by`
+
+`created_by` es **opcional a propósito**: de los tres canales de entrada
+(`source`), solo uno tiene profesional autenticado detrás.
+
+| `source` | Quién rellena | `created_by` |
+|---|---|---|
+| `professional` | El profesional en consulta | el profesional |
+| `patient_web` | El paciente desde el formulario web | vacío |
+| `patient_whatsapp` | El paciente por WhatsApp (vía n8n) | vacío |
+
+`source` es lo que después permite auditar por dónde entró cada dato. Que el
+agente pueda *aportar* una respuesta no le da ningún acceso de lectura a esta
+capa: sigue sin haber API sobre `clinical`.
+
+### Inmutabilidad de la anamnesis
+
+Los mismos dos niveles, con el trigger en `migrations/0004`:
+
+| Fila | Modelo / ORM | Trigger PostgreSQL |
+|---|---|---|
+| `QuestionnaireResponse` | `save()` rechaza cambiar snapshot, versión, paciente, episodio, canal, fecha y autor | `UPDATE` de contenido y `DELETE` físico bloqueados |
+| `Question` de versión publicada | `save()` y `can_be_deleted()` lo impiden | `INSERT`/`UPDATE`/`DELETE` bloqueados |
+| `TemplateVersion` publicada | `save()` congela `template`, `number` y `published_at` | `UPDATE` de esos campos y `DELETE` físico bloqueados |
+
+Lo que **sí** se mueve en una versión publicada es su ciclo de vida:
+`is_current`, `is_published` (retirarla) y el borrado lógico. Ninguno de los tres
+altera una respuesta ya guardada.
+
 ## Separación `Appointment` / `Visit`
 
 Son entidades distintas a propósito:
@@ -105,15 +174,34 @@ por defecto conservador (15 años) por encima del mínimo legal, porque:
 
 ## Auditoría
 
-Los cinco modelos están registrados en `audit` desde `ClinicalConfig.ready()`.
-Todo el texto clínico (los cuatro SOAP, `Episode.reason`, `Addendum.text`) está
-marcado como **sensible**: el `ChangeLog` guarda que el campo cambió, nunca su
-valor. El `patient_resolver` de cada modelo sube por la cadena hasta el paciente,
+Los nueve modelos están registrados en `audit` desde `ClinicalConfig.ready()`.
+Todo el texto clínico (los cuatro SOAP, `Episode.reason`, `Addendum.text`, el
+`snapshot` de la respuesta) está marcado como **sensible**: el `ChangeLog` guarda
+que el campo cambió, nunca su valor. El cuestionario en blanco —plantilla,
+versiones y preguntas— no es dato de paciente y se audita entero, para poder
+reconstruir quién publicó qué versión y cuándo. El `patient_resolver` de cada modelo sube por la cadena hasta el paciente,
 de modo que todo evento queda atribuido a la ficha correcta.
 
 Como esta capa no tiene API, la única vista que muestra dato clínico es el admin,
 que instrumenta `AccessLog` (ver `clinical/admin.py`). **Cualquier endpoint nuevo
 sobre esta capa debe instrumentar `AccessLog` y quedar vedado al token de n8n.**
+
+## Datos de ejemplo (solo desarrollo)
+
+```bash
+python manage.py seed_clinical --dry-run     # enseña el plan, no escribe
+python manage.py seed_clinical               # siembra
+python manage.py seed_clinical --clinic 123456
+```
+
+Rellena la historia de los pacientes que ya existan: episodio cerrado con nota
+firmada y adenda, episodio abierto con nota en borrador —colgando de sus citas
+completadas cuando las hay— y el cuestionario «Anamnesis dental» con v1 y v2
+publicadas y una respuesta por paciente.
+
+Es repetible: los pacientes que ya tengan episodios se saltan. **Se niega a
+ejecutarse con `DEBUG=False`**, y no por prudencia genérica: las notas firmadas
+que crea no se pueden borrar después, ni por ORM ni por SQL.
 
 ## Tests
 

@@ -11,9 +11,16 @@ Esta capa distingue tres estados de dato:
 La inmutabilidad de la nota firmada y de la adenda se defiende a DOS niveles: en
 el modelo (aquí) y con un trigger de PostgreSQL (migración 0002). El de aquí es
 la primera barrera, no la única.
+
+La segunda mitad del módulo es la **anamnesis**: cuestionarios versionados
+(`QuestionnaireTemplate` → `TemplateVersion` → `Question`) y sus respuestas
+(`QuestionnaireResponse`), que congelan una copia literal del cuestionario en el
+momento de contestarlo. Misma doctrina, mismos dos niveles (migración 0004).
 """
+import copy
+
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 from clinical.conf import retention_years
@@ -21,10 +28,36 @@ from clinical.exceptions import (
     EpisodeClosed,
     NoteAlreadySigned,
     ProtectedClinicalRecord,
+    TemplateVersionNotPublished,
+    TemplateVersionPublished,
 )
 from clinical.hashing import compute_note_hash
 from clinical.managers import AppendOnlyInsertManager, next_history_number
+from clinical.snapshots import build_response_snapshot, is_answered
 from core.models import SoftDeleteModel, TimeStampedModel
+
+
+def _frozen_state(instance, fields, loaded_names=None) -> dict:
+    """Copia profunda del valor de `fields` en `instance`.
+
+    Se usa para saber, en el `save()`, si alguien tocó un campo congelado. La
+    copia es profunda porque los `JSONField` se mutan in situ: sin ella, el
+    «valor cargado» y el actual serían el mismo objeto y ningún cambio se vería.
+
+    `loaded_names` limita la captura a los campos que realmente se trajeron de la
+    base de datos: con `defer()`/`only()`, leer un campo diferido dispararía una
+    consulta por campo solo para vigilarlo.
+    """
+    if loaded_names is not None:
+        fields = [name for name in fields if name in loaded_names]
+    return {name: copy.deepcopy(getattr(instance, name)) for name in fields}
+
+
+def _changed_frozen_fields(instance, loaded: dict) -> list[str]:
+    """Campos congelados que difieren de lo que se cargó de la base de datos."""
+    return sorted(
+        name for name, value in loaded.items() if getattr(instance, name) != value
+    )
 
 
 def _add_years(dt, years):
@@ -359,4 +392,456 @@ class Addendum(TimeStampedModel):
     def delete(self, *args, **kwargs):
         raise ProtectedClinicalRecord(
             f'La adenda #{self.pk} es de solo inserción: no se puede borrar.'
+        )
+
+
+# ---------------------------------------------------------------------------
+# Anamnesis: cuestionarios versionados
+# ---------------------------------------------------------------------------
+#
+# Un cuestionario de anamnesis cambia con el tiempo: se añaden preguntas, se
+# corrige la redacción de otras, se retira alguna. Pero lo que un paciente
+# contestó en 2026 debe poder leerse en 2036 exactamente como se contestó. Se
+# resuelve con dos mecanismos que se complementan:
+#
+#   1. **Versionado.** El cuestionario «lógico» (`QuestionnaireTemplate`) no
+#      tiene preguntas; las tienen sus versiones. Publicar una versión la
+#      congela: sus preguntas ya no se tocan. Cambiar el cuestionario = publicar
+#      una versión nueva, nunca editar la anterior.
+#   2. **Snapshot literal.** La respuesta no guarda FK a las preguntas: guarda
+#      una copia del texto de cada una junto a lo contestado. Aunque alguien
+#      despublique o borre lógicamente la versión, la respuesta sigue siendo
+#      legible por sí sola (`clinical/snapshots.py`).
+#
+# El versionado solo protege del cambio *previsto*; el snapshot protege también
+# del imprevisto. Por eso están los dos.
+
+
+class QuestionnaireTemplate(SoftDeleteModel, TimeStampedModel):
+    """Cuestionario de anamnesis como entidad lógica: agrupa sus versiones.
+
+    No contiene preguntas. «El cuestionario de anamnesis podológica» es esto; lo
+    que se responde es siempre una `TemplateVersion` concreta.
+    """
+
+    clinic = models.ForeignKey(
+        'core.Clinic', on_delete=models.CASCADE, related_name='questionnaire_templates'
+    )
+    name = models.CharField(max_length=150)
+    specialty = models.CharField(
+        max_length=100, blank=True,
+        help_text='Especialidad o tipo de cuestionario, p. ej. «podología general».',
+    )
+    is_active = models.BooleanField(
+        default=True, help_text='Un cuestionario inactivo no se ofrece para rellenar.'
+    )
+
+    class Meta(SoftDeleteModel.Meta):
+        abstract = False
+        db_table = 'clinical_questionnaire_template'
+        unique_together = ('clinic', 'name')
+        ordering = ['name']
+        verbose_name = 'cuestionario'
+        verbose_name_plural = 'cuestionarios'
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def current_version(self):
+        """Versión vigente, o `None` si aún no se ha publicado ninguna."""
+        return self.versions.filter(is_current=True).first()
+
+    def new_draft_version(self, copy_questions_from=None):
+        """Crea la siguiente versión en borrador, opcionalmente clonando preguntas.
+
+        Es el camino normal para «editar» un cuestionario ya publicado: se clona
+        la versión vigente, se retoca el borrador y se publica. La versión
+        anterior no se toca en ningún momento.
+
+        Sin argumento clona la versión vigente (si la hay); con
+        `copy_questions_from=False` arranca en blanco.
+        """
+        source = self.current_version if copy_questions_from is None else copy_questions_from
+
+        with transaction.atomic():
+            version = TemplateVersion.objects.create(template=self)
+            if source:
+                for question in source.questions.all():
+                    Question.objects.create(
+                        version=version,
+                        text=question.text,
+                        answer_type=question.answer_type,
+                        order=question.order,
+                        is_required=question.is_required,
+                        options=list(question.options or []),
+                    )
+        return version
+
+
+class TemplateVersion(SoftDeleteModel, TimeStampedModel):
+    """Versión concreta de un cuestionario. Inmutable una vez publicada.
+
+    Publicada, solo admite cambios de *ciclo de vida* (`is_current`,
+    `is_published`, borrado lógico): a qué cuestionario pertenece, qué número
+    tiene y cuándo se publicó quedan fijos. Sus preguntas, también.
+
+    Despublicar está permitido —es la forma de retirar un cuestionario— y no
+    altera ninguna respuesta ya guardada: cada una lleva su propio snapshot.
+    """
+
+    # Campos congelados en cuanto la versión está publicada. `is_current`,
+    # `is_published` y `deleted_at` quedan fuera a propósito: son estado de ciclo
+    # de vida, no contenido del documento.
+    FROZEN_FIELDS = ('template_id', 'number', 'published_at')
+
+    template = models.ForeignKey(
+        QuestionnaireTemplate, on_delete=models.PROTECT, related_name='versions'
+    )
+    number = models.PositiveIntegerField(
+        help_text='Correlativo dentro del cuestionario; se asigna solo.'
+    )
+    is_published = models.BooleanField(default=False, db_index=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+    is_current = models.BooleanField(
+        default=False, help_text='Versión que se sirve al rellenar. Solo una por cuestionario.'
+    )
+
+    class Meta(SoftDeleteModel.Meta):
+        abstract = False
+        db_table = 'clinical_template_version'
+        unique_together = ('template', 'number')
+        ordering = ['template', '-number']
+        verbose_name = 'versión de cuestionario'
+        verbose_name_plural = 'versiones de cuestionario'
+        constraints = [
+            # Una sola versión vigente por cuestionario, garantizado por la base
+            # de datos y no solo por `make_current()`: dos publicaciones
+            # concurrentes no pueden dejar el cuestionario con dos «vigentes».
+            models.UniqueConstraint(
+                fields=['template'],
+                condition=models.Q(is_current=True, deleted_at__isnull=True),
+                name='clinical_one_current_version_per_template',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.template.name} v{self.number}'
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        # Estado con el que se cargó: la referencia para decidir si esta versión
+        # ya estaba publicada ANTES de este save().
+        instance._loaded_is_published = instance.is_published
+        instance._loaded_frozen = _frozen_state(instance, cls.FROZEN_FIELDS, field_names)
+        return instance
+
+    def _next_number(self) -> int:
+        last = (
+            TemplateVersion.all_objects.filter(template=self.template)
+            .order_by('-number')
+            .values_list('number', flat=True)
+            .first()
+        )
+        return (last or 0) + 1
+
+    def save(self, *args, **kwargs):
+        if self.number is None and self._state.adding:
+            self.number = self._next_number()
+
+        if getattr(self, '_loaded_is_published', False):
+            changed = _changed_frozen_fields(self, getattr(self, '_loaded_frozen', {}))
+            if changed:
+                raise TemplateVersionPublished(
+                    f'La versión {self} está publicada: {", ".join(changed)} no se '
+                    f'puede modificar. Publica una versión nueva.'
+                )
+
+        super().save(*args, **kwargs)
+        self._loaded_is_published = self.is_published
+        self._loaded_frozen = _frozen_state(self, self.FROZEN_FIELDS)
+
+    def publish(self, make_current=True):
+        """Publica la versión: la congela y, por defecto, la vuelve vigente."""
+        if self.is_published:
+            raise TemplateVersionPublished(f'La versión {self} ya está publicada.')
+        if not self.questions.exists():
+            raise ValidationError(
+                f'La versión {self} no tiene preguntas: no se puede publicar.'
+            )
+
+        with transaction.atomic():
+            self.is_published = True
+            self.published_at = timezone.now()
+            self.save(update_fields=['is_published', 'published_at', 'updated_at'])
+            if make_current:
+                self.make_current()
+
+    def make_current(self):
+        """Marca esta versión como la vigente y retira la marca a las demás."""
+        if not self.is_published:
+            raise TemplateVersionNotPublished(
+                f'La versión {self} está en borrador: no puede ser la vigente.'
+            )
+
+        with transaction.atomic():
+            # Primero se degrada la anterior y después se promueve esta, o el
+            # índice único de «una sola vigente» saltaría a mitad de camino. Una
+            # a una y no con `update()`: los bulk se saltan las señales de audit.
+            previous = (
+                TemplateVersion.all_objects.filter(template_id=self.template_id, is_current=True)
+                .exclude(pk=self.pk)
+            )
+            for version in previous:
+                version.is_current = False
+                version.save(update_fields=['is_current', 'updated_at'])
+
+            if not self.is_current:
+                self.is_current = True
+                self.save(update_fields=['is_current', 'updated_at'])
+
+    def unpublish(self):
+        """Retira la versión de circulación. No toca ninguna respuesta guardada."""
+        if not self.is_published:
+            return
+        self.is_published = False
+        self.is_current = False
+        self.save(update_fields=['is_published', 'is_current', 'updated_at'])
+
+
+class Question(SoftDeleteModel, TimeStampedModel):
+    """Pregunta de una versión concreta. Congelada cuando la versión se publica.
+
+    Pertenece a una versión, nunca al cuestionario: es la pieza que hace que
+    «editar una pregunta» sea imposible y haya que publicar una versión nueva.
+    """
+
+    class AnswerType(models.TextChoices):
+        BOOLEAN = 'boolean', 'Sí / No'
+        TEXT = 'text', 'Texto libre'
+        SINGLE_CHOICE = 'single_choice', 'Opción única'
+        MULTIPLE_CHOICE = 'multiple_choice', 'Opción múltiple'
+        NUMBER = 'number', 'Número'
+
+    CHOICE_TYPES = frozenset({AnswerType.SINGLE_CHOICE, AnswerType.MULTIPLE_CHOICE})
+
+    version = models.ForeignKey(
+        TemplateVersion, on_delete=models.PROTECT, related_name='questions'
+    )
+    text = models.TextField(help_text='Enunciado literal de la pregunta.')
+    answer_type = models.CharField(
+        max_length=20, choices=AnswerType.choices, default=AnswerType.TEXT
+    )
+    order = models.PositiveIntegerField(default=0)
+    is_required = models.BooleanField(default=False)
+    options = models.JSONField(
+        default=list, blank=True,
+        help_text='Lista de opciones; solo para los tipos de elección.',
+    )
+
+    class Meta(SoftDeleteModel.Meta):
+        abstract = False
+        db_table = 'clinical_question'
+        ordering = ['version', 'order', 'id']
+        verbose_name = 'pregunta'
+        verbose_name_plural = 'preguntas'
+
+    def __str__(self):
+        return self.text[:60]
+
+    def _validate_options(self):
+        options = self.options or []
+        if not isinstance(options, list):
+            raise ValidationError({'options': 'Las opciones deben ser una lista.'})
+        if self.answer_type in self.CHOICE_TYPES:
+            if not options:
+                raise ValidationError(
+                    {'options': f'Un tipo «{self.get_answer_type_display()}» necesita opciones.'}
+                )
+        elif options:
+            raise ValidationError(
+                {'options': f'Un tipo «{self.get_answer_type_display()}» no admite opciones.'}
+            )
+
+    def _assert_version_editable(self):
+        if self.version_id and self.version.is_published:
+            raise TemplateVersionPublished(
+                f'La versión {self.version} está publicada: sus preguntas no se '
+                f'pueden crear, editar ni borrar. Publica una versión nueva.'
+            )
+
+    def clean(self):
+        super().clean()
+        # Se repite aquí la comprobación del `save()` para que el admin y los
+        # formularios la enseñen como error de validación y no como un 500.
+        if self.version_id and self.version.is_published:
+            raise ValidationError(
+                f'La versión {self.version} está publicada y sus preguntas no se '
+                f'pueden tocar. Crea una versión nueva.'
+            )
+        self._validate_options()
+
+    def save(self, *args, **kwargs):
+        # Barrera dura, más allá del formulario: una versión publicada no admite
+        # preguntas nuevas ni cambios en las que tiene.
+        self._assert_version_editable()
+        self._validate_options()
+        super().save(*args, **kwargs)
+
+    def can_be_deleted(self) -> bool:
+        # Ni borrado lógico: una pregunta publicada es parte del documento que
+        # los pacientes ya han visto.
+        return not (self.version_id and self.version.is_published)
+
+
+class QuestionnaireResponse(SoftDeleteModel, TimeStampedModel):
+    """Cuestionario contestado. Su contenido queda congelado al guardarse.
+
+    El snapshot (`snapshot`) es la fuente de verdad: lleva el texto literal de
+    cada pregunta tal y como se le mostró a quien contestó, junto a su respuesta.
+    La FK a `TemplateVersion` dice de dónde salió, pero leer la respuesta no
+    depende de que esa versión siga existiendo, publicada ni intacta.
+
+    `created_by` es opcional porque hay tres canales de entrada y solo uno tiene
+    profesional autenticado: el cuestionario que rellena el paciente desde la web
+    o por WhatsApp (vía n8n) no tiene sesión detrás. `source` deja constancia del
+    canal, que es justo lo que hay que poder auditar después.
+    """
+
+    class Source(models.TextChoices):
+        PROFESSIONAL = 'professional', 'Profesional'
+        PATIENT_WEB = 'patient_web', 'Paciente (web)'
+        PATIENT_WHATSAPP = 'patient_whatsapp', 'Paciente (WhatsApp)'
+
+    # Todo el contenido de la respuesta es inmutable en cuanto existe: no hay
+    # borrador que valga. Solo `deleted_at` y `updated_at` pueden cambiar.
+    FROZEN_FIELDS = (
+        'version_id', 'patient_id', 'episode_id',
+        'filled_at', 'source', 'created_by_id', 'snapshot',
+    )
+
+    version = models.ForeignKey(
+        TemplateVersion, on_delete=models.PROTECT, related_name='responses'
+    )
+    # Mismo patrón que `MedicalHistory`: borrar un paciente no puede arrastrar ni
+    # bloquear su documentación clínica (ver el docstring de MedicalHistory).
+    patient = models.ForeignKey(
+        'patients.Patient', on_delete=models.DO_NOTHING,
+        related_name='questionnaire_responses', db_constraint=False,
+    )
+    episode = models.ForeignKey(
+        Episode, on_delete=models.PROTECT, related_name='questionnaire_responses'
+    )
+    filled_at = models.DateTimeField(default=timezone.now)
+    source = models.CharField(
+        max_length=20, choices=Source.choices, default=Source.PROFESSIONAL, db_index=True
+    )
+    created_by = models.ForeignKey(
+        'appointments.Professional', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='+',
+        help_text='Profesional que lo registró; vacío si lo rellenó el paciente.',
+    )
+    snapshot = models.JSONField(
+        default=list,
+        help_text='Copia literal de las preguntas y las respuestas dadas.',
+    )
+
+    class Meta(SoftDeleteModel.Meta):
+        abstract = False
+        db_table = 'clinical_questionnaire_response'
+        ordering = ['-filled_at']
+        verbose_name = 'respuesta de cuestionario'
+        verbose_name_plural = 'respuestas de cuestionario'
+
+    def __str__(self):
+        return f'Respuesta #{self.pk} ({self.get_source_display()})'
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        instance._loaded_frozen = _frozen_state(instance, cls.FROZEN_FIELDS, field_names)
+        return instance
+
+    @classmethod
+    def record(cls, *, version, patient, episode, answers=None,
+               source=Source.PROFESSIONAL, created_by=None, filled_at=None):
+        """Registra un cuestionario contestado congelando su snapshot.
+
+        Es la vía normal de alta: `answers` es `{question_id: respuesta}` y se
+        convierte en el snapshot en el propio `save()`.
+        """
+        response = cls(
+            version=version, patient=patient, episode=episode,
+            source=source, created_by=created_by,
+        )
+        if filled_at is not None:
+            response.filled_at = filled_at
+        response.answers = answers or {}
+        response.save()
+        return response
+
+    def clean(self):
+        super().clean()
+        # Aislamiento por clínica: no se responde el cuestionario de otra clínica.
+        if self.version_id and self.patient_id:
+            template_clinic_id = self.version.template.clinic_id
+            if template_clinic_id != self.patient.clinic_id:
+                raise ValidationError(
+                    'El cuestionario pertenece a otra clínica distinta a la del paciente.'
+                )
+        # El episodio tiene que ser del mismo paciente: una anamnesis colgada del
+        # episodio de otra persona es un error de historia clínica, no un matiz.
+        if self.episode_id and self.patient_id:
+            if self.episode.history.patient_id != self.patient_id:
+                raise ValidationError(
+                    'El episodio pertenece a un paciente distinto al de la respuesta.'
+                )
+
+    def save(self, *args, **kwargs):
+        if self._state.adding:
+            if not self.version.is_published:
+                raise TemplateVersionNotPublished(
+                    f'La versión {self.version} está en borrador: no se puede '
+                    f'responder hasta que se publique.'
+                )
+            if not self.snapshot:
+                # El congelado ocurre aquí y no en la vista: da igual por dónde
+                # entre la respuesta (admin, formulario web, n8n), sale con su
+                # copia literal hecha.
+                self.snapshot = build_response_snapshot(
+                    self.version, getattr(self, 'answers', None)
+                )
+        else:
+            changed = _changed_frozen_fields(self, getattr(self, '_loaded_frozen', {}))
+            if changed:
+                raise ProtectedClinicalRecord(
+                    f'La respuesta #{self.pk} está congelada: '
+                    f'{", ".join(changed)} no se puede modificar.'
+                )
+
+        super().save(*args, **kwargs)
+        self._loaded_frozen = _frozen_state(self, self.FROZEN_FIELDS)
+
+    # --- Lectura del snapshot ------------------------------------------------
+
+    @property
+    def questions(self) -> list:
+        """Preguntas tal y como se formularon, no las que existen hoy."""
+        return list(self.snapshot or [])
+
+    def answer_for(self, question_id):
+        """Respuesta dada a una pregunta, o `None` si no está en el snapshot."""
+        for entry in self.snapshot or []:
+            if entry.get('question_id') == question_id:
+                return entry.get('answer')
+        return None
+
+    @property
+    def is_complete(self) -> bool:
+        """`True` si todas las preguntas obligatorias del snapshot tienen respuesta."""
+        return all(
+            is_answered(entry)
+            for entry in (self.snapshot or [])
+            if entry.get('required')
         )
