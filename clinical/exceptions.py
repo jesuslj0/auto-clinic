@@ -27,3 +27,19 @@ class EpisodeClosed(Exception):
 
     Un episodio cerrado no admite visitas nuevas sin reabrirse explícitamente.
     """
+
+
+class TemplateVersionPublished(Exception):
+    """Se intentó modificar una versión de cuestionario ya publicada o sus preguntas.
+
+    Una versión publicada es el documento que se respondió: su contenido queda
+    congelado. Para cambiar el cuestionario se publica una versión nueva.
+    """
+
+
+class TemplateVersionNotPublished(Exception):
+    """Se intentó responder (o marcar como vigente) una versión en borrador.
+
+    Solo se responde lo que está publicado: un borrador aún puede cambiar, y una
+    respuesta debe poder señalar siempre a un documento estable.
+    """
