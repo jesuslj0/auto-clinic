@@ -15,9 +15,11 @@ from django.core.exceptions import ValidationError
 
 # Claves de cada entrada del snapshot. Se declaran aquí porque son el contrato
 # de lectura de toda respuesta ya guardada: renombrar una de estas claves rompe
-# el histórico, no solo el código nuevo.
+# el histórico, no solo el código nuevo. Añadir una sí es seguro: las respuestas
+# antiguas simplemente no la traen, y quien lea debe usar `entry.get(...)`.
 ENTRY_KEYS = (
     'question_id',
+    'code',
     'order',
     'text',
     'answer_type',
@@ -62,6 +64,10 @@ def build_response_snapshot(version, answers=None) -> list[dict]:
     return [
         {
             'question_id': question.pk,
+            # El código viaja DENTRO del snapshot, no se resuelve después por la
+            # FK: es lo que permite que el motor de alertas lea una respuesta de
+            # hace años sin depender de la pregunta viva.
+            'code': question.code,
             'order': question.order,
             'text': question.text,
             'answer_type': question.answer_type,

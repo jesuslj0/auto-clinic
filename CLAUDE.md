@@ -50,7 +50,7 @@ python manage.py runserver    # Uses config.settings.dev by default
 | `agent` | WhatsApp bot state: `AgentMemory` (contexto del LLM), `ConversationSession` (hilo), `ChatMessage` (historial append-only), `WorkflowError` |
 | `knowledge` | Clinic knowledge base: `ClinicKnowledgeBase`, `ClinicInfoQuery`, `ClinicInfoCache` |
 | `audit` | Append-only audit trail: `ChangeLog` (writes, via signals) and `AccessLog` (reads, instrumented per view) |
-| `clinical` | Clinical core: `MedicalHistory`, `Episode`, `Visit`, `ClinicalNote` (SOAP), `Addendum`. Immutable after signing; soft-delete only. Also versioned anamnesis: `QuestionnaireTemplate`, `TemplateVersion`, `Question`, `QuestionnaireResponse` (immutable literal snapshot) |
+| `clinical` | Clinical core: `MedicalHistory`, `Episode`, `Visit`, `ClinicalNote` (SOAP), `Addendum`. Immutable after signing; soft-delete only. Also versioned anamnesis: `QuestionnaireTemplate`, `TemplateVersion`, `Question`, `QuestionnaireResponse` (immutable literal snapshot) and `ClinicalAlert` (per-patient, deactivated never deleted) |
 | `core.models.SoftDeleteModel` | Reusable soft-delete mixin (`deleted_at`, `objects`/`all_objects`, `can_be_deleted()`) |
 
 ### Auditing (mandatory for clinical data)
@@ -87,9 +87,18 @@ touching it — see `clinical/README.md` for the full picture:
   `QuestionnaireResponse` stores a literal `snapshot` (question text + answer),
   not FKs to `Question`, so later edits can never rewrite what a patient
   answered. Same two levels (`clinical/migrations/0004`).
+- **Alerts derive from the anamnesis by `Question.code`, never by text or
+  order.** Rules live as data in `clinical/rules.py`; `evaluate_snapshot()` is
+  pure (no DB) and `clinical/derivation.py` does the DB work, triggered by an
+  explicit call in `QuestionnaireResponse.record()` — not a signal — so the
+  panel, the patient form and the n8n path all go through it. The engine must
+  never touch `source='manual'` alerts, and corrections deactivate, never
+  delete.
 - **Nothing is physically deleted.** Every model uses `SoftDeleteModel`; deletion
   is logical and cascades manually (`delete()` overrides). `Addendum` is
-  append-only.
+  append-only. A `ClinicalAlert` is never deleted either — `deactivate()` sets
+  `is_active=False` and keeps the row, so "what was known back then" stays
+  answerable.
 - **Off-limits to the n8n token.** This layer has **no REST API** on purpose, so
   the agent's `Api-Key` cannot reach clinical data. `Visit` links *to*
   `Appointment`, never the reverse. **Any new endpoint over this layer must

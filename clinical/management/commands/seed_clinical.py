@@ -24,6 +24,7 @@ from appointments.models import Appointment
 from audit.context import ORIGIN_COMMAND, audit_context
 from clinical.models import (
     Addendum,
+    ClinicalAlert,
     ClinicalNote,
     Episode,
     MedicalHistory,
@@ -35,34 +36,39 @@ from clinical.models import (
 
 TEMPLATE_NAME = 'Anamnesis dental'
 
-# Cuestionario v1. `(texto, tipo, obligatoria, opciones)`, en orden.
+# Cuestionario v1. `(código, texto, tipo, obligatoria, opciones)`, en orden.
+#
+# El `código` es lo que reconoce el motor de alertas (`clinical/rules.py`): las
+# preguntas con código levantan alerta si se contestan que sí; las de código
+# `None` son solo informativas. Por eso la diabetes y los anticoagulantes van
+# como preguntas propias en vez de dentro del cajón de sastre de las crónicas.
 V1_QUESTIONS = [
-    ('¿Padece alguna enfermedad crónica (diabetes, hipertensión, cardiopatía)?',
+    ('has_diabetes', '¿Es usted diabético?',
      Question.AnswerType.BOOLEAN, True, []),
-    ('¿Qué medicación toma actualmente?',
-     Question.AnswerType.TEXT, False, []),
-    ('¿Es alérgico a algún medicamento?',
+    ('takes_anticoagulants', '¿Toma anticoagulantes (Sintrom, aspirina…)?',
      Question.AnswerType.BOOLEAN, True, []),
-    ('¿A cuáles?',
+    (None, '¿Padece alguna otra enfermedad crónica (hipertensión, cardiopatía)?',
+     Question.AnswerType.BOOLEAN, True, []),
+    (None, '¿Qué medicación toma actualmente?',
      Question.AnswerType.TEXT, False, []),
-    ('¿Ha tenido alguna reacción a la anestesia local?',
-     Question.AnswerType.BOOLEAN, False, []),
-    ('¿Con qué frecuencia se cepilla los dientes?',
+    ('allergy_local_anesthetics', '¿Es alérgico a los anestésicos locales?',
+     Question.AnswerType.BOOLEAN, True, []),
+    (None, '¿Es alérgico a algún otro medicamento? ¿A cuáles?',
+     Question.AnswerType.TEXT, False, []),
+    (None, '¿Con qué frecuencia se cepilla los dientes?',
      Question.AnswerType.SINGLE_CHOICE, True,
      ['Una vez al día', 'Dos veces al día', 'Tres o más veces al día']),
-    ('¿Le sangran las encías al cepillarse?',
+    (None, '¿Le sangran las encías al cepillarse?',
      Question.AnswerType.SINGLE_CHOICE, False,
      ['Nunca', 'A veces', 'A menudo']),
-    ('¿Fuma?',
-     Question.AnswerType.BOOLEAN, False, []),
 ]
 
 # Lo que añade la v2. Es lo que hace visible el versionado: las respuestas de la
 # v1 siguen teniendo ocho preguntas, no diez.
 V2_EXTRA_QUESTIONS = [
-    ('¿Está embarazada o en periodo de lactancia?',
+    ('allergy_latex', '¿Es alérgico al látex?',
      Question.AnswerType.BOOLEAN, False, []),
-    ('¿Cuántas piezas se ha extraído?',
+    (None, '¿Cuántas piezas se ha extraído?',
      Question.AnswerType.NUMBER, False, []),
 ]
 
@@ -86,9 +92,18 @@ CASES = [
             'assessment': 'Pulpitis irreversible en 3.6.',
             'plan': 'Endodoncia en 3.6, pendiente de programar. Ibuprofeno 600 mg cada 8 horas si dolor.',
         },
-        # Respuestas indexadas por posición de la pregunta en la versión.
-        'answers': {0: False, 1: 'Ninguna', 2: False, 4: False,
-                    5: 'Dos veces al día', 6: 'A veces', 7: True},
+        # Respuestas indexadas por posición de la pregunta en la versión. Sin
+        # enfermedades crónicas, pero alérgico a los anestésicos locales: una
+        # sola alerta crítica, que en una clínica dental es de las que más pesan.
+        'answers': {
+            0: False,               # diabetes
+            1: False,               # anticoagulantes
+            2: False,               # otra crónica
+            3: 'Ninguna',           # medicación
+            4: True,                # alergia a anestésicos locales
+            6: 'Dos veces al día',  # cepillado
+            7: 'A veces',           # sangrado de encías
+        },
     },
     {
         'closed': {
@@ -107,8 +122,19 @@ CASES = [
             'assessment': 'Periodontitis inicial.',
             'plan': 'Raspado y alisado radicular por cuadrantes. Instrucciones de higiene y revisión a las cuatro semanas.',
         },
-        'answers': {0: True, 1: 'Metformina 850 mg', 2: True, 3: 'Penicilina', 4: False,
-                    5: 'Una vez al día', 6: 'A menudo', 7: False},
+        # Este sí: diabetes, anticoagulantes y alergia al látex. Las tres tienen
+        # código, así que el motor levanta tres alertas críticas derivadas.
+        'answers': {
+            0: True,                        # diabetes
+            1: True,                        # anticoagulantes
+            2: True,                        # otra crónica
+            3: 'Metformina 850 mg y Sintrom',
+            4: False,                       # alergia a anestésicos
+            5: 'Penicilina',                # otras alergias
+            6: 'Una vez al día',            # cepillado
+            7: 'A menudo',                  # sangrado de encías
+            8: True,                        # alergia al látex (solo en la v2)
+        },
     },
 ]
 
@@ -134,6 +160,13 @@ class Command(BaseCommand):
             action='store_true',
             help='Siembra también los pacientes que ya tengan actividad clínica.',
         )
+        parser.add_argument(
+            '--refresh-anamnesis',
+            action='store_true',
+            help='A los pacientes ya sembrados les registra una anamnesis nueva '
+                 'sobre la versión vigente, en vez de saltarlos. Es la forma de '
+                 'ver el motor de alertas sobre datos que ya existen.',
+        )
 
     def handle(self, *args, **options):
         if not settings.DEBUG:
@@ -151,11 +184,12 @@ class Command(BaseCommand):
                 raise CommandError(f'No existe la clínica «{options["clinic"]}».')
 
         self.dry_run = options['dry_run']
+        self.refresh_anamnesis = options['refresh_anamnesis']
         if self.dry_run:
             self.stdout.write(self.style.WARNING('DRY-RUN: no se escribe nada.'))
 
         totals = {'historias': 0, 'episodios': 0, 'visitas': 0, 'notas': 0,
-                  'adendas': 0, 'respuestas': 0}
+                  'adendas': 0, 'respuestas': 0, 'alertas': 0}
 
         # Todo lo que se cree queda en el ChangeLog atribuido al comando, no a un
         # usuario fantasma.
@@ -193,19 +227,39 @@ class Command(BaseCommand):
             self._seed_patient(patient, professional, versions, index, force, totals)
 
     def _ensure_questionnaire(self, clinic):
-        """Cuestionario de anamnesis con v1 y v2 publicadas. Devuelve `(v1, v2)`.
+        """Cuestionario de anamnesis con v1 y v2 publicadas. Devuelve `(v1, vigente)`.
 
         Si ya existe, se reutiliza tal cual: republicar versiones en cada
-        ejecución llenaría el histórico de ruido.
+        ejecución llenaría el histórico de ruido. La excepción es que la versión
+        vigente no tenga ninguna pregunta codificada —sembrada antes de que
+        existiera `Question.code`—: entonces se publica una versión nueva con los
+        códigos puestos, porque una versión publicada es inmutable y no se le
+        pueden añadir. Es exactamente el flujo real de «editar» un cuestionario.
         """
         existing = QuestionnaireTemplate.objects.filter(
             clinic=clinic, name=TEMPLATE_NAME
         ).first()
         if existing is not None:
             published = list(existing.versions.filter(is_published=True).order_by('number'))
-            if published:
-                self.stdout.write(f'  Cuestionario «{TEMPLATE_NAME}» ya existe: se reutiliza.')
-                return published[0], published[-1]
+            current = existing.current_version
+            if published and current is not None:
+                if current.questions.exclude(code=None).exists():
+                    self.stdout.write(
+                        f'  Cuestionario «{TEMPLATE_NAME}» ya existe: se reutiliza.'
+                    )
+                    return published[0], current
+                if self.dry_run:
+                    self.stdout.write(
+                        f'  La versión vigente de «{TEMPLATE_NAME}» no tiene códigos: '
+                        f'publicaría una versión nueva con ellos.'
+                    )
+                    return None, None
+                coded = self._publish_coded_version(existing)
+                self.stdout.write(
+                    f'  «{TEMPLATE_NAME}»: la vigente no tenía códigos; publicada la '
+                    f'v{coded.number} con ellos (las anteriores quedan intactas).'
+                )
+                return published[0], coded
 
         if self.dry_run:
             self.stdout.write(
@@ -235,10 +289,22 @@ class Command(BaseCommand):
         )
         return v1, v2
 
+    def _publish_coded_version(self, template):
+        """Publica una versión nueva con el juego completo de preguntas codificadas."""
+        with transaction.atomic():
+            version = template.new_draft_version(copy_questions_from=False)
+            self._add_questions(version, V1_QUESTIONS, start_order=1)
+            self._add_questions(
+                version, V2_EXTRA_QUESTIONS, start_order=len(V1_QUESTIONS) + 1
+            )
+            version.publish()
+        return version
+
     def _add_questions(self, version, specs, start_order):
-        for offset, (text, answer_type, required, options) in enumerate(specs):
+        for offset, (code, text, answer_type, required, options) in enumerate(specs):
             Question.objects.create(
                 version=version,
+                code=code,
                 text=text,
                 answer_type=answer_type,
                 order=start_order + offset,
@@ -255,7 +321,11 @@ class Command(BaseCommand):
         history = MedicalHistory.all_objects.filter(patient=patient).first()
 
         if history is not None and history.episodes.exists() and not force:
-            self.stdout.write(f'  {name}: ya tiene historia con episodios. Se salta.')
+            if self.refresh_anamnesis:
+                self._refresh_anamnesis(patient, name, history, professional,
+                                        versions, index, totals)
+            else:
+                self.stdout.write(f'  {name}: ya tiene historia con episodios. Se salta.')
             return
 
         case = CASES[index % len(CASES)]
@@ -350,9 +420,11 @@ class Command(BaseCommand):
             totals['adendas'] += 1
 
             # --- Anamnesis ----------------------------------------------------
-            if self._record_anamnesis(patient, episode_open, professional, versions,
-                                      case, index, second_at):
+            alerts = self._record_anamnesis(patient, episode_open, professional, versions,
+                                            case, index, second_at)
+            if alerts is not False:
                 totals['respuestas'] += 1
+                totals['alertas'] += alerts
 
         self.stdout.write(
             f'  {name}: historia {history.number}, episodio cerrado '
@@ -360,7 +432,43 @@ class Command(BaseCommand):
             f'«{open_case["reason"]}» (borrador).'
         )
 
-    def _record_anamnesis(self, patient, episode, professional, versions, case, index, filled_at):
+    def _refresh_anamnesis(self, patient, name, history, professional, versions, index, totals):
+        """Registra una anamnesis nueva a un paciente ya sembrado.
+
+        Es el camino para ver el motor de alertas sobre datos que ya existían:
+        no se toca nada de lo anterior —las notas firmadas y las respuestas
+        antiguas siguen donde estaban—, solo se añade una respuesta más sobre la
+        versión vigente. Si esa anamnesis declara alguna condición crítica, salen
+        sus alertas derivadas.
+        """
+        episode = (
+            history.episodes.filter(status=Episode.Status.OPEN).order_by('-opened_at').first()
+            or history.episodes.order_by('-opened_at').first()
+        )
+        if episode is None:
+            self.stdout.write(f'  {name}: sin episodios donde colgar la anamnesis. Se salta.')
+            return
+
+        if self.dry_run:
+            self.stdout.write(f'  {name}: registraría una anamnesis nueva sobre la versión vigente.')
+            totals['respuestas'] += 1
+            return
+
+        case = CASES[index % len(CASES)]
+        alerts = self._record_anamnesis(
+            patient, episode, professional, versions, case, index,
+            timezone.now(), use_current_version=True,
+        )
+        if alerts is False:
+            return
+
+        totals['respuestas'] += 1
+        totals['alertas'] += alerts
+        detail = f'{alerts} alerta(s) derivada(s)' if alerts else 'sin condiciones críticas'
+        self.stdout.write(f'  {name}: anamnesis nueva sobre «{episode.reason}» → {detail}.')
+
+    def _record_anamnesis(self, patient, episode, professional, versions, case, index,
+                          filled_at, use_current_version=False):
         v1, v2 = versions
         if v1 is None:
             return False
@@ -372,13 +480,20 @@ class Command(BaseCommand):
         else:
             version, source, created_by = v2, QuestionnaireResponse.Source.PATIENT_WEB, None
 
+        if use_current_version:
+            # En el refresco manda la vigente: es la única que lleva los códigos
+            # que el motor de alertas sabe leer.
+            version = v2
+
         questions = list(version.questions.all())
         answers = {
             questions[position].pk: value
             for position, value in case['answers'].items()
             if position < len(questions)
         }
-        QuestionnaireResponse.record(
+        # `record()` dispara el motor de alertas: si la anamnesis declara alguna
+        # condición crítica, el paciente sale ya con su alerta derivada.
+        response = QuestionnaireResponse.record(
             version=version,
             patient=patient,
             episode=episode,
@@ -387,4 +502,4 @@ class Command(BaseCommand):
             created_by=created_by,
             filled_at=filled_at,
         )
-        return True
+        return ClinicalAlert.objects.filter(source_response=response).count()

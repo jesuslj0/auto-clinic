@@ -14,6 +14,7 @@ class ClinicalConfig(AppConfig):
 
         from clinical.models import (
             Addendum,
+            ClinicalAlert,
             ClinicalNote,
             Episode,
             MedicalHistory,
@@ -64,6 +65,15 @@ class ClinicalConfig(AppConfig):
             QuestionnaireResponse,
             sensitive=['snapshot'],
             patient_resolver=lambda r: r.patient,
+        )
+
+        # Alertas. El detalle libre (`note`) es dato clínico y va enmascarado;
+        # el tipo, la gravedad y el alta/baja de la alerta se registran enteros,
+        # que es lo que hay que poder reconstruir: qué se sabía y desde cuándo.
+        registry.register(
+            ClinicalAlert,
+            sensitive=['note'],
+            patient_resolver=lambda a: a.patient,
         )
 
         # --- Auto-creación de la historia al alta del paciente ---------------

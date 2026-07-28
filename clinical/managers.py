@@ -7,10 +7,12 @@
   SÍ debe auditarse. Así que comparte comportamiento pero no herencia.
 - `next_history_number()`: correlativo de historia por clínica y año, con bloqueo
   de fila para que dos altas simultáneas no colisionen.
+- `ClinicalAlertManager` / `ClinicalAlertQuerySet`: consultas de alertas, con la
+  de las críticas activas de un paciente ya resuelta en un solo sitio.
 """
 from django.db import models, transaction
 
-from core.managers import ProtectedRecordError
+from core.managers import ProtectedRecordError, SoftDeleteQuerySet
 
 
 class AppendOnlyInsertQuerySet(models.QuerySet):
@@ -33,6 +35,47 @@ class AppendOnlyInsertQuerySet(models.QuerySet):
 
 
 AppendOnlyInsertManager = models.Manager.from_queryset(AppendOnlyInsertQuerySet)
+
+
+class ClinicalAlertQuerySet(SoftDeleteQuerySet):
+    """Consultas de alertas clínicas. Encadenable como cualquier queryset."""
+
+    def active(self):
+        return self.filter(is_active=True)
+
+    def critical(self):
+        return self.filter(severity=self.model.Severity.CRITICAL)
+
+    def for_patient(self, patient):
+        return self.filter(patient=patient)
+
+    def active_critical_for(self, patient):
+        """Alertas críticas vigentes de un paciente, listas para pintar.
+
+        Es la consulta que alimenta el bloque no descartable de la ficha, así que
+        vive aquí y no repartida por las vistas: si mañana cambia qué cuenta como
+        «crítica vigente», cambia en un sitio.
+
+        El orden es el de presentación —la más reciente primero, y el `id` como
+        desempate para que dos alertas del mismo instante no bailen entre
+        peticiones—. Las desactivadas y las borradas lógicamente quedan fuera.
+        """
+        return self.for_patient(patient).active().critical().order_by('-created_at', '-id')
+
+
+class ClinicalAlertManager(models.Manager.from_queryset(ClinicalAlertQuerySet)):
+    """Manager por defecto de las alertas: oculta las borradas lógicamente.
+
+    Se construye con `from_queryset` en vez de heredar de `SoftDeleteManager`
+    por dos motivos: el `get_queryset()` de aquel instancia un
+    `SoftDeleteQuerySet` a pelo y perdería estos métodos, y así los helpers
+    (`active()`, `critical()`, `active_critical_for()`…) quedan disponibles
+    también directamente sobre el manager. El contrato que importa —no ver los
+    borrados— es el mismo.
+    """
+
+    def get_queryset(self):
+        return super().get_queryset().filter(deleted_at__isnull=True)
 
 
 def next_history_number(clinic) -> str:

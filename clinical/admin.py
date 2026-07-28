@@ -19,6 +19,7 @@ from audit.models import AccessLog
 
 from clinical.models import (
     Addendum,
+    ClinicalAlert,
     ClinicalNote,
     Episode,
     MedicalHistory,
@@ -151,7 +152,7 @@ class QuestionnaireTemplateAdmin(admin.ModelAdmin):
 class QuestionInline(admin.TabularInline):
     model = Question
     extra = 1
-    fields = ('order', 'text', 'answer_type', 'is_required', 'options')
+    fields = ('order', 'code', 'text', 'answer_type', 'is_required', 'options')
     ordering = ('order', 'id')
 
     def _version_is_published(self, obj):
@@ -207,9 +208,9 @@ class TemplateVersionAdmin(admin.ModelAdmin):
 
 @admin.register(Question)
 class QuestionAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'version', 'order', 'answer_type', 'is_required')
+    list_display = ('__str__', 'version', 'order', 'code', 'answer_type', 'is_required')
     list_filter = ('answer_type', 'is_required')
-    search_fields = ('text',)
+    search_fields = ('text', 'code')
     raw_id_fields = ('version',)
     readonly_fields = ('deleted_at',)
 
@@ -223,6 +224,52 @@ class QuestionAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return not self._is_frozen(obj)
+
+
+@admin.register(ClinicalAlert)
+class ClinicalAlertAdmin(AuditedAdminMixin, admin.ModelAdmin):
+    """Alta y baja manual de alertas. Es el flujo manual mientras no hay ficha.
+
+    Nada de borrar: se desactiva. Y la procedencia (`source`/`source_response`)
+    es de solo lectura, porque marcar a mano una alerta como «derivada» sería
+    falsificar de dónde salió.
+    """
+
+    list_display = ('__str__', 'patient', 'alert_type', 'severity', 'source', 'is_active', 'created_by', 'created_at')
+    list_filter = ('is_active', 'severity', 'alert_type', 'source')
+    search_fields = ('patient__first_name', 'patient__last_name', 'note')
+    raw_id_fields = ('patient', 'created_by', 'source_response')
+    readonly_fields = ('source', 'source_response', 'deleted_at')
+    actions = ['deactivate_alerts', 'reactivate_alerts']
+
+    def save_model(self, request, obj, form, change):
+        # Alta manual desde el admin: la firma quien la está creando, sin tener
+        # que acordarse de rellenar el campo.
+        if not change and obj.created_by_id is None:
+            obj.created_by = getattr(request.user, 'professional_profile', None)
+        super().save_model(request, obj, form, change)
+
+    def has_delete_permission(self, request, obj=None):
+        # Una alerta no se borra nunca: se desactiva y la fila se conserva.
+        return False
+
+    @admin.action(description='Desactivar las alertas seleccionadas')
+    def deactivate_alerts(self, request, queryset):
+        # Una a una y no con `update()`: los bulk se saltan la auditoría, y
+        # quitar un aviso de una ficha clínica no puede quedar sin registrar.
+        changed = 0
+        for alert in queryset.filter(is_active=True):
+            alert.deactivate()
+            changed += 1
+        self.message_user(request, f'{changed} alerta(s) desactivada(s).')
+
+    @admin.action(description='Reactivar las alertas seleccionadas')
+    def reactivate_alerts(self, request, queryset):
+        changed = 0
+        for alert in queryset.filter(is_active=False):
+            alert.reactivate()
+            changed += 1
+        self.message_user(request, f'{changed} alerta(s) reactivada(s).')
 
 
 @admin.register(QuestionnaireResponse)

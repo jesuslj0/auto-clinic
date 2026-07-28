@@ -32,7 +32,11 @@ from clinical.exceptions import (
     TemplateVersionPublished,
 )
 from clinical.hashing import compute_note_hash
-from clinical.managers import AppendOnlyInsertManager, next_history_number
+from clinical.managers import (
+    AppendOnlyInsertManager,
+    ClinicalAlertManager,
+    next_history_number,
+)
 from clinical.snapshots import build_response_snapshot, is_answered
 from core.models import SoftDeleteModel, TimeStampedModel
 
@@ -470,6 +474,10 @@ class QuestionnaireTemplate(SoftDeleteModel, TimeStampedModel):
                 for question in source.questions.all():
                     Question.objects.create(
                         version=version,
+                        # El código se clona con la pregunta: es lo único que
+                        # mantiene reconocible «la misma pregunta» de una versión
+                        # a otra, y de ello vive el motor de alertas.
+                        code=question.code,
                         text=question.text,
                         answer_type=question.answer_type,
                         order=question.order,
@@ -630,6 +638,11 @@ class Question(SoftDeleteModel, TimeStampedModel):
         TemplateVersion, on_delete=models.PROTECT, related_name='questions'
     )
     text = models.TextField(help_text='Enunciado literal de la pregunta.')
+    code = models.SlugField(
+        max_length=60, null=True, blank=True,
+        help_text='Identificador estable entre versiones, p. ej. «has_diabetes». '
+                  'Es la clave por la que el motor de alertas reconoce la pregunta.',
+    )
     answer_type = models.CharField(
         max_length=20, choices=AnswerType.choices, default=AnswerType.TEXT
     )
@@ -646,6 +659,17 @@ class Question(SoftDeleteModel, TimeStampedModel):
         ordering = ['version', 'order', 'id']
         verbose_name = 'pregunta'
         verbose_name_plural = 'preguntas'
+        constraints = [
+            # Dos preguntas con el mismo código en una versión dejarían al motor
+            # de alertas sin saber a cuál hace caso. Las de código nulo no entran
+            # (en Postgres los NULL no colisionan), que es lo que permite tener
+            # preguntas sin codificar.
+            models.UniqueConstraint(
+                fields=['version', 'code'],
+                condition=models.Q(deleted_at__isnull=True),
+                name='clinical_unique_question_code_per_version',
+            ),
+        ]
 
     def __str__(self):
         return self.text[:60]
@@ -687,6 +711,9 @@ class Question(SoftDeleteModel, TimeStampedModel):
         # preguntas nuevas ni cambios en las que tiene.
         self._assert_version_editable()
         self._validate_options()
+        # Cadena vacía y «sin código» son lo mismo, pero solo NULL se libra del
+        # índice único: si no se normaliza, dos preguntas sin codificar chocan.
+        self.code = self.code or None
         super().save(*args, **kwargs)
 
     def can_be_deleted(self) -> bool:
@@ -765,11 +792,18 @@ class QuestionnaireResponse(SoftDeleteModel, TimeStampedModel):
 
     @classmethod
     def record(cls, *, version, patient, episode, answers=None,
-               source=Source.PROFESSIONAL, created_by=None, filled_at=None):
+               source=Source.PROFESSIONAL, created_by=None, filled_at=None,
+               derive=True):
         """Registra un cuestionario contestado congelando su snapshot.
 
         Es la vía normal de alta: `answers` es `{question_id: respuesta}` y se
         convierte en el snapshot en el propio `save()`.
+
+        Al terminar dispara el motor de alertas (`derive=False` lo salta). Es una
+        llamada explícita y no una señal a propósito: así el mismo camino sirve
+        para el panel, para el formulario del paciente y para la vía del agente
+        por n8n, y se ve en el código que dar de alta una anamnesis puede
+        levantar avisos en la ficha.
         """
         response = cls(
             version=version, patient=patient, episode=episode,
@@ -779,6 +813,12 @@ class QuestionnaireResponse(SoftDeleteModel, TimeStampedModel):
             response.filled_at = filled_at
         response.answers = answers or {}
         response.save()
+
+        if derive:
+            # Import perezoso: `derivation` importa este módulo.
+            from clinical.derivation import derive_alerts
+
+            derive_alerts(response)
         return response
 
     def clean(self):
@@ -844,4 +884,155 @@ class QuestionnaireResponse(SoftDeleteModel, TimeStampedModel):
             is_answered(entry)
             for entry in (self.snapshot or [])
             if entry.get('required')
+        )
+
+
+# ---------------------------------------------------------------------------
+# Alertas clínicas
+# ---------------------------------------------------------------------------
+
+
+class ClinicalAlert(SoftDeleteModel, TimeStampedModel):
+    """Aviso permanente sobre un paciente: lo que hay que saber ANTES de tratar.
+
+    Cuelga del paciente y no del episodio a propósito: una diabetes o una alergia
+    al látex no caducan al cerrar un proceso asistencial, valen para todos los
+    que vengan después.
+
+    Una alerta **no se borra, se desactiva**. `is_active=False` la retira de la
+    ficha pero conserva la fila, que es lo que permite responder después a «esto
+    se sabía en aquel momento». Por eso `can_be_deleted()` devuelve `False`
+    incluso para el borrado lógico: el camino correcto es `deactivate()`.
+
+    El `source` deja preparado el motor de derivación —el que leerá una anamnesis
+    y levantará alertas solo— sin construirlo todavía: una alerta derivada
+    apuntará a la `QuestionnaireResponse` de la que salió (`source_response`), de
+    modo que siempre se pueda contestar de dónde vino cada aviso. Las manuales no
+    tienen respuesta de origen.
+    """
+
+    class AlertType(models.TextChoices):
+        # Las críticas de podología: las que cambian el tratamiento o lo
+        # contraindican. `OTHER` existe para no forzar el encaje de lo que no
+        # esté en la lista, con el detalle en `note`.
+        DIABETES = 'diabetes', 'Diabetes'
+        PERIPHERAL_VASCULAR_DISEASE = 'peripheral_vascular_disease', 'Enfermedad vascular periférica'
+        NEUROPATHY = 'neuropathy', 'Neuropatía'
+        ANTICOAGULANTS = 'anticoagulants', 'Tratamiento anticoagulante'
+        ALLERGY_LATEX = 'allergy_latex', 'Alergia al látex'
+        ALLERGY_LOCAL_ANESTHETICS = 'allergy_local_anesthetics', 'Alergia a anestésicos locales'
+        OTHER = 'other', 'Otra'
+
+    class Severity(models.TextChoices):
+        CRITICAL = 'critical', 'Crítica'
+        WARNING = 'warning', 'Advertencia'
+        INFO = 'info', 'Informativa'
+
+    class Source(models.TextChoices):
+        MANUAL = 'manual', 'Manual'
+        DERIVED = 'derived', 'Derivada de una anamnesis'
+
+    # Mismo patrón que `MedicalHistory`: borrar un paciente no puede arrastrar ni
+    # bloquear su documentación clínica (ver el docstring de MedicalHistory).
+    patient = models.ForeignKey(
+        'patients.Patient', on_delete=models.DO_NOTHING,
+        related_name='clinical_alerts', db_constraint=False,
+    )
+    alert_type = models.CharField(max_length=40, choices=AlertType.choices, db_index=True)
+    severity = models.CharField(
+        max_length=10, choices=Severity.choices, default=Severity.WARNING, db_index=True
+    )
+    source = models.CharField(
+        max_length=10, choices=Source.choices, default=Source.MANUAL, db_index=True
+    )
+    note = models.TextField(blank=True, help_text='Detalle del aviso.')
+    is_active = models.BooleanField(default=True, db_index=True)
+    created_by = models.ForeignKey(
+        'appointments.Professional', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='+',
+        help_text='Profesional que la dio de alta; vacío si la levantó el sistema.',
+    )
+    # PROTECT y no SET_NULL: una respuesta de cuestionario no se borra nunca
+    # físicamente, así que la procedencia de una alerta derivada no puede
+    # evaporarse.
+    source_response = models.ForeignKey(
+        QuestionnaireResponse, on_delete=models.PROTECT,
+        null=True, blank=True, related_name='derived_alerts',
+        help_text='Respuesta de anamnesis de la que se derivó. Vacío si es manual.',
+    )
+
+    objects = ClinicalAlertManager()
+
+    class Meta(SoftDeleteModel.Meta):
+        abstract = False
+        db_table = 'clinical_alert'
+        ordering = ['-created_at']
+        verbose_name = 'alerta clínica'
+        verbose_name_plural = 'alertas clínicas'
+        indexes = [
+            # La consulta de la ficha: alertas vigentes de un paciente.
+            models.Index(
+                fields=['patient', 'is_active', 'severity'],
+                name='idx_clinical_alert_patient',
+            ),
+        ]
+        constraints = [
+            # La idempotencia del motor de derivación, respaldada por la base de
+            # datos: una alerta derivada queda identificada por paciente, tipo y
+            # respuesta de origen. Dos derivaciones simultáneas de la misma
+            # respuesta no pueden dejar dos avisos iguales. No afecta a las
+            # manuales, que quedan fuera de la condición.
+            models.UniqueConstraint(
+                fields=['patient', 'alert_type', 'source_response'],
+                condition=models.Q(source='derived', deleted_at__isnull=True),
+                name='clinical_unique_derived_alert',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.get_alert_type_display()} ({self.get_severity_display()})'
+
+    def _validate_source(self):
+        """La procedencia tiene que cuadrar con el origen declarado."""
+        if self.source == self.Source.DERIVED and self.source_response_id is None:
+            raise ValidationError(
+                {'source_response': 'Una alerta derivada debe apuntar a la respuesta de origen.'}
+            )
+        if self.source == self.Source.MANUAL and self.source_response_id is not None:
+            raise ValidationError(
+                {'source_response': 'Una alerta manual no procede de ninguna respuesta.'}
+            )
+
+    def clean(self):
+        super().clean()
+        self._validate_source()
+
+    def save(self, *args, **kwargs):
+        # Barrera más allá del formulario: que nadie deje una alerta «derivada»
+        # sin decir de dónde salió, que es justo lo que el motor necesitará.
+        self._validate_source()
+        super().save(*args, **kwargs)
+
+    def deactivate(self):
+        """Retira la alerta de la ficha conservando la fila. Idempotente."""
+        if not self.is_active:
+            return
+        self.is_active = False
+        self.save(update_fields=['is_active', 'updated_at'])
+
+    def reactivate(self):
+        """Vuelve a poner la alerta en circulación. Idempotente."""
+        if self.is_active:
+            return
+        self.is_active = True
+        self.save(update_fields=['is_active', 'updated_at'])
+
+    def can_be_deleted(self) -> bool:
+        # Una alerta no se borra: se desactiva. Conservar la fila es lo que
+        # permite reconstruir qué se sabía del paciente en cada momento.
+        return False
+
+    def delete(self, using=None, keep_parents=False):
+        raise ProtectedClinicalRecord(
+            f'La alerta #{self.pk} no se borra: se desactiva con deactivate().'
         )
