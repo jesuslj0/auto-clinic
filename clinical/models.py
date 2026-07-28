@@ -18,8 +18,10 @@ La segunda mitad del módulo es la **anamnesis**: cuestionarios versionados
 momento de contestarlo. Misma doctrina, mismos dos niveles (migración 0004).
 """
 import copy
+import uuid
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.utils import timezone
 
@@ -31,10 +33,17 @@ from clinical.exceptions import (
     TemplateVersionNotPublished,
     TemplateVersionPublished,
 )
+from clinical.files import (
+    attachment_upload_to,
+    clinical_media_storage,
+    validate_clinical_image,
+)
 from clinical.hashing import compute_note_hash
 from clinical.managers import (
     AppendOnlyInsertManager,
     ClinicalAlertManager,
+    LesionManager,
+    LesionObservationManager,
     next_history_number,
 )
 from clinical.snapshots import build_response_snapshot, is_answered
@@ -1036,3 +1045,503 @@ class ClinicalAlert(SoftDeleteModel, TimeStampedModel):
         raise ProtectedClinicalRecord(
             f'La alerta #{self.pk} no se borra: se desactiva con deactivate().'
         )
+
+
+# ---------------------------------------------------------------------------
+# Lesiones sobre el mapa del pie
+# ---------------------------------------------------------------------------
+
+
+class Lesion(SoftDeleteModel, TimeStampedModel):
+    """Lesión localizada sobre el mapa del pie.
+
+    Guarda la localización **dos veces y a propósito**, porque son dos cosas
+    distintas que envejecen distinto:
+
+    - `anatomical_zone` es el dato **clínico**: «cabeza del primer metatarsiano»
+      significa lo mismo hoy que dentro de quince años y es lo que se consulta,
+      se agrega y se lee en un informe.
+    - `x`/`y` son solo **para pintar**: fracciones (0–1) de las dimensiones del
+      SVG, nunca píxeles. Normalizadas porque el dibujo se reescala en cada
+      pantalla, y un número de píxel no significaría nada fuera del tamaño en el
+      que se marcó.
+
+    Si mañana se rediseña el SVG, las coordenadas viejas dejan de cuadrar, pero
+    **la zona anatómica sigue siendo válida**: por eso el dato clínico no depende
+    del dibujo. Nunca se debe derivar la zona de las coordenadas ni al revés.
+
+    La localización queda **fija al crearse**. Una lesión no «se mueve»: si la
+    marca estaba mal, se borra lógicamente y se registra otra; si lo que cambia
+    es la evolución, eso es el ciclo de vida (`resolve()`), no la posición.
+    """
+
+    class Laterality(models.TextChoices):
+        LEFT = 'left', 'Pie izquierdo'
+        RIGHT = 'right', 'Pie derecho'
+
+    class View(models.TextChoices):
+        DORSAL = 'dorsal', 'Dorsal'
+        PLANTAR = 'plantar', 'Plantar'
+        MEDIAL = 'medial', 'Medial'
+        LATERAL = 'lateral', 'Lateral'
+
+    class AnatomicalZone(models.TextChoices):
+        """Zonas codificadas. Slugs estables: sobreviven a un rediseño del SVG.
+
+        NO es texto libre a propósito. Una zona escrita a mano («1er meta»,
+        «primer metatarsiano», «MTT1») no se puede consultar ni agregar, y es
+        justo lo que hay que poder hacer con una lesión: buscarla, contarla y
+        compararla entre visitas.
+        """
+
+        HALLUX = 'hallux', 'Hallux (primer dedo)'
+        SECOND_TOE = 'second_toe', 'Segundo dedo'
+        THIRD_TOE = 'third_toe', 'Tercer dedo'
+        FOURTH_TOE = 'fourth_toe', 'Cuarto dedo'
+        FIFTH_TOE = 'fifth_toe', 'Quinto dedo'
+        FIRST_METATARSAL = 'first_metatarsal', 'Primer metatarsiano'
+        SECOND_METATARSAL = 'second_metatarsal', 'Segundo metatarsiano'
+        THIRD_METATARSAL = 'third_metatarsal', 'Tercer metatarsiano'
+        FOURTH_METATARSAL = 'fourth_metatarsal', 'Cuarto metatarsiano'
+        FIFTH_METATARSAL = 'fifth_metatarsal', 'Quinto metatarsiano'
+        INTERDIGITAL = 'interdigital', 'Espacio interdigital'
+        MIDFOOT = 'midfoot', 'Mediopié'
+        MEDIAL_ARCH = 'medial_arch', 'Arco medial'
+        LATERAL_BORDER = 'lateral_border', 'Borde lateral'
+        HEEL = 'heel', 'Talón'
+        ANKLE = 'ankle', 'Tobillo'
+        OTHER = 'other', 'Otra zona'
+
+    class LesionType(models.TextChoices):
+        ULCER = 'ulcer', 'Úlcera'
+        HYPERKERATOSIS = 'hyperkeratosis', 'Hiperqueratosis'
+        WOUND = 'wound', 'Herida'
+        BLISTER = 'blister', 'Ampolla'
+        OTHER = 'other', 'Otra'
+
+    class Status(models.TextChoices):
+        ACTIVE = 'active', 'Activa'
+        RESOLVED = 'resolved', 'Resuelta'
+
+    # Dónde está la lesión: fijo desde que se crea.
+    FROZEN_FIELDS = (
+        'episode_id', 'laterality', 'view', 'anatomical_zone', 'x', 'y',
+    )
+
+    episode = models.ForeignKey(Episode, on_delete=models.PROTECT, related_name='lesions')
+    laterality = models.CharField(max_length=5, choices=Laterality.choices, db_index=True)
+    view = models.CharField(max_length=10, choices=View.choices, db_index=True)
+    anatomical_zone = models.CharField(
+        max_length=30, choices=AnatomicalZone.choices, db_index=True,
+        help_text='Zona clínica. Es el dato que sobrevive a un rediseño del mapa.',
+    )
+    x = models.FloatField(
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text='Fracción horizontal del SVG (0–1), nunca píxeles.',
+    )
+    y = models.FloatField(
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text='Fracción vertical del SVG (0–1), nunca píxeles.',
+    )
+    lesion_type = models.CharField(
+        max_length=20, choices=LesionType.choices, default=LesionType.OTHER, db_index=True
+    )
+    status = models.CharField(
+        max_length=10, choices=Status.choices, default=Status.ACTIVE, db_index=True
+    )
+    detected_at = models.DateField(default=timezone.localdate)
+    resolved_at = models.DateField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        'appointments.Professional', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='+',
+    )
+
+    objects = LesionManager()
+
+    class Meta(SoftDeleteModel.Meta):
+        abstract = False
+        db_table = 'clinical_lesion'
+        ordering = ['-detected_at', '-id']
+        verbose_name = 'lesión'
+        verbose_name_plural = 'lesiones'
+        indexes = [
+            # La consulta del mapa: las lesiones de una vista concreta del pie.
+            models.Index(
+                fields=['episode', 'laterality', 'view'],
+                name='idx_lesion_episode_view',
+            ),
+        ]
+        constraints = [
+            # Segundo nivel, como el resto de la capa: los validadores del campo
+            # solo corren en `full_clean()`, y esto no admite excepciones ni
+            # aunque alguien entre por SQL.
+            models.CheckConstraint(
+                condition=(
+                    models.Q(x__gte=0.0) & models.Q(x__lte=1.0)
+                    & models.Q(y__gte=0.0) & models.Q(y__lte=1.0)
+                ),
+                name='clinical_lesion_coordinates_normalized',
+            ),
+            # Resuelta ⇒ con fecha de resolución; activa ⇒ sin ella. Una lesión
+            # «resuelta» sin fecha no se puede situar en el tiempo, y una activa
+            # con fecha de alta es una contradicción.
+            models.CheckConstraint(
+                condition=(
+                    models.Q(status='resolved', resolved_at__isnull=False)
+                    | models.Q(status='active', resolved_at__isnull=True)
+                ),
+                name='clinical_lesion_resolved_at_matches_status',
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f'{self.get_lesion_type_display()} en {self.get_anatomical_zone_display()} '
+            f'({self.get_laterality_display()})'
+        )
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        instance._loaded_frozen = _frozen_state(instance, cls.FROZEN_FIELDS, field_names)
+        return instance
+
+    def _validate_coordinates(self):
+        for name in ('x', 'y'):
+            value = getattr(self, name)
+            if value is None or not (0.0 <= value <= 1.0):
+                raise ValidationError({
+                    name: 'Las coordenadas son fracciones del SVG entre 0.0 y 1.0, no píxeles.'
+                })
+
+    def _validate_status(self):
+        if self.status == self.Status.RESOLVED and self.resolved_at is None:
+            raise ValidationError({
+                'resolved_at': 'Una lesión resuelta necesita fecha de resolución.'
+            })
+        if self.status == self.Status.ACTIVE and self.resolved_at is not None:
+            raise ValidationError({
+                'resolved_at': 'Una lesión activa no puede tener fecha de resolución.'
+            })
+
+    def clean(self):
+        super().clean()
+        self._validate_coordinates()
+        self._validate_status()
+
+    def save(self, *args, **kwargs):
+        # Barreras duras, más allá del formulario: `clean()` solo lo llama quien
+        # se acuerda, y estas dos reglas no pueden depender de eso.
+        self._validate_coordinates()
+        self._validate_status()
+
+        if not self._state.adding:
+            changed = _changed_frozen_fields(self, getattr(self, '_loaded_frozen', {}))
+            if changed:
+                raise ProtectedClinicalRecord(
+                    f'La lesión #{self.pk} no se puede recolocar: '
+                    f'{", ".join(changed)} queda fijo desde que se registra.'
+                )
+
+        super().save(*args, **kwargs)
+        self._loaded_frozen = _frozen_state(self, self.FROZEN_FIELDS)
+
+    def evolution(self):
+        """Observaciones de la lesión en orden cronológico, de la primera a la última.
+
+        Es como se lee un seguimiento; el `ordering` del modelo, al revés, es
+        como se lee una ficha. Vive aquí para que ninguna vista tenga que
+        acordarse de invertirlo.
+        """
+        return self.observations.all().chronological()
+
+    def resolve(self, on=None):
+        """Marca la lesión como resuelta. `on` por defecto, hoy."""
+        if self.status == self.Status.RESOLVED:
+            return
+        self.status = self.Status.RESOLVED
+        self.resolved_at = on or timezone.localdate()
+        self.save(update_fields=['status', 'resolved_at', 'updated_at'])
+
+    def reopen(self):
+        """Vuelve a poner la lesión en activa y retira la fecha de resolución."""
+        if self.status == self.Status.ACTIVE:
+            return
+        self.status = self.Status.ACTIVE
+        self.resolved_at = None
+        self.save(update_fields=['status', 'resolved_at', 'updated_at'])
+
+
+# ---------------------------------------------------------------------------
+# Seguimiento de la lesión: observaciones y fotos
+# ---------------------------------------------------------------------------
+#
+# Una lesión no es un dato, es una serie. Lo que interesa clínicamente no es
+# «hay una úlcera en el primer metatarsiano» sino si mide menos que hace tres
+# semanas. Por eso la lesión guarda su localización (fija) y cada visita añade
+# una `LesionObservation` con las medidas de ese día.
+#
+# Las fotos cuelgan de la observación y no de la lesión: una foto sin la fecha y
+# las medidas de ese momento no dice nada, y colgándola de la observación queda
+# atada a la visita en la que se tomó.
+
+
+class LesionObservation(SoftDeleteModel, TimeStampedModel):
+    """Cómo estaba la lesión en una visita concreta.
+
+    Es la unidad de la evolución: la lesión no cambia de sitio ni de identidad,
+    lo que cambia es lo que se ve de ella cada día. Por eso las medidas están
+    aquí y no en `Lesion`.
+
+    Las medidas van en **campos separados y numéricos** (largo, ancho, profundo,
+    en milímetros) y no en un texto ni en un JSON suelto: el sentido de medir una
+    úlcera es poder compararla con la de la semana pasada, y eso exige un número
+    consultable. Son opcionales porque no toda lesión se mide (una hiperqueratosis
+    se describe), pero cuando se miden, se miden igual siempre.
+
+    `lesion` y `visit` quedan **fijos**: una observación es de esa lesión en esa
+    visita. Si se anotó donde no era, se borra lógicamente y se registra otra.
+    """
+
+    # De qué lesión y de qué encuentro es esta observación: no se reasigna.
+    FROZEN_FIELDS = ('lesion_id', 'visit_id')
+
+    lesion = models.ForeignKey(Lesion, on_delete=models.PROTECT, related_name='observations')
+    visit = models.ForeignKey(
+        Visit, on_delete=models.PROTECT, related_name='lesion_observations'
+    )
+    observed_at = models.DateField(
+        default=timezone.localdate,
+        help_text='Día de la observación. Es el eje de la evolución.',
+    )
+    length_mm = models.DecimalField(
+        max_digits=6, decimal_places=1, null=True, blank=True,
+        validators=[MinValueValidator(0)], help_text='Largo en milímetros.',
+    )
+    width_mm = models.DecimalField(
+        max_digits=6, decimal_places=1, null=True, blank=True,
+        validators=[MinValueValidator(0)], help_text='Ancho en milímetros.',
+    )
+    depth_mm = models.DecimalField(
+        max_digits=6, decimal_places=1, null=True, blank=True,
+        validators=[MinValueValidator(0)], help_text='Profundidad en milímetros.',
+    )
+    description = models.TextField(blank=True, help_text='Descripción clínica del estado.')
+    created_by = models.ForeignKey(
+        'appointments.Professional', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='+',
+    )
+
+    objects = LesionObservationManager()
+
+    class Meta(SoftDeleteModel.Meta):
+        abstract = False
+        db_table = 'clinical_lesion_observation'
+        # La más reciente primero, que es como se lee una ficha. La serie en
+        # orden cronológico la da `Lesion.evolution()`.
+        ordering = ['-observed_at', '-id']
+        verbose_name = 'observación de lesión'
+        verbose_name_plural = 'observaciones de lesión'
+        indexes = [
+            models.Index(fields=['lesion', 'observed_at'], name='idx_lesion_obs_series'),
+        ]
+        constraints = [
+            # Segundo nivel: los validadores solo corren en `full_clean()`. Una
+            # medida negativa no es un matiz de formulario, es un dato imposible.
+            models.CheckConstraint(
+                condition=(
+                    (models.Q(length_mm__isnull=True) | models.Q(length_mm__gte=0))
+                    & (models.Q(width_mm__isnull=True) | models.Q(width_mm__gte=0))
+                    & (models.Q(depth_mm__isnull=True) | models.Q(depth_mm__gte=0))
+                ),
+                name='clinical_lesion_observation_measurements_positive',
+            ),
+        ]
+
+    def __str__(self):
+        return f'Observación de lesión #{self.lesion_id} ({self.observed_at:%Y-%m-%d})'
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        instance._loaded_frozen = _frozen_state(instance, cls.FROZEN_FIELDS, field_names)
+        return instance
+
+    def _validate_visit(self):
+        """La visita y la lesión tienen que ser del mismo episodio.
+
+        Observar la lesión de un episodio dentro de la visita de otro no es un
+        despiste de formulario: deja la evolución de una lesión repartida entre
+        procesos asistenciales distintos y la vuelve ilegible.
+        """
+        if self.lesion_id and self.visit_id:
+            if self.lesion.episode_id != self.visit.episode_id:
+                raise ValidationError({
+                    'visit': 'La visita pertenece a un episodio distinto al de la lesión.'
+                })
+
+    def clean(self):
+        super().clean()
+        self._validate_visit()
+
+    def save(self, *args, **kwargs):
+        # Barrera dura, más allá del formulario.
+        self._validate_visit()
+
+        if not self._state.adding:
+            changed = _changed_frozen_fields(self, getattr(self, '_loaded_frozen', {}))
+            if changed:
+                raise ProtectedClinicalRecord(
+                    f'La observación #{self.pk} no se puede reasignar: '
+                    f'{", ".join(changed)} queda fijo desde que se registra.'
+                )
+
+        super().save(*args, **kwargs)
+        self._loaded_frozen = _frozen_state(self, self.FROZEN_FIELDS)
+
+    def delete(self, using=None, keep_parents=False):
+        # Django no cascadea el borrado lógico: los adjuntos se recorren a mano.
+        # El objeto del bucket NO se toca (ver `LesionAttachment.delete`).
+        for attachment in LesionAttachment.all_objects.filter(
+            observation=self, deleted_at__isnull=True
+        ):
+            attachment.delete()
+        super().delete(using=using, keep_parents=keep_parents)
+
+
+class LesionAttachment(SoftDeleteModel, TimeStampedModel):
+    """Foto clínica de una observación, guardada en un bucket privado.
+
+    Tres reglas que no se negocian:
+
+    - **Se guarda la clave, nunca una URL.** Una URL firmada caduca en minutos;
+      persistirla sería guardar una credencial caducada y, peor, un enlace de
+      acceso a dato de salud dentro de la base de datos. La URL se genera en cada
+      petición y solo después de comprobar permisos (`clinical/attachments.py`).
+    - **La clave es un UUID.** Nada de `paciente_perez_pie_izq.jpg`: el nombre de
+      un objeto es visible para cualquiera que vea la clave y no puede contar qué
+      le pasa a quién (`clinical.files.attachment_upload_to`).
+    - **El fichero se valida por su contenido**, no por su extensión ni por el
+      `Content-Type` que mande el cliente, y el resultado de esa validación es lo
+      que se guarda en `mime_type`/`size_bytes`/`checksum`. Ocurre en `save()`, no
+      en un formulario, para que valga igual venga de la consulta o de WhatsApp.
+
+    Una vez subido queda **congelado**: ni se reemplaza el fichero ni se retoca
+    su procedencia. Corregir es borrar lógicamente y subir otro.
+    """
+
+    class Source(models.TextChoices):
+        PROFESSIONAL = 'professional', 'Profesional'
+        PATIENT_WHATSAPP = 'patient_whatsapp', 'Paciente (WhatsApp)'
+        PATIENT_WEB = 'patient_web', 'Paciente (web)'
+
+    #: Orígenes que NO son la consulta: se validan con el límite estricto.
+    EXTERNAL_SOURCES = frozenset({Source.PATIENT_WHATSAPP, Source.PATIENT_WEB})
+
+    # Todo lo que describe el fichero queda fijo tras la subida. `deleted_at` y
+    # `updated_at` quedan fuera: son ciclo de vida.
+    FROZEN_FIELDS = ('observation_id', 'mime_type', 'size_bytes', 'checksum', 'source')
+
+    # Identificador público: es el que viaja en la URL de descarga. La PK
+    # secuencial se queda dentro, para que un id ajeno no se pueda ni tantear.
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    observation = models.ForeignKey(
+        LesionObservation, on_delete=models.PROTECT, related_name='attachments'
+    )
+    file = models.FileField(
+        upload_to=attachment_upload_to,
+        storage=clinical_media_storage,
+        max_length=255,
+        help_text='Clave del objeto en el bucket privado. Nunca una URL.',
+    )
+    mime_type = models.CharField(
+        max_length=100, blank=True,
+        help_text='Tipo real del contenido, deducido al validar. No lo elige quien sube.',
+    )
+    size_bytes = models.PositiveBigIntegerField(default=0)
+    checksum = models.CharField(
+        max_length=71, blank=True,
+        help_text='sha256:<hexdigest> del contenido tal y como se subió.',
+    )
+    source = models.CharField(
+        max_length=20, choices=Source.choices, default=Source.PROFESSIONAL, db_index=True
+    )
+    uploaded_at = models.DateTimeField(default=timezone.now)
+
+    class Meta(SoftDeleteModel.Meta):
+        abstract = False
+        db_table = 'clinical_lesion_attachment'
+        ordering = ['-uploaded_at', '-id']
+        verbose_name = 'adjunto de lesión'
+        verbose_name_plural = 'adjuntos de lesión'
+
+    def __str__(self):
+        return f'Adjunto #{self.pk} de observación #{self.observation_id}'
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        instance._loaded_frozen = _frozen_state(instance, cls.FROZEN_FIELDS, field_names)
+        # El fichero aparte: comparar `FieldFile`s copiaría el backend entero.
+        # Lo que identifica al fichero es su clave.
+        instance._loaded_file_name = instance.file.name
+        return instance
+
+    @property
+    def is_external(self) -> bool:
+        """`True` si no lo subió un profesional desde la consulta."""
+        return self.source in self.EXTERNAL_SOURCES
+
+    @property
+    def patient(self):
+        """Paciente al que pertenece la foto, subiendo por la cadena clínica."""
+        return self.observation.lesion.episode.history.patient
+
+    def clean(self):
+        super().clean()
+        # En el admin y en los formularios, el motivo del rechazo se enseña como
+        # error de campo en vez de reventar en el `save()`.
+        if self._state.adding and self.file:
+            try:
+                validate_clinical_image(self.file, external=self.is_external)
+            except ValidationError as exc:
+                raise ValidationError({'file': exc.messages})
+
+    def save(self, *args, **kwargs):
+        if self._state.adding:
+            if not self.file:
+                raise ValidationError({'file': 'El adjunto necesita un fichero.'})
+            # La validación vive aquí y no en un formulario a propósito: es la
+            # única forma de que el adjunto que entre por la vía del agente pase
+            # exactamente por el mismo filtro que el que sube el profesional.
+            probe = validate_clinical_image(self.file, external=self.is_external)
+            # Se guarda lo que el fichero ES, no lo que dijo quien lo subió. El
+            # `mime_type` ya está puesto cuando `attachment_upload_to` calcula la
+            # clave, así que la extensión sale también del contenido real.
+            self.mime_type = probe.mime_type
+            self.size_bytes = probe.size_bytes
+            self.checksum = probe.checksum
+        else:
+            changed = _changed_frozen_fields(self, getattr(self, '_loaded_frozen', {}))
+            if self.file.name != getattr(self, '_loaded_file_name', self.file.name):
+                changed = sorted(changed + ['file'])
+            if changed:
+                raise ProtectedClinicalRecord(
+                    f'El adjunto #{self.pk} está congelado: '
+                    f'{", ".join(changed)} no se puede modificar. '
+                    f'Para corregirlo, bórralo y sube otro.'
+                )
+
+        super().save(*args, **kwargs)
+        self._loaded_frozen = _frozen_state(self, self.FROZEN_FIELDS)
+        self._loaded_file_name = self.file.name
+
+    def delete(self, using=None, keep_parents=False):
+        """Borrado lógico. **El objeto del bucket se conserva.**
+
+        Es intencionado y del mismo signo que el resto de la capa: la fila
+        desaparece de la ficha, pero el fichero sigue ahí mientras corra el plazo
+        de conservación. Borrarlo del bucket sería el único borrado físico e
+        irreversible de toda la capa clínica, y no se hace desde una vista.
+        """
+        super().delete(using=using, keep_parents=keep_parents)

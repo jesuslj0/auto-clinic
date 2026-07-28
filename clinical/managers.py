@@ -9,6 +9,10 @@
   de fila para que dos altas simultáneas no colisionen.
 - `ClinicalAlertManager` / `ClinicalAlertQuerySet`: consultas de alertas, con la
   de las críticas activas de un paciente ya resuelta en un solo sitio.
+- `LesionManager` / `LesionQuerySet`: las lesiones de una vista concreta del pie,
+  que es como las pide el mapa.
+- `LesionObservationManager` / `LesionObservationQuerySet`: el seguimiento de una
+  lesión, con el orden cronológico de la evolución explícito.
 """
 from django.db import models, transaction
 
@@ -73,6 +77,58 @@ class ClinicalAlertManager(models.Manager.from_queryset(ClinicalAlertQuerySet)):
     también directamente sobre el manager. El contrato que importa —no ver los
     borrados— es el mismo.
     """
+
+    def get_queryset(self):
+        return super().get_queryset().filter(deleted_at__isnull=True)
+
+
+class LesionQuerySet(SoftDeleteQuerySet):
+    """Consultas de lesiones. La que importa es la de una vista del pie."""
+
+    def active(self):
+        return self.filter(status=self.model.Status.ACTIVE)
+
+    def resolved(self):
+        return self.filter(status=self.model.Status.RESOLVED)
+
+    def for_view(self, episode, laterality, view):
+        """Lesiones de un episodio en un pie y una vista concretos.
+
+        Es lo que pedirá el mapa para pintar: un dibujo es siempre «pie
+        izquierdo, plantar», nunca «todas las lesiones». Vive aquí para que la
+        vista no tenga que recordar los tres filtros ni su orden.
+        """
+        return self.filter(episode=episode, laterality=laterality, view=view)
+
+
+class LesionManager(models.Manager.from_queryset(LesionQuerySet)):
+    """Manager por defecto de las lesiones: oculta las borradas lógicamente."""
+
+    def get_queryset(self):
+        return super().get_queryset().filter(deleted_at__isnull=True)
+
+
+class LesionObservationQuerySet(SoftDeleteQuerySet):
+    """Consultas del seguimiento de una lesión."""
+
+    def for_lesion(self, lesion):
+        return self.filter(lesion=lesion)
+
+    def chronological(self):
+        """De la más antigua a la más reciente: el orden de una evolución.
+
+        El `ordering` del modelo es el contrario (lo reciente primero, que es
+        como se lee una ficha). Leer una evolución al revés se presta a
+        conclusiones invertidas —«va a peor» cuando iba a mejor—, así que el
+        orden de la serie se pide explícitamente y no se hereda.
+        """
+        return self.order_by('observed_at', 'id')
+
+
+class LesionObservationManager(
+    models.Manager.from_queryset(LesionObservationQuerySet)
+):
+    """Manager por defecto de las observaciones: oculta las borradas."""
 
     def get_queryset(self):
         return super().get_queryset().filter(deleted_at__isnull=True)

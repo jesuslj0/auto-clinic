@@ -17,6 +17,9 @@ class ClinicalConfig(AppConfig):
             ClinicalAlert,
             ClinicalNote,
             Episode,
+            Lesion,
+            LesionAttachment,
+            LesionObservation,
             MedicalHistory,
             Question,
             QuestionnaireResponse,
@@ -74,6 +77,32 @@ class ClinicalConfig(AppConfig):
             ClinicalAlert,
             sensitive=['note'],
             patient_resolver=lambda a: a.patient,
+        )
+
+        # Lesiones. Todo son códigos y coordenadas, no texto libre: se registran
+        # enteros, que es lo que permite reconstruir la evolución de una lesión
+        # (cuándo se detectó, cuándo se resolvió) sin abrir la ficha.
+        registry.register(
+            Lesion,
+            patient_resolver=lambda lesion: lesion.episode.history.patient,
+        )
+
+        # Seguimiento de la lesión. La descripción es texto clínico y va
+        # enmascarada; las medidas no, y a propósito: son el dato con el que se
+        # reconstruye la evolución, y de nada sirve saber que «cambió el largo».
+        registry.register(
+            LesionObservation,
+            sensitive=['description'],
+            patient_resolver=lambda obs: obs.lesion.episode.history.patient,
+        )
+        # Adjuntos. La clave del objeto (`file`) va como sensible: es lo que
+        # señala dónde vive la foto de un paciente, y el log no puede ser el
+        # índice del bucket. Lo que sí queda entero es que se subió un adjunto,
+        # de qué tipo, tamaño y por qué canal.
+        registry.register(
+            LesionAttachment,
+            sensitive=['file'],
+            patient_resolver=lambda att: att.patient,
         )
 
         # --- Auto-creación de la historia al alta del paciente ---------------

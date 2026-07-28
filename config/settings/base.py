@@ -100,6 +100,53 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# --- Almacenamiento ---------------------------------------------------------
+#
+# `default` es el media público de siempre (logos de clínica y poco más).
+# `clinical_media` es OTRO backend, deliberadamente separado: guarda fotos de
+# lesiones, que son datos de salud. Nunca debe servirse desde MEDIA_URL ni desde
+# ninguna ruta pública — se accede solo con una URL firmada de vida corta que
+# genera `clinical/attachments.py` tras comprobar permisos.
+#
+# El bucket es de Cloudflare R2 (S3-compatible) y es PRIVADO: `default_acl=None`
+# (jamás `public-read`) y `querystring_auth=True`, de modo que sin firma no hay
+# lectura posible ni aunque alguien acierte la clave del objeto.
+R2_ACCESS_KEY_ID = config('R2_ACCESS_KEY_ID', default='')
+R2_SECRET_ACCESS_KEY = config('R2_SECRET_ACCESS_KEY', default='')
+R2_BUCKET_NAME = config('R2_BUCKET_NAME', default='')
+R2_ENDPOINT_URL = config('R2_ENDPOINT_URL', default='')
+
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+    },
+    'clinical_media': {
+        'BACKEND': 'storages.backends.s3.S3Storage',
+        'OPTIONS': {
+            'access_key': R2_ACCESS_KEY_ID,
+            'secret_key': R2_SECRET_ACCESS_KEY,
+            'bucket_name': R2_BUCKET_NAME,
+            'endpoint_url': R2_ENDPOINT_URL,
+            # R2 no tiene regiones al estilo de S3; «auto» es lo que espera.
+            'region_name': 'auto',
+            'signature_version': 's3v4',
+            'addressing_style': 'virtual',
+            # Privado: sin ACL pública y con firma obligatoria en cada lectura.
+            'default_acl': None,
+            'querystring_auth': True,
+            'querystring_expire': config(
+                'CLINICAL_MEDIA_URL_EXPIRE', default=600, cast=int
+            ),
+            # Una clave nunca se pisa: cada adjunto tiene la suya (un UUID) y
+            # sobrescribir una existente sería perder documentación clínica.
+            'file_overwrite': False,
+        },
+    },
+}
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
@@ -197,6 +244,16 @@ AUDIT_FAILURE_POLICY = config('AUDIT_FAILURE_POLICY', default='fail_closed')
 # autonómica, pendiente de confirmar. Es solo andamiaje de cálculo: no hay purga
 # automática. Ver `clinical/conf.py` y el README de la app `clinical`.
 CLINICAL_RETENTION_YEARS = config('CLINICAL_RETENTION_YEARS', default=15, cast=int)
+
+# Tamaño máximo de una foto clínica, en BYTES. El segundo límite se aplica a lo
+# que llega de fuera de la consulta (el paciente por WhatsApp o por la web): esa
+# vía es la que no controlamos, así que va más apretada. Ver `clinical/files.py`.
+CLINICAL_ATTACHMENT_MAX_BYTES = config(
+    'CLINICAL_ATTACHMENT_MAX_BYTES', default=10 * 1024 * 1024, cast=int
+)
+CLINICAL_ATTACHMENT_MAX_BYTES_EXTERNAL = config(
+    'CLINICAL_ATTACHMENT_MAX_BYTES_EXTERNAL', default=5 * 1024 * 1024, cast=int
+)
 
 LOGGING = {
     'version': 1,

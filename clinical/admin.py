@@ -12,6 +12,8 @@ Dos cosas más allá del alta normal de modelos:
    borrado. Coherente con la barrera del modelo y el trigger de base de datos.
 """
 from django.contrib import admin
+from django.urls import reverse
+from django.utils.html import format_html
 
 from audit import registry
 from audit.mixins import log_access
@@ -22,6 +24,9 @@ from clinical.models import (
     ClinicalAlert,
     ClinicalNote,
     Episode,
+    Lesion,
+    LesionAttachment,
+    LesionObservation,
     MedicalHistory,
     Question,
     QuestionnaireResponse,
@@ -224,6 +229,132 @@ class QuestionAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return not self._is_frozen(obj)
+
+
+@admin.register(Lesion)
+class LesionAdmin(AuditedAdminMixin, admin.ModelAdmin):
+    """Lesiones del mapa del pie. La localización, en solo lectura tras crearse.
+
+    Recolocar una lesión ya registrada no es una corrección de formulario: es
+    reescribir dónde estaba. Si la marca se puso mal, se borra y se registra otra.
+    """
+
+    list_display = ('__str__', 'episode', 'view', 'status', 'detected_at', 'resolved_at')
+    list_filter = ('status', 'laterality', 'view', 'lesion_type', 'anatomical_zone')
+    search_fields = ('episode__history__number',)
+    raw_id_fields = ('episode', 'created_by')
+    date_hierarchy = 'detected_at'
+    actions = ['resolve_lesions']
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is None:
+            return ('deleted_at',)
+        return ('episode', 'laterality', 'view', 'anatomical_zone', 'x', 'y', 'deleted_at')
+
+    def save_model(self, request, obj, form, change):
+        if not change and obj.created_by_id is None:
+            obj.created_by = getattr(request.user, 'professional_profile', None)
+        super().save_model(request, obj, form, change)
+
+    @admin.action(description='Marcar como resueltas (hoy)')
+    def resolve_lesions(self, request, queryset):
+        # Una a una: `resolve()` pone estado y fecha a la vez, que es la única
+        # combinación que la base de datos acepta. Un `update()` masivo del
+        # estado chocaría con el CheckConstraint, y además se saltaría el log.
+        resolved = 0
+        for lesion in queryset.filter(status=Lesion.Status.ACTIVE):
+            lesion.resolve()
+            resolved += 1
+        self.message_user(request, f'{resolved} lesión(es) marcada(s) como resuelta(s).')
+
+
+class LesionAttachmentInline(admin.TabularInline):
+    """Fotos de la observación. Se suben desde aquí; no se editan después."""
+
+    model = LesionAttachment
+    extra = 0
+    fields = ('file', 'source', 'mime_type', 'size_bytes', 'download_link')
+    readonly_fields = ('mime_type', 'size_bytes', 'download_link')
+
+    @admin.display(description='descarga')
+    def download_link(self, obj):
+        if obj is None or obj.pk is None:
+            return '—'
+        url = reverse('clinical:lesion-attachment', args=[obj.public_id])
+        return format_html('<a href="{}" target="_blank" rel="noopener">Ver foto</a>', url)
+
+    def has_change_permission(self, request, obj=None):
+        # Un adjunto subido está congelado: se añade o se borra, no se retoca.
+        return False
+
+
+@admin.register(LesionObservation)
+class LesionObservationAdmin(AuditedAdminMixin, admin.ModelAdmin):
+    """Seguimiento de una lesión. La lesión y la visita, fijas tras crearse."""
+
+    list_display = (
+        '__str__', 'lesion', 'visit', 'observed_at',
+        'length_mm', 'width_mm', 'depth_mm', 'attachment_count',
+    )
+    list_filter = ('observed_at', 'lesion__lesion_type', 'lesion__anatomical_zone')
+    search_fields = ('lesion__episode__history__number',)
+    raw_id_fields = ('lesion', 'visit', 'created_by')
+    date_hierarchy = 'observed_at'
+    inlines = [LesionAttachmentInline]
+
+    @admin.display(description='fotos')
+    def attachment_count(self, obj):
+        return obj.attachments.count()
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is None:
+            return ('deleted_at',)
+        return ('lesion', 'visit', 'deleted_at')
+
+    def save_model(self, request, obj, form, change):
+        if not change and obj.created_by_id is None:
+            obj.created_by = getattr(request.user, 'professional_profile', None)
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(LesionAttachment)
+class LesionAttachmentAdmin(AuditedAdminMixin, admin.ModelAdmin):
+    """Adjuntos clínicos. Ni un enlace directo al bucket: siempre la vista firmada.
+
+    El admin **no muestra la URL del objeto** ni la firma por su cuenta. El
+    enlace apunta a la vista protegida, que vuelve a comprobar permisos y deja el
+    acceso en `AccessLog`; si el enlace se copia y se pega, sigue pasando por ahí.
+    """
+
+    list_display = ('__str__', 'observation', 'source', 'mime_type', 'size_bytes', 'uploaded_at')
+    list_filter = ('source', 'mime_type')
+    search_fields = ('observation__lesion__episode__history__number', 'checksum')
+    raw_id_fields = ('observation',)
+    date_hierarchy = 'uploaded_at'
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is None:
+            return ('mime_type', 'size_bytes', 'checksum', 'deleted_at')
+        # Subido = congelado.
+        return [f.name for f in self.model._meta.fields] + ['download_link']
+
+    def get_fields(self, request, obj=None):
+        if obj is None:
+            return ('observation', 'file', 'source', 'uploaded_at')
+        return (
+            'observation', 'file', 'download_link', 'source',
+            'mime_type', 'size_bytes', 'checksum', 'uploaded_at', 'deleted_at',
+        )
+
+    @admin.display(description='descarga')
+    def download_link(self, obj):
+        if obj is None or obj.pk is None:
+            return '—'
+        url = reverse('clinical:lesion-attachment', args=[obj.public_id])
+        return format_html('<a href="{}" target="_blank" rel="noopener">Ver foto</a>', url)
+
+    def has_change_permission(self, request, obj=None):
+        return obj is None
 
 
 @admin.register(ClinicalAlert)

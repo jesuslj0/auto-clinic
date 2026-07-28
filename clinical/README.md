@@ -19,6 +19,9 @@ diseño manda sobre la comodidad.
 | `Question` | Pregunta de una versión. Congelada cuando la versión se publica. |
 | `QuestionnaireResponse` | Cuestionario contestado. Congela una copia literal de preguntas y respuestas. |
 | `ClinicalAlert` | Aviso permanente sobre un paciente (diabetes, alergias…). No se borra: se desactiva. |
+| `Lesion` | Lesión localizada sobre el mapa del pie. Zona clínica + coordenadas normalizadas. |
+| `LesionObservation` | Cómo estaba la lesión en una visita: medidas en mm y descripción. La unidad de la evolución. |
+| `LesionAttachment` | Foto clínica de una observación. Vive en un bucket privado; se sirve con URL firmada. |
 
 ## Tres estados de dato
 
@@ -175,7 +178,7 @@ por defecto conservador (15 años) por encima del mínimo legal, porque:
 
 ## Auditoría
 
-Los diez modelos están registrados en `audit` desde `ClinicalConfig.ready()`.
+Los trece modelos están registrados en `audit` desde `ClinicalConfig.ready()`.
 Todo el texto clínico (los cuatro SOAP, `Episode.reason`, `Addendum.text`, el
 `snapshot` de la respuesta, la `note` de la alerta) está marcado como **sensible**: el `ChangeLog` guarda
 que el campo cambió, nunca su valor. El cuestionario en blanco —plantilla,
@@ -183,9 +186,10 @@ versiones y preguntas— no es dato de paciente y se audita entero, para poder
 reconstruir quién publicó qué versión y cuándo. El `patient_resolver` de cada modelo sube por la cadena hasta el paciente,
 de modo que todo evento queda atribuido a la ficha correcta.
 
-Como esta capa no tiene API, la única vista que muestra dato clínico es el admin,
-que instrumenta `AccessLog` (ver `clinical/admin.py`). **Cualquier endpoint nuevo
-sobre esta capa debe instrumentar `AccessLog` y quedar vedado al token de n8n.**
+Como esta capa no tiene API, las únicas vistas que muestran dato clínico son el
+admin y la descarga de adjuntos, y las dos instrumentan `AccessLog` (ver
+`clinical/admin.py` y `clinical/views.py`). **Cualquier endpoint nuevo sobre esta
+capa debe instrumentar `AccessLog` y quedar vedado al token de n8n.**
 
 ## Alertas clínicas
 
@@ -291,6 +295,136 @@ locales.
   duplicados, uno por respuesta. Lo anterior de OTRO cuestionario no se toca.
 - Lo «anterior» se mide por `filled_at`, no por el id: una respuesta posterior
   que se derive tarde no puede quedar apagada por una anterior.
+
+## Lesiones sobre el mapa del pie
+
+Una `Lesion` cuelga de un **episodio** y guarda su localización **dos veces, a
+propósito**, porque son dos datos que envejecen distinto:
+
+| | Qué es | Cuánto dura |
+|---|---|---|
+| `anatomical_zone` | El dato **clínico**: `hallux`, `first_metatarsal`, `heel`… | Para siempre |
+| `x`, `y` | Solo **para pintar**: fracciones del SVG entre 0 y 1 | Hasta el próximo rediseño |
+
+Si mañana se rediseña el SVG, las coordenadas viejas dejan de cuadrar; **la zona
+sigue siendo válida**. Por eso el dato clínico no depende del dibujo, y por eso
+la zona **no es texto libre**: «1er meta», «primer metatarsiano» y «MTT1» no se
+pueden contar ni comparar entre visitas. Nunca derives una de la otra.
+
+Las coordenadas son **fracciones, jamás píxeles** — el dibujo se reescala en cada
+pantalla y un píxel no significa nada fuera del tamaño en que se marcó. Se
+defiende en tres sitios: validadores del campo (formularios y admin), `save()`
+(el ORM) y un `CheckConstraint` (la base de datos).
+
+### Estado y localización
+
+```python
+Lesion.objects.for_view(episode, Lesion.Laterality.LEFT, Lesion.View.PLANTAR)
+lesion.resolve()          # estado y fecha a la vez, que es lo único coherente
+lesion.reopen()
+```
+
+- **Resuelta ⇒ con `resolved_at`; activa ⇒ sin él.** En `clean()`, en `save()` y
+  en un `CheckConstraint`. Por eso el estado se mueve con `resolve()`/`reopen()`
+  y no a mano: un `update()` masivo del estado chocaría con la base de datos.
+- **La localización queda fija al crearse** (`episode`, `laterality`, `view`,
+  `anatomical_zone`, `x`, `y`). Una lesión no se mueve: si la marca estaba mal se
+  borra lógicamente y se registra otra. Lo que cambia es la evolución, no el
+  sitio.
+- `for_view()` es como lo pedirá el mapa: un dibujo es siempre «pie izquierdo,
+  plantar», nunca «todas las lesiones».
+
+## Seguimiento: observaciones y fotos
+
+Una lesión no es un dato, es una **serie**. Lo que importa clínicamente no es
+«hay una úlcera en el primer metatarsiano» sino si mide menos que hace tres
+semanas. Por eso la lesión guarda su localización (fija) y cada visita añade una
+`LesionObservation`:
+
+```
+Lesion (dónde está — fijo)
+  └── LesionObservation (cómo está hoy — una por visita)
+        └── LesionAttachment (la foto de ese día)
+```
+
+```python
+LesionObservation.objects.create(
+    lesion=lesion, visit=visit, length_mm=12.5, width_mm=8.2, depth_mm=1.5,
+    description='Úlcera con bordes limpios',
+)
+lesion.evolution()        # la serie en orden CRONOLÓGICO, de la primera a la última
+lesion.observations.all() # el orden de la ficha: la más reciente primero
+```
+
+- **Las medidas son números en campos separados** (mm), no un texto ni un JSON
+  suelto: el sentido de medir una úlcera es compararla con la de la semana
+  pasada, y eso exige un dato consultable. Son opcionales —no toda lesión se
+  mide— pero cuando se miden, se miden igual siempre. No admiten negativos
+  (validadores + `CheckConstraint`).
+- **La visita tiene que ser del mismo episodio que la lesión.** Si no, la
+  evolución queda repartida entre procesos asistenciales y deja de ser legible.
+- **`lesion` y `visit` quedan fijos.** Corregir las medidas es normal; reasignar
+  la observación a otra lesión, no. Como en `Lesion`: si se anotó donde no era,
+  se borra lógicamente y se registra otra.
+- `evolution()` invierte el orden a propósito y de forma explícita: leer una
+  serie al revés se presta a concluir «va a peor» cuando iba a mejor.
+
+### Fotos: bucket privado y URL firmada
+
+Las fotos cuelgan de la **observación** y no de la lesión: una foto sin la fecha
+y las medidas de ese momento no dice nada, y así queda atada a la visita en la
+que se tomó.
+
+Viven en un bucket de **Cloudflare R2** (S3-compatible) configurado como
+`clinical_media` en `STORAGES`, **separado del media público**. Tres reglas:
+
+1. **Se guarda la clave del objeto, jamás una URL.** Una URL firmada caduca en
+   minutos; persistirla sería dejar un enlace de acceso a dato de salud dentro de
+   la base de datos. La URL se genera en cada petición.
+2. **La clave es un UUID** (`lesion-attachments/ab/<uuid>.jpg`). Nada de
+   `paciente_perez_pie_izq.jpg`: el nombre de un objeto es visible para quien vea
+   la clave y no puede contar qué le pasa a quién.
+3. **El fichero se valida por su contenido.** La extensión y el `Content-Type`
+   los pone quien sube: no son un control. `clinical/files.py` mide el tamaño,
+   mira la firma de los primeros bytes y **decodifica con Pillow**; lo que se
+   guarda en `mime_type`/`size_bytes`/`checksum` es el resultado de ese examen.
+   Lista blanca: **JPEG, PNG y WebP**. Un PDF con extensión `.jpg`, un SVG con
+   scripts o un GIF se rechazan.
+
+La validación ocurre en `save()`, no en un formulario, para que el adjunto que
+entre algún día por la vía del agente pase por el mismo filtro que el que sube el
+profesional. Y hay **dos límites de tamaño**, porque hay dos niveles de
+confianza: `CLINICAL_ATTACHMENT_MAX_BYTES` (10 MiB) para la consulta y
+`CLINICAL_ATTACHMENT_MAX_BYTES_EXTERNAL` (5 MiB) para lo que llega del paciente
+por WhatsApp o por la web.
+
+Un adjunto queda **congelado** una vez subido (fichero, tipo, tamaño, checksum,
+observación y canal). Corregir es borrar lógicamente y subir otro. El borrado es
+lógico y **el objeto del bucket se conserva**: sería el único borrado físico e
+irreversible de toda la capa, y no se hace desde una vista.
+
+### Servido protegido
+
+```python
+from clinical.attachments import signed_url_for
+
+signed_url_for(attachment, request.user)   # URL firmada, o PermissionDenied
+```
+
+`GET /clinical/attachments/<public_id>/` comprueba el permiso, deja el acceso en
+`AccessLog` (`download_attachment`) y **redirige** a la URL firmada; Django nunca
+sirve el fichero. Detalles que no son casualidad:
+
+- **Comprobar y firmar están en la misma función.** Separarlas dejaría a mano una
+  forma de firmar sin comprobar, y esa es justo la equivocación que no cabe aquí.
+- El permiso es el del **paciente**, alcanzado por la cadena adjunto →
+  observación → lesión → episodio → historia → paciente. Superusuario: todas las
+  clínicas. Resto: la suya. Sin clínica: nada.
+- **El agente de n8n, nunca**, ni con la `Api-Key` de la clínica del propio
+  paciente: `can_view_patient()` lo rechaza en la primera línea. Este endpoint no
+  abre API sobre la capa clínica — es una vista de sesión del panel.
+- Se identifica por `public_id` (UUID) y no por la PK: un id secuencial invita a
+  tantear el de al lado, y la mera existencia de la fila ya es información.
 
 ## Datos de ejemplo (solo desarrollo)
 
