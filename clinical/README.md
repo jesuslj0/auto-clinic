@@ -22,6 +22,10 @@ diseño manda sobre la comodidad.
 | `Lesion` | Lesión localizada sobre el mapa del pie. Zona clínica + coordenadas normalizadas. |
 | `LesionObservation` | Cómo estaba la lesión en una visita: medidas en mm y descripción. La unidad de la evolución. |
 | `LesionAttachment` | Foto clínica de una observación. Vive en un bucket privado; se sirve con URL firmada. |
+| `PerformedProcedure` | Qué se le hizo al paciente en una visita, con el nombre y el precio del catálogo congelados. |
+| `ConsentTemplate` | Documento de consentimiento como entidad lógica. Agrupa versiones; no tiene texto. |
+| `ConsentVersion` | Versión concreta del consentimiento. Texto inmutable una vez publicada. Solo una vigente. |
+| `SignedConsent` | Consentimiento firmado. Guarda copia literal del texto y la firma en el bucket privado. |
 
 ## Tres estados de dato
 
@@ -155,7 +159,7 @@ queryset— hace borrado lógico, nunca físico.
 Django no cascadea el borrado lógico, así que se hace a mano:
 
 - Borrar un `Episode` recorre y borra lógicamente sus `Visit`, y cada `Visit`
-  sus `ClinicalNote` en borrador.
+  sus `ClinicalNote` en borrador y sus `PerformedProcedure`.
 - Una **nota firmada veta** el borrado de su visita y de su episodio
   (`can_be_deleted()` devuelve `False`). Como consecuencia, **la cascada solo
   alcanza borradores**: una nota firmada nunca se borra, ni directa, ni por
@@ -178,18 +182,26 @@ por defecto conservador (15 años) por encima del mínimo legal, porque:
 
 ## Auditoría
 
-Los trece modelos están registrados en `audit` desde `ClinicalConfig.ready()`.
+Todos los modelos de la capa están registrados en `audit` desde
+`ClinicalConfig.ready()`.
 Todo el texto clínico (los cuatro SOAP, `Episode.reason`, `Addendum.text`, el
-`snapshot` de la respuesta, la `note` de la alerta) está marcado como **sensible**: el `ChangeLog` guarda
-que el campo cambió, nunca su valor. El cuestionario en blanco —plantilla,
-versiones y preguntas— no es dato de paciente y se audita entero, para poder
-reconstruir quién publicó qué versión y cuándo. El `patient_resolver` de cada modelo sube por la cadena hasta el paciente,
-de modo que todo evento queda atribuido a la ficha correcta.
+`snapshot` de la respuesta, la `note` de la alerta, el `text_copy` del
+consentimiento firmado) está marcado como **sensible**: el `ChangeLog` guarda
+que el campo cambió, nunca su valor. Las claves de los ficheros del bucket
+(`LesionAttachment.file`, `SignedConsent.signature_image`) también, porque el log
+no puede ser el índice de dónde vive la foto o la firma de un paciente.
+
+Los documentos en blanco —cuestionarios y consentimientos, con sus versiones y
+preguntas— no son dato de paciente y se auditan enteros, para poder reconstruir
+quién publicó qué versión y cuándo. Lo mismo con los procedimientos realizados:
+todo son códigos e importes, y el importe es justo lo que hay que poder
+reconstruir. El `patient_resolver` de cada modelo sube por la cadena hasta el
+paciente, de modo que todo evento queda atribuido a la ficha correcta.
 
 Como esta capa no tiene API, las únicas vistas que muestran dato clínico son el
-admin y la descarga de adjuntos, y las dos instrumentan `AccessLog` (ver
-`clinical/admin.py` y `clinical/views.py`). **Cualquier endpoint nuevo sobre esta
-capa debe instrumentar `AccessLog` y quedar vedado al token de n8n.**
+admin y la descarga de ficheros protegidos, y las dos instrumentan `AccessLog`
+(ver `clinical/admin.py` y `clinical/views.py`). **Cualquier endpoint nuevo sobre
+esta capa debe instrumentar `AccessLog` y quedar vedado al token de n8n.**
 
 ## Alertas clínicas
 
@@ -425,6 +437,102 @@ sirve el fichero. Detalles que no son casualidad:
   abre API sobre la capa clínica — es una vista de sesión del panel.
 - Se identifica por `public_id` (UUID) y no por la PK: un id secuencial invita a
   tantear el de al lado, y la mera existencia de la fila ya es información.
+
+## Consentimiento informado
+
+Cuando un consentimiento se discute —y se discute años después— la pregunta no es
+si el paciente firmó, sino **qué texto tenía delante cuando firmó**. Se responde
+con los mismos dos mecanismos que la anamnesis, y hacen falta los dos:
+
+```
+ConsentTemplate                  "Consentimiento de cirugía ungueal"
+      │
+      ├── ConsentVersion v1 (publicada) ── text: "Se me ha informado de que…"
+      │         └── SignedConsent ── text_copy: copia literal + firma (imagen)
+      └── ConsentVersion v2 (vigente)   ── text: redacción nueva
+```
+
+1. **Versionado.** El documento lógico no tiene texto: lo tienen sus versiones.
+   `version.publish()` la congela y la vuelve vigente, degradando la anterior;
+   `template.new_draft_version()` arranca del texto vigente para retocarlo.
+   **Una sola versión vigente por documento**, garantizado por un índice único
+   parcial y no solo por el código.
+2. **Copia literal.** `SignedConsent.text_copy` guarda el texto **entero** que se
+   firmó, no solo la FK a la versión. La redundancia es deliberada y es la razón
+   de ser del modelo: la FK dice de dónde salió, pero lo que prueba qué aceptó el
+   paciente es la copia, y esa copia no depende de que la versión siga
+   existiendo, publicada ni intacta.
+
+Publicar v2 **no toca ninguna firma de v1**; despublicar, tampoco. La copia se
+hace en el `save()` y no en la vista (`SignedConsent.sign()` es la vía normal),
+así que da igual por dónde entre la firma: sale con el texto dentro.
+
+A diferencia de la versión de cuestionario —cuyo contenido son sus `Question`s—,
+aquí el documento **es** el `text`, así que el texto entra en los campos
+congelados. Y una versión en borrador **no se puede firmar**: no se le hace
+firmar a nadie un texto que aún puede cambiar.
+
+### La firma es un fichero clínico más
+
+Una firma manuscrita es dato personal pegado a un dato de salud, así que recibe
+exactamente el mismo trato que una foto de lesión: bucket **privado**, clave
+opaca (UUID bajo `consent-signatures/`), validación **por contenido**, se guarda
+la clave y jamás una URL.
+
+```python
+GET /clinical/consents/<public_id>/signature/
+```
+
+Comprueba el permiso, deja el acceso en `AccessLog` (`download_attachment`) y
+redirige a una URL firmada de vida corta. Es la misma vista base
+(`ProtectedFileRedirectView`) que sirve las fotos: el control —comprobar,
+registrar, redirigir— vive en un único sitio, porque repartido por vistas es
+cuestión de tiempo que una se deje un paso.
+
+Un consentimiento firmado queda **congelado** (versión, paciente, episodio,
+fecha, copia del texto y fichero con su huella) y **no se borra**: el borrado es
+lógico y el objeto del bucket se conserva. Segundo nivel en la migración `0011`,
+como el resto de la capa.
+
+## Procedimientos realizados: el precio, congelado
+
+`PerformedProcedure` es la costura entre la visita y la facturación: qué se le
+hizo al paciente y **cuánto valía eso ese día**.
+
+```
+Visit ── PerformedProcedure ── frozen_service_name  "Quiropodia"
+             │                 frozen_price          38.00 €
+             └── service ────► services.Service      (procedencia, NO el precio)
+```
+
+El catálogo (`services.Service`) es un documento vivo: los precios suben, los
+servicios se renombran y algunos se retiran. Lo que se hizo en una visita, no.
+Por eso el procedimiento **copia nombre y precio en el primer `save()` y no
+vuelve a mirar el catálogo nunca más**. Sin eso, subir el precio de la quiropodia
+reescribiría hacia atrás lo que costaron todas las del año pasado.
+
+Es el mismo mecanismo que el `snapshot` de la anamnesis, aplicado al dinero: el
+documento tiene que poder leerse tal y como se emitió.
+
+- **La FK a `Service` es procedencia, jamás fuente de verdad del importe.** Sirve
+  para agrupar y para saber de qué entrada del catálogo salió. Leer el precio de
+  ahí sería exactamente el error que esto evita.
+- Los importes se pueden dar **explícitos al crear** —un servicio de precio
+  variable se cobra por lo que se hizo, no por el mínimo de la ficha—; lo que no
+  se dé se copia del catálogo. Una vez guardados, quedan **congelados**
+  (`visit`, `service`, `frozen_service_name`, `frozen_price`). Corregir un
+  importe es dar de baja el procedimiento y registrar otro.
+- La FK al catálogo es `DO_NOTHING` + `db_constraint=False`, como
+  `MedicalHistory.patient`: retirar un servicio no arrastra ni bloquea los
+  procedimientos ya hechos, y **no dispara el `UPDATE` masivo de un `SET_NULL`**,
+  que se saltaría la auditoría. `catalog_service` devuelve `None` en vez de
+  reventar, y el procedimiento sigue legible entero porque lo que hay que leer
+  está congelado en él.
+- La **zona tratada va codificada** (`affected_zone`, el mismo vocabulario que
+  `Lesion.AnatomicalZone`) y no en texto libre, por el mismo motivo que en la
+  lesión: hay que poder consultarla y agregarla.
+- Esta capa **no factura**: registra lo que se hizo y por cuánto. Emitir la
+  factura es otra cosa y vive fuera.
 
 ## Datos de ejemplo (solo desarrollo)
 

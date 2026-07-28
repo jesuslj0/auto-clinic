@@ -23,14 +23,18 @@ from clinical.models import (
     Addendum,
     ClinicalAlert,
     ClinicalNote,
+    ConsentTemplate,
+    ConsentVersion,
     Episode,
     Lesion,
     LesionAttachment,
     LesionObservation,
     MedicalHistory,
+    PerformedProcedure,
     Question,
     QuestionnaireResponse,
     QuestionnaireTemplate,
+    SignedConsent,
     TemplateVersion,
     Visit,
 )
@@ -355,6 +359,142 @@ class LesionAttachmentAdmin(AuditedAdminMixin, admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return obj is None
+
+
+# ---------------------------------------------------------------------------
+# Consentimiento informado
+# ---------------------------------------------------------------------------
+#
+# Mismo trato que la anamnesis: una versión publicada se muestra en solo lectura
+# y sin borrar, y una firma recogida no se edita ni se borra desde aquí. Si se
+# colara un cambio, el `save()` del modelo y el trigger lo rechazarían; esto es
+# lo que hace que el admin ni lo ofrezca.
+
+
+@admin.register(ConsentTemplate)
+class ConsentTemplateAdmin(admin.ModelAdmin):
+    list_display = ('name', 'clinic', 'specialty', 'is_active', 'current_version')
+    list_filter = ('clinic', 'is_active')
+    search_fields = ('name', 'specialty')
+    readonly_fields = ('deleted_at',)
+
+    @admin.display(description='versión vigente')
+    def current_version(self, obj):
+        version = obj.current_version
+        return version.number if version else '—'
+
+
+@admin.register(ConsentVersion)
+class ConsentVersionAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'template', 'number', 'is_published', 'is_current', 'published_at')
+    list_filter = ('is_published', 'is_current', 'template')
+    search_fields = ('template__name', 'text')
+    raw_id_fields = ('template',)
+    actions = ['publish_versions']
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is not None and obj.is_published:
+            # Publicada = congelada, texto incluido. `is_current` sigue siendo
+            # editable porque es ciclo de vida: así se cambia la vigente.
+            return ('template', 'number', 'text', 'is_published', 'published_at', 'deleted_at')
+        return ('number', 'is_published', 'published_at', 'deleted_at')
+
+    def has_delete_permission(self, request, obj=None):
+        # Una versión publicada pudo haber sido firmada: no se borra.
+        return not (obj is not None and obj.is_published)
+
+    @admin.action(description='Publicar las versiones seleccionadas')
+    def publish_versions(self, request, queryset):
+        published = 0
+        for version in queryset:
+            if version.is_published:
+                continue
+            try:
+                version.publish()
+            except Exception as exc:  # noqa: BLE001 — el motivo se muestra al usuario
+                self.message_user(request, f'{version}: {exc}', level='error')
+            else:
+                published += 1
+        if published:
+            self.message_user(request, f'{published} versión(es) publicada(s).')
+
+
+@admin.register(SignedConsent)
+class SignedConsentAdmin(AuditedAdminMixin, admin.ModelAdmin):
+    """Consultas y alta. Una firma recogida no se edita ni se borra.
+
+    Como con las fotos clínicas, el admin **no muestra la URL del bucket** ni la
+    firma por su cuenta: el enlace apunta a la vista protegida, que vuelve a
+    comprobar permisos y deja el acceso en `AccessLog`.
+    """
+
+    list_display = ('__str__', 'patient', 'version', 'episode', 'signed_at')
+    list_filter = ('version__template', 'signed_at')
+    search_fields = ('patient__first_name', 'patient__last_name', 'version__template__name')
+    raw_id_fields = ('version', 'patient', 'episode')
+    date_hierarchy = 'signed_at'
+
+    def get_fields(self, request, obj=None):
+        if obj is None:
+            # `text_copy` no se ofrece en el alta: se copia de la versión. Que lo
+            # escriba una persona sería justo perder la prueba de qué se firmó.
+            return ('version', 'patient', 'episode', 'signature_image', 'signed_at')
+        return (
+            'version', 'patient', 'episode', 'text_copy',
+            'signature_image', 'signature_link',
+            'mime_type', 'size_bytes', 'checksum', 'signed_at', 'deleted_at',
+        )
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is None:
+            return ('mime_type', 'size_bytes', 'checksum', 'deleted_at')
+        # Firmado = congelado.
+        return [f.name for f in self.model._meta.fields] + ['signature_link']
+
+    @admin.display(description='firma')
+    def signature_link(self, obj):
+        if obj is None or obj.pk is None:
+            return '—'
+        url = reverse('clinical:consent-signature', args=[obj.public_id])
+        return format_html('<a href="{}" target="_blank" rel="noopener">Ver firma</a>', url)
+
+    def has_change_permission(self, request, obj=None):
+        return obj is None
+
+    def has_delete_permission(self, request, obj=None):
+        # Un consentimiento firmado es la prueba de qué aceptó el paciente.
+        return False
+
+
+@admin.register(PerformedProcedure)
+class PerformedProcedureAdmin(AuditedAdminMixin, admin.ModelAdmin):
+    """Procedimientos hechos. El servicio y el importe, en solo lectura tras el alta.
+
+    Editar aquí el precio congelado sería reescribir lo que costó aquel día, que
+    es justo lo que el modelo impide. El admin ni lo ofrece: se da de baja el
+    procedimiento y se registra otro.
+    """
+
+    list_display = (
+        '__str__', 'visit', 'frozen_service_name', 'frozen_price',
+        'affected_zone', 'performed_at',
+    )
+    list_filter = ('affected_zone', 'laterality', 'service')
+    search_fields = ('frozen_service_name', 'visit__episode__history__number')
+    raw_id_fields = ('visit', 'service', 'created_by')
+    date_hierarchy = 'performed_at'
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is None:
+            # En el alta se dejan editables: en blanco se copian del catálogo, y
+            # un servicio de precio variable necesita poder decir lo que se cobró.
+            return ('deleted_at',)
+        return ('visit', 'service', 'frozen_service_name', 'frozen_price', 'deleted_at')
+
+    def save_model(self, request, obj, form, change):
+        if not change and obj.created_by_id is None:
+            obj.created_by = getattr(request.user, 'professional_profile', None)
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(ClinicalAlert)

@@ -7,10 +7,10 @@ no pueda entrar mal aunque entre por otro camino:
   media público. Se resuelve en cada operación y no al importar el modelo, de
   modo que cambiar `STORAGES` (en tests, o mañana en otro entorno) cambia de
   verdad dónde va el fichero.
-- **La clave** (`attachment_upload_to`). Un UUID, nunca el nombre original.
-  `foto_juan_perez_pie_izq.jpg` en la ruta de un objeto es un dato de salud
-  escrito en un identificador: filtra quién es el paciente y qué le pasa a
-  cualquiera que vea la clave, aunque el contenido esté protegido.
+- **La clave** (`attachment_upload_to`, `signature_upload_to`). Un UUID, nunca el
+  nombre original. `foto_juan_perez_pie_izq.jpg` en la ruta de un objeto es un
+  dato de salud escrito en un identificador: filtra quién es el paciente y qué le
+  pasa a cualquiera que vea la clave, aunque el contenido esté protegido.
 - **La validación** (`validate_clinical_image`). Qué ES el fichero, no qué dice
   su nombre. La extensión y el `Content-Type` del navegador los pone quien sube:
   no valen como control.
@@ -145,20 +145,36 @@ def clinical_media_storage():
     return ClinicalMediaStorage()
 
 
+def _object_key(prefix: str, mime_type: str) -> str:
+    """Clave del objeto en el bucket: un UUID bajo `prefix`.
+
+    El primer nivel dentro del prefijo son dos caracteres del propio UUID:
+    reparte las claves en vez de amontonar millones de objetos bajo el mismo
+    prefijo, que es lo que degrada el listado en un almacén tipo S3.
+    """
+    extension = ALLOWED_IMAGE_TYPES.get(mime_type, '')
+    key = uuid.uuid4().hex
+    return f'{prefix}/{key[:2]}/{key}{extension}'
+
+
 def attachment_upload_to(instance, filename):
-    """Clave del objeto en el bucket: un UUID, sin rastro del nombre original.
+    """Clave de una foto clínica: un UUID, sin rastro del nombre original.
 
     `filename` se ignora a propósito —es texto que elige quien sube— salvo por
     la extensión, que se deriva del MIME ya *validado* de la instancia y no de lo
     que traiga el nombre.
-
-    El primer nivel de la ruta es un prefijo de dos caracteres del propio UUID:
-    reparte las claves en vez de amontonar millones de objetos bajo el mismo
-    prefijo, que es lo que degrada el listado en un almacén tipo S3.
     """
-    extension = ALLOWED_IMAGE_TYPES.get(instance.mime_type, '')
-    key = uuid.uuid4().hex
-    return f'lesion-attachments/{key[:2]}/{key}{extension}'
+    return _object_key('lesion-attachments', instance.mime_type)
+
+
+def signature_upload_to(instance, filename):
+    """Clave de la firma de un consentimiento. Mismas reglas que la foto.
+
+    Va en su propio prefijo y no mezclada con las fotos clínicas: son documentos
+    distintos, con ciclos de vida distintos, y separarlos deja la puerta abierta
+    a políticas de bucket distintas sin tener que mover objetos.
+    """
+    return _object_key('consent-signatures', instance.mime_type)
 
 
 def _file_size(file) -> int:

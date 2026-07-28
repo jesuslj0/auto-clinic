@@ -16,17 +16,24 @@ La segunda mitad del módulo es la **anamnesis**: cuestionarios versionados
 (`QuestionnaireTemplate` → `TemplateVersion` → `Question`) y sus respuestas
 (`QuestionnaireResponse`), que congelan una copia literal del cuestionario en el
 momento de contestarlo. Misma doctrina, mismos dos niveles (migración 0004).
+
+El **consentimiento informado** (`ConsentTemplate` → `ConsentVersion` →
+`SignedConsent`) repite ese patrón al pie de la letra: versión publicada que se
+congela y copia literal del texto dentro de cada firma (migración 0011).
 """
 import copy
 import uuid
+from decimal import Decimal
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.utils import timezone
 
 from clinical.conf import retention_years
 from clinical.exceptions import (
+    ConsentVersionNotPublished,
+    ConsentVersionPublished,
     EpisodeClosed,
     NoteAlreadySigned,
     ProtectedClinicalRecord,
@@ -36,6 +43,7 @@ from clinical.exceptions import (
 from clinical.files import (
     attachment_upload_to,
     clinical_media_storage,
+    signature_upload_to,
     validate_clinical_image,
 )
 from clinical.hashing import compute_note_hash
@@ -289,8 +297,13 @@ class Visit(SoftDeleteModel, TimeStampedModel):
             raise ProtectedClinicalRecord(
                 f'La visita #{self.pk} tiene notas firmadas y no se puede borrar.'
             )
+        # Django no cascadea el borrado lógico: los hijos se recorren a mano.
         for note in ClinicalNote.all_objects.filter(visit=self, deleted_at__isnull=True):
             note.delete()
+        for procedure in PerformedProcedure.all_objects.filter(
+            visit=self, deleted_at__isnull=True
+        ):
+            procedure.delete()
         super().delete(using=using, keep_parents=keep_parents)
 
 
@@ -1543,5 +1556,585 @@ class LesionAttachment(SoftDeleteModel, TimeStampedModel):
         desaparece de la ficha, pero el fichero sigue ahí mientras corra el plazo
         de conservación. Borrarlo del bucket sería el único borrado físico e
         irreversible de toda la capa clínica, y no se hace desde una vista.
+        """
+        super().delete(using=using, keep_parents=keep_parents)
+
+
+# ---------------------------------------------------------------------------
+# Procedimientos realizados
+# ---------------------------------------------------------------------------
+#
+# Es la costura entre lo clínico y lo económico: qué se le hizo al paciente en
+# una visita y cuánto valía eso ESE DÍA.
+#
+# El catálogo (`services.Service`) es un documento vivo: los precios suben, los
+# servicios se renombran y algunos se retiran. Lo que se hizo en una visita, no.
+# Por eso el procedimiento **congela** el nombre y el precio del servicio en el
+# momento de registrarlo y no vuelve a mirar el catálogo nunca más. La FK a
+# `Service` se queda como procedencia —de qué entrada del catálogo salió—, jamás
+# como fuente de verdad del importe.
+#
+# Sin ese congelado, subir el precio de la quiropodia reescribiría hacia atrás lo
+# que costaron todas las quiropodias del año pasado. Es exactamente el mismo
+# motivo por el que una respuesta de anamnesis guarda un snapshot literal y no
+# FKs a las preguntas: el documento tiene que poder leerse tal y como se emitió.
+#
+# Y es también lo que permite enlazar con facturación sin duplicar el catálogo:
+# aquí no hay una copia del servicio, hay una copia de *un* servicio *en un
+# instante*.
+
+
+class PerformedProcedure(SoftDeleteModel, TimeStampedModel):
+    """Procedimiento hecho en una visita, con el precio del catálogo congelado.
+
+    Tres campos cuentan la misma cosa desde ángulos distintos, y hacen falta los
+    tres:
+
+    - `service` — de qué entrada del catálogo salió. Es **procedencia**: sirve
+      para agrupar y para saber qué se ofreció, nunca para leer el precio.
+    - `frozen_service_name` — cómo se llamaba ese servicio el día que se hizo.
+    - `frozen_price` — cuánto valía ese día. Es el importe del procedimiento;
+      punto. El catálogo puede cambiar mañana y esto no se mueve.
+
+    Los dos campos congelados se copian del catálogo en el **primer** `save()` y
+    no se vuelven a leer de él jamás. Se pueden dar explícitos al crear —un
+    servicio de precio variable se cobra por lo que se hizo, no por el mínimo de
+    la ficha—, pero una vez guardados quedan fijos: corregir un importe ya
+    registrado es dar de baja el procedimiento y registrar otro.
+
+    La FK al catálogo es `DO_NOTHING` + `db_constraint=False`, el patrón de
+    `MedicalHistory.patient`: borrar un servicio del catálogo ni arrastra ni
+    bloquea los procedimientos ya hechos, y tampoco emite el `UPDATE` masivo de
+    un `SET_NULL` (que se saltaría la auditoría). La fila sobrevive con el
+    `service_id` colgando y sigue siendo legible entera, porque lo que hay que
+    leer —nombre e importe— está congelado aquí. Para el caso, `catalog_service`
+    devuelve `None` en vez de reventar.
+    """
+
+    # Qué se hizo, en qué visita y por cuánto: fijo desde que se registra.
+    FROZEN_FIELDS = ('visit_id', 'service_id', 'frozen_service_name', 'frozen_price')
+
+    visit = models.ForeignKey(Visit, on_delete=models.PROTECT, related_name='procedures')
+    service = models.ForeignKey(
+        'services.Service', on_delete=models.DO_NOTHING,
+        related_name='performed_procedures', db_constraint=False,
+        help_text='Entrada del catálogo de la que salió. Procedencia, no precio.',
+    )
+    frozen_service_name = models.CharField(
+        max_length=255,
+        help_text='Nombre del servicio el día que se hizo. Copia, no referencia.',
+    )
+    frozen_price = models.DecimalField(
+        max_digits=10, decimal_places=2, validators=[MinValueValidator(0)],
+        help_text='Importe del procedimiento el día que se hizo. No se relee del catálogo.',
+    )
+    laterality = models.CharField(
+        max_length=5, choices=Lesion.Laterality.choices, blank=True,
+        help_text='Pie sobre el que se actuó, si aplica.',
+    )
+    affected_zone = models.CharField(
+        max_length=30, choices=Lesion.AnatomicalZone.choices, blank=True, db_index=True,
+        help_text='Zona o pieza tratada. Codificada, como en la lesión: nunca texto libre.',
+    )
+    performed_at = models.DateTimeField(default=timezone.now)
+    created_by = models.ForeignKey(
+        'appointments.Professional', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='+',
+    )
+
+    class Meta(SoftDeleteModel.Meta):
+        abstract = False
+        db_table = 'clinical_performed_procedure'
+        ordering = ['-performed_at', '-id']
+        verbose_name = 'procedimiento realizado'
+        verbose_name_plural = 'procedimientos realizados'
+        indexes = [
+            models.Index(fields=['visit', 'performed_at'], name='idx_procedure_visit'),
+        ]
+        constraints = [
+            # Segundo nivel, como en el resto de la capa: el validador del campo
+            # solo corre en `full_clean()`, y un importe negativo no es un matiz
+            # de formulario.
+            models.CheckConstraint(
+                condition=models.Q(frozen_price__gte=0),
+                name='clinical_performed_procedure_price_positive',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.frozen_service_name} ({self.performed_at:%Y-%m-%d})'
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        instance._loaded_frozen = _frozen_state(instance, cls.FROZEN_FIELDS, field_names)
+        return instance
+
+    @property
+    def patient(self):
+        """Paciente al que se le hizo, subiendo por la cadena clínica."""
+        return self.visit.episode.history.patient
+
+    @property
+    def catalog_service(self):
+        """El servicio del catálogo, o `None` si ya no existe.
+
+        Para saber de dónde salió el procedimiento, nunca para leer su precio:
+        eso está congelado en `frozen_price` y no se consulta aquí.
+        """
+        try:
+            return self.service
+        except ObjectDoesNotExist:
+            return None
+
+    def _freeze_from_catalog(self):
+        """Copia nombre y precio del catálogo. Solo en el alta, y solo lo que falte.
+
+        Lo que venga puesto se respeta: un servicio de precio variable se cobra
+        por lo que se hizo, no por el mínimo de la ficha. Lo que no venga, se
+        toma del catálogo tal y como está EN ESTE INSTANTE, que es el instante
+        que queda congelado.
+        """
+        service = self.catalog_service
+        if service is None:
+            raise ValidationError({
+                'service': 'Un procedimiento necesita el servicio del catálogo del que sale.'
+            })
+        if not self.frozen_service_name:
+            self.frozen_service_name = service.name
+        if self.frozen_price is None:
+            # Normalizado a Decimal: una instancia del catálogo sin releer de la
+            # base de datos puede traer el importe como texto, y el snapshot no
+            # puede quedar en memoria como una cosa y en la columna como otra.
+            self.frozen_price = Decimal(str(service.price))
+
+    def _validate_clinic(self):
+        """El servicio tiene que ser del catálogo de la clínica del paciente.
+
+        La FK no lleva restricción en base de datos (`db_constraint=False`), así
+        que nada impediría colgar de una visita el servicio de otro inquilino.
+        """
+        service = self.catalog_service
+        if self.visit_id and service is not None:
+            if service.clinic_id != self.visit.episode.history.clinic_id:
+                raise ValidationError({
+                    'service': 'El servicio pertenece al catálogo de otra clínica.'
+                })
+
+    def clean(self):
+        super().clean()
+        self._validate_clinic()
+
+    def save(self, *args, **kwargs):
+        if self._state.adding:
+            # Barrera dura, más allá del formulario: el congelado ocurre aquí
+            # para que dé igual por dónde entre el procedimiento.
+            self._validate_clinic()
+            self._freeze_from_catalog()
+        else:
+            changed = _changed_frozen_fields(self, getattr(self, '_loaded_frozen', {}))
+            if changed:
+                raise ProtectedClinicalRecord(
+                    f'El procedimiento #{self.pk} está congelado: '
+                    f'{", ".join(changed)} no se puede modificar. '
+                    f'Para corregirlo, dalo de baja y registra otro.'
+                )
+
+        super().save(*args, **kwargs)
+        self._loaded_frozen = _frozen_state(self, self.FROZEN_FIELDS)
+
+
+# ---------------------------------------------------------------------------
+# Consentimiento informado
+# ---------------------------------------------------------------------------
+#
+# Un consentimiento informado no es un «sí» del paciente: es la prueba de QUÉ se
+# le explicó y a qué dijo que sí. Cuando se discute uno —y se discuten años
+# después—, la pregunta no es si firmó, sino qué texto tenía delante cuando
+# firmó.
+#
+# Se resuelve con los mismos dos mecanismos que la anamnesis, y hacen falta los
+# dos:
+#
+#   1. **Versionado.** El documento lógico (`ConsentTemplate`) no tiene texto:
+#      lo tienen sus versiones. Publicar una versión la congela. Cambiar el
+#      consentimiento es publicar una versión nueva, jamás editar la anterior.
+#   2. **Copia literal.** `SignedConsent.text_copy` guarda el texto entero que se
+#      firmó, no una FK al que lo dice. Es redundante A PROPÓSITO: aunque la
+#      versión se despublique, se reestructure la plantilla o alguien fuerce un
+#      cambio, el registro firmado sigue probando por sí solo qué aceptó el
+#      paciente.
+#
+# El versionado protege del cambio previsto; la copia, también del imprevisto.
+#
+# Y la firma es una imagen: dato personal pegado a un dato de salud. Va al mismo
+# bucket privado que las fotos clínicas, con clave opaca, URL firmada de vida
+# corta y permiso comprobado en cada petición.
+
+
+class ConsentTemplate(SoftDeleteModel, TimeStampedModel):
+    """Documento de consentimiento como entidad lógica: agrupa sus versiones.
+
+    No contiene texto. «El consentimiento de cirugía ungueal» es esto; lo que se
+    firma es siempre una `ConsentVersion` concreta.
+    """
+
+    clinic = models.ForeignKey(
+        'core.Clinic', on_delete=models.CASCADE, related_name='consent_templates'
+    )
+    name = models.CharField(max_length=150)
+    specialty = models.CharField(
+        max_length=100, blank=True,
+        help_text='Especialidad o tipo de consentimiento, p. ej. «cirugía ungueal».',
+    )
+    is_active = models.BooleanField(
+        default=True, help_text='Un consentimiento inactivo no se ofrece para firmar.'
+    )
+
+    class Meta(SoftDeleteModel.Meta):
+        abstract = False
+        db_table = 'clinical_consent_template'
+        unique_together = ('clinic', 'name')
+        ordering = ['name']
+        verbose_name = 'consentimiento informado'
+        verbose_name_plural = 'consentimientos informados'
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def current_version(self):
+        """Versión vigente, o `None` si aún no se ha publicado ninguna."""
+        return self.versions.filter(is_current=True).first()
+
+    def new_draft_version(self, text=None):
+        """Crea la siguiente versión en borrador, partiendo del texto vigente.
+
+        Es el camino normal para «editar» un consentimiento ya publicado: se
+        arranca del texto de la vigente, se retoca el borrador y se publica. La
+        versión anterior no se toca en ningún momento, y las firmas que cuelgan
+        de ella, tampoco.
+        """
+        if text is None:
+            current = self.current_version
+            text = current.text if current else ''
+        return ConsentVersion.objects.create(template=self, text=text)
+
+
+class ConsentVersion(SoftDeleteModel, TimeStampedModel):
+    """Versión concreta de un consentimiento. Inmutable una vez publicada.
+
+    A diferencia del cuestionario —donde el contenido son `Question`s—, aquí el
+    documento **es** el `text`, así que el texto entra en los campos congelados:
+    publicada, no se le cambia ni una coma.
+
+    Publicada, solo admite cambios de *ciclo de vida* (`is_current`,
+    `is_published`, borrado lógico). Despublicar está permitido —es la forma de
+    retirar un consentimiento— y no altera ninguna firma ya recogida: cada una
+    lleva su propia copia del texto.
+    """
+
+    # `is_current`, `is_published` y `deleted_at` quedan fuera a propósito: son
+    # estado de ciclo de vida, no contenido del documento.
+    FROZEN_FIELDS = ('template_id', 'number', 'text', 'published_at')
+
+    template = models.ForeignKey(
+        ConsentTemplate, on_delete=models.PROTECT, related_name='versions'
+    )
+    number = models.PositiveIntegerField(
+        help_text='Correlativo dentro del consentimiento; se asigna solo.'
+    )
+    text = models.TextField(
+        blank=True, help_text='Texto íntegro del consentimiento, tal y como se firma.'
+    )
+    is_published = models.BooleanField(default=False, db_index=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+    is_current = models.BooleanField(
+        default=False, help_text='Versión que se ofrece al firmar. Solo una por documento.'
+    )
+
+    class Meta(SoftDeleteModel.Meta):
+        abstract = False
+        db_table = 'clinical_consent_version'
+        unique_together = ('template', 'number')
+        ordering = ['template', '-number']
+        verbose_name = 'versión de consentimiento'
+        verbose_name_plural = 'versiones de consentimiento'
+        constraints = [
+            # Una sola versión vigente por documento, garantizado por la base de
+            # datos y no solo por `make_current()`: dos publicaciones
+            # concurrentes no pueden dejar dos textos «vigentes» a la vez, que es
+            # tanto como no saber cuál se está haciendo firmar.
+            models.UniqueConstraint(
+                fields=['template'],
+                condition=models.Q(is_current=True, deleted_at__isnull=True),
+                name='clinical_one_current_consent_per_template',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.template.name} v{self.number}'
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        instance._loaded_is_published = instance.is_published
+        instance._loaded_frozen = _frozen_state(instance, cls.FROZEN_FIELDS, field_names)
+        return instance
+
+    def _next_number(self) -> int:
+        last = (
+            ConsentVersion.all_objects.filter(template=self.template)
+            .order_by('-number')
+            .values_list('number', flat=True)
+            .first()
+        )
+        return (last or 0) + 1
+
+    def save(self, *args, **kwargs):
+        if self.number is None and self._state.adding:
+            self.number = self._next_number()
+
+        if getattr(self, '_loaded_is_published', False):
+            changed = _changed_frozen_fields(self, getattr(self, '_loaded_frozen', {}))
+            if changed:
+                raise ConsentVersionPublished(
+                    f'La versión {self} está publicada: {", ".join(changed)} no se '
+                    f'puede modificar. Publica una versión nueva.'
+                )
+
+        super().save(*args, **kwargs)
+        self._loaded_is_published = self.is_published
+        self._loaded_frozen = _frozen_state(self, self.FROZEN_FIELDS)
+
+    def publish(self, make_current=True):
+        """Publica la versión: congela su texto y, por defecto, la vuelve vigente."""
+        if self.is_published:
+            raise ConsentVersionPublished(f'La versión {self} ya está publicada.')
+        if not (self.text or '').strip():
+            raise ValidationError(
+                f'La versión {self} no tiene texto: no se puede publicar.'
+            )
+
+        with transaction.atomic():
+            self.is_published = True
+            self.published_at = timezone.now()
+            self.save(update_fields=['is_published', 'published_at', 'updated_at'])
+            if make_current:
+                self.make_current()
+
+    def make_current(self):
+        """Marca esta versión como la vigente y retira la marca a las demás."""
+        if not self.is_published:
+            raise ConsentVersionNotPublished(
+                f'La versión {self} está en borrador: no puede ser la vigente.'
+            )
+
+        with transaction.atomic():
+            # Primero se degrada la anterior y después se promueve esta, o el
+            # índice único de «una sola vigente» saltaría a mitad de camino. Una
+            # a una y no con `update()`: los bulk se saltan las señales de audit.
+            previous = (
+                ConsentVersion.all_objects.filter(template_id=self.template_id, is_current=True)
+                .exclude(pk=self.pk)
+            )
+            for version in previous:
+                version.is_current = False
+                version.save(update_fields=['is_current', 'updated_at'])
+
+            if not self.is_current:
+                self.is_current = True
+                self.save(update_fields=['is_current', 'updated_at'])
+
+    def unpublish(self):
+        """Retira la versión de circulación. No toca ninguna firma recogida."""
+        if not self.is_published:
+            return
+        self.is_published = False
+        self.is_current = False
+        self.save(update_fields=['is_published', 'is_current', 'updated_at'])
+
+    def can_be_deleted(self) -> bool:
+        # Una versión publicada pudo haber sido firmada: no se borra ni
+        # lógicamente. Un borrador sí.
+        return not self.is_published
+
+
+class SignedConsent(SoftDeleteModel, TimeStampedModel):
+    """Consentimiento firmado por un paciente. Congelado desde que existe.
+
+    Guarda **el texto completo** (`text_copy`), no solo la FK a la versión. La
+    redundancia es deliberada y es la razón de ser del modelo: la FK dice de
+    dónde salió, pero lo que prueba qué aceptó el paciente es la copia, y esa
+    copia no depende de que la versión siga existiendo, publicada ni intacta.
+
+    La firma es una imagen y vive en el **bucket privado**, con el mismo trato
+    que una foto clínica: clave opaca (UUID), validación por contenido, se guarda
+    la clave y nunca una URL, y se sirve solo con URL firmada de vida corta y
+    permiso comprobado (`clinical/attachments.py`).
+    """
+
+    # Todo el contenido es inmutable en cuanto existe. `deleted_at` y
+    # `updated_at` quedan fuera: son ciclo de vida.
+    FROZEN_FIELDS = (
+        'version_id', 'patient_id', 'episode_id',
+        'signed_at', 'text_copy', 'mime_type', 'size_bytes', 'checksum',
+    )
+
+    # Identificador público: el que viaja en la URL de la firma. La PK secuencial
+    # se queda dentro, para que un id ajeno no se pueda ni tantear.
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    version = models.ForeignKey(
+        ConsentVersion, on_delete=models.PROTECT, related_name='signatures'
+    )
+    # Mismo patrón que `MedicalHistory`: borrar un paciente no puede arrastrar ni
+    # bloquear su documentación clínica (ver el docstring de MedicalHistory).
+    patient = models.ForeignKey(
+        'patients.Patient', on_delete=models.DO_NOTHING,
+        related_name='signed_consents', db_constraint=False,
+    )
+    episode = models.ForeignKey(
+        Episode, on_delete=models.PROTECT, related_name='signed_consents'
+    )
+    text_copy = models.TextField(
+        help_text='Copia literal del texto firmado. No es un duplicado ocioso: '
+                  'es lo que prueba qué aceptó el paciente.',
+    )
+    signature_image = models.FileField(
+        upload_to=signature_upload_to,
+        storage=clinical_media_storage,
+        max_length=255,
+        help_text='Clave del objeto en el bucket privado. Nunca una URL.',
+    )
+    mime_type = models.CharField(
+        max_length=100, blank=True,
+        help_text='Tipo real del contenido, deducido al validar. No lo elige quien sube.',
+    )
+    size_bytes = models.PositiveBigIntegerField(default=0)
+    checksum = models.CharField(
+        max_length=71, blank=True,
+        help_text='sha256:<hexdigest> de la firma tal y como se subió.',
+    )
+    signed_at = models.DateTimeField(default=timezone.now)
+
+    class Meta(SoftDeleteModel.Meta):
+        abstract = False
+        db_table = 'clinical_signed_consent'
+        ordering = ['-signed_at', '-id']
+        verbose_name = 'consentimiento firmado'
+        verbose_name_plural = 'consentimientos firmados'
+        indexes = [
+            models.Index(fields=['patient', 'signed_at'], name='idx_signed_consent_patient'),
+        ]
+
+    def __str__(self):
+        return f'Consentimiento firmado #{self.pk} ({self.signed_at:%Y-%m-%d})'
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        instance._loaded_frozen = _frozen_state(instance, cls.FROZEN_FIELDS, field_names)
+        # El fichero aparte: comparar `FieldFile`s copiaría el backend entero.
+        # Lo que identifica al fichero es su clave.
+        instance._loaded_file_name = instance.signature_image.name
+        return instance
+
+    @property
+    def file(self):
+        """Alias del fichero firmado.
+
+        `clinical/attachments.py` sirve cualquier documento clínico por `.file` y
+        `.patient`; esto es lo que deja al consentimiento pasar por el mismo
+        camino comprobado que las fotos, en vez de tener uno propio que firmara
+        por su cuenta.
+        """
+        return self.signature_image
+
+    def _validate_relations(self):
+        # Aislamiento por clínica: no se firma el consentimiento de otra clínica.
+        if self.version_id and self.patient_id:
+            if self.version.template.clinic_id != self.patient.clinic_id:
+                raise ValidationError(
+                    'El consentimiento pertenece a otra clínica distinta a la del paciente.'
+                )
+        # El episodio tiene que ser del mismo paciente: un consentimiento colgado
+        # del episodio de otra persona es un error de historia clínica.
+        if self.episode_id and self.patient_id:
+            if self.episode.history.patient_id != self.patient_id:
+                raise ValidationError(
+                    'El episodio pertenece a un paciente distinto al firmante.'
+                )
+
+    def clean(self):
+        super().clean()
+        self._validate_relations()
+        # En el admin y en los formularios, el motivo del rechazo se enseña como
+        # error de campo en vez de reventar en el `save()`.
+        if self._state.adding and self.signature_image:
+            try:
+                validate_clinical_image(self.signature_image)
+            except ValidationError as exc:
+                raise ValidationError({'signature_image': exc.messages})
+
+    def save(self, *args, **kwargs):
+        if self._state.adding:
+            if not self.version.is_published:
+                raise ConsentVersionNotPublished(
+                    f'La versión {self.version} está en borrador: no se le puede '
+                    f'hacer firmar a un paciente un texto que aún puede cambiar.'
+                )
+            self._validate_relations()
+            if not self.signature_image:
+                raise ValidationError(
+                    {'signature_image': 'Un consentimiento firmado necesita la firma.'}
+                )
+            if not self.text_copy:
+                # La copia se hace aquí y no en la vista: da igual por dónde entre
+                # la firma, sale con el texto congelado dentro.
+                self.text_copy = self.version.text
+            # La firma se valida por su contenido, igual que una foto clínica: la
+            # extensión y el content-type los pone quien sube.
+            probe = validate_clinical_image(self.signature_image)
+            self.mime_type = probe.mime_type
+            self.size_bytes = probe.size_bytes
+            self.checksum = probe.checksum
+        else:
+            changed = _changed_frozen_fields(self, getattr(self, '_loaded_frozen', {}))
+            if self.signature_image.name != getattr(
+                self, '_loaded_file_name', self.signature_image.name
+            ):
+                changed = sorted(changed + ['signature_image'])
+            if changed:
+                raise ProtectedClinicalRecord(
+                    f'El consentimiento firmado #{self.pk} está congelado: '
+                    f'{", ".join(changed)} no se puede modificar.'
+                )
+
+        super().save(*args, **kwargs)
+        self._loaded_frozen = _frozen_state(self, self.FROZEN_FIELDS)
+        self._loaded_file_name = self.signature_image.name
+
+    @classmethod
+    def sign(cls, *, version, patient, episode, signature_image, signed_at=None):
+        """Recoge una firma congelando el texto de la versión.
+
+        Es la vía normal de alta. Existe por lo mismo que
+        `QuestionnaireResponse.record()`: que el congelado no dependa de que
+        quien escribe la vista se acuerde de copiarlo.
+        """
+        consent = cls(
+            version=version, patient=patient, episode=episode,
+            signature_image=signature_image,
+        )
+        if signed_at is not None:
+            consent.signed_at = signed_at
+        consent.save()
+        return consent
+
+    def delete(self, using=None, keep_parents=False):
+        """Borrado lógico. **El objeto del bucket se conserva.**
+
+        Igual que con las fotos clínicas: la fila desaparece de la ficha, pero el
+        fichero sigue mientras corra el plazo de conservación.
         """
         super().delete(using=using, keep_parents=keep_parents)

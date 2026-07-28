@@ -1,8 +1,13 @@
-"""Servido protegido de las fotos clínicas.
+"""Servido protegido de los ficheros clínicos: fotos de lesión y firmas.
 
 El bucket es privado: sin firma no se lee nada. Este módulo es quien decide a
 quién se le firma, y la respuesta corta es «a quien pueda ver la ficha de ese
 paciente, y al agente jamás».
+
+Vale para cualquier documento clínico con fichero. Lo único que se le pide es que
+exponga `.file` y `.patient`; con eso, un `LesionAttachment` y un
+`SignedConsent` pasan por el mismo camino comprobado en vez de tener cada uno el
+suyo, que es como acaban divergiendo los controles.
 
 La URL se genera **en cada petición** y caduca en minutos
 (`querystring_expire`). No se guarda en ninguna parte: una URL firmada
@@ -50,43 +55,43 @@ def can_view_patient(user, patient) -> bool:
     return user.clinic_id == patient.clinic_id
 
 
-def can_view_attachment(user, attachment) -> bool:
-    """`True` si `user` puede ver ese adjunto.
+def can_view_attachment(user, document) -> bool:
+    """`True` si `user` puede ver ese fichero clínico.
 
-    El permiso es el del paciente, alcanzado por la cadena
-    adjunto → observación → lesión → episodio → historia → paciente. El adjunto
-    no tiene permisos propios: quien puede ver la ficha puede ver sus fotos, y
-    quien no, no.
+    El permiso es el del paciente: en una foto, alcanzado por la cadena adjunto →
+    observación → lesión → episodio → historia → paciente; en un consentimiento
+    firmado, el firmante. El fichero no tiene permisos propios: quien puede ver
+    la ficha puede ver sus documentos, y quien no, no.
     """
-    return can_view_patient(user, attachment.patient)
+    return can_view_patient(user, document.patient)
 
 
-def signed_url_for(attachment, user) -> str:
-    """URL firmada y de vida corta del adjunto, o `PermissionDenied`.
+def signed_url_for(document, user) -> str:
+    """URL firmada y de vida corta del fichero, o `PermissionDenied`.
 
-    Es el ÚNICO camino hasta el contenido de una foto clínica. Comprueba primero
-    y firma después; no hay variante que se salte el primer paso.
+    Es el ÚNICO camino hasta el contenido de un fichero clínico. Comprueba
+    primero y firma después; no hay variante que se salte el primer paso.
     """
-    if not can_view_attachment(user, attachment):
+    if not can_view_attachment(user, document):
         raise PermissionDenied(
-            'No tiene permiso para ver los adjuntos clínicos de este paciente.'
+            'No tiene permiso para ver los documentos clínicos de este paciente.'
         )
     # `.url` firma contra el backend en este mismo instante. El resultado no se
     # guarda ni se cachea: caduca, y una URL caducada guardada solo sirve para
-    # filtrar por dónde estaba la foto.
-    return attachment.file.url
+    # filtrar por dónde estaba el fichero.
+    return document.file.url
 
 
-def log_attachment_download(attachment, request=None):
-    """Deja el acceso en `AccessLog`. Leer una foto clínica es un acceso a datos.
+def log_attachment_download(document, request=None):
+    """Deja el acceso en `AccessLog`. Leer un fichero clínico es un acceso a datos.
 
     Las lecturas no emiten señales, así que se declara a mano (ver
-    `audit/README.md`). Sin esto, la única capa del proyecto que sirve imágenes
+    `audit/README.md`). Sin esto, la única capa del proyecto que sirve ficheros
     de pacientes lo haría sin dejar rastro.
     """
     return log_access(
         action=AccessLog.Action.DOWNLOAD_ATTACHMENT,
-        obj=attachment,
-        patient=attachment.patient,
+        obj=document,
+        patient=document.patient,
         request=request,
     )

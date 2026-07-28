@@ -43,3 +43,19 @@ class TemplateVersionNotPublished(Exception):
     Solo se responde lo que está publicado: un borrador aún puede cambiar, y una
     respuesta debe poder señalar siempre a un documento estable.
     """
+
+
+class ConsentVersionPublished(Exception):
+    """Se intentó modificar una versión de consentimiento ya publicada.
+
+    Una versión publicada es el documento que los pacientes han firmado: su texto
+    queda congelado. Para cambiar el consentimiento se publica una versión nueva,
+    y las firmas anteriores no se tocan.
+    """
+
+
+class ConsentVersionNotPublished(Exception):
+    """Se intentó firmar (o marcar como vigente) un consentimiento en borrador.
+
+    No se le hace firmar a un paciente un texto que aún puede cambiar.
+    """

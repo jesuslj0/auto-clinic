@@ -16,14 +16,18 @@ class ClinicalConfig(AppConfig):
             Addendum,
             ClinicalAlert,
             ClinicalNote,
+            ConsentTemplate,
+            ConsentVersion,
             Episode,
             Lesion,
             LesionAttachment,
             LesionObservation,
             MedicalHistory,
+            PerformedProcedure,
             Question,
             QuestionnaireResponse,
             QuestionnaireTemplate,
+            SignedConsent,
             TemplateVersion,
             Visit,
         )
@@ -103,6 +107,29 @@ class ClinicalConfig(AppConfig):
             LesionAttachment,
             sensitive=['file'],
             patient_resolver=lambda att: att.patient,
+        )
+
+        # Procedimientos realizados. Nada de esto es texto libre —el nombre del
+        # servicio sale del catálogo y la zona es un código—, así que se registra
+        # entero: el importe congelado y qué se hizo son justo lo que hay que
+        # poder reconstruir si mañana se discute una factura.
+        registry.register(
+            PerformedProcedure,
+            patient_resolver=lambda proc: proc.visit.episode.history.patient,
+        )
+
+        # Consentimiento informado. Mismo criterio que la anamnesis: el documento
+        # en blanco (plantilla y versiones) NO es dato de paciente y se audita
+        # entero —quién publicó qué texto y cuándo es justo lo que hay que poder
+        # reconstruir—. La firma sí lo es: su `text_copy` es el documento que
+        # aceptó el paciente y la clave del fichero señala dónde vive su firma;
+        # los dos van enmascarados. Lo que queda entero es QUE firmó y cuándo.
+        registry.register(ConsentTemplate)
+        registry.register(ConsentVersion)
+        registry.register(
+            SignedConsent,
+            sensitive=['text_copy', 'signature_image'],
+            patient_resolver=lambda consent: consent.patient,
         )
 
         # --- Auto-creación de la historia al alta del paciente ---------------
