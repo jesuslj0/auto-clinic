@@ -1,0 +1,72 @@
+{% comment %}
+Banda de alertas vigentes del paciente: lo que hay que saber ANTES de tratar.
+
+Va a ancho completo y por encima de todo lo demás, y se pinta en todas las
+pestañas porque no depende de ninguna. Si el paciente no tiene alertas activas no
+ocupa ni un píxel.
+
+Sobre el `role`: es una región etiquetada, no un `role="alert"`. El contenido es
+estático —ya está en el HTML al cargar—, y `alert` implica `aria-live="assertive"`,
+que interrumpiría al lector de pantalla para leerle una lista entera. Como región
+con nombre, sale en el índice de puntos de referencia y se llega a ella a la
+primera. El detalle completo de cada aviso vive en la pestaña «Alertas».
+{% endcomment %}
+{% if active_alerts %}
+<section
+    role="region"
+    aria-labelledby="patient-alerts-title"
+    class="rounded-3xl bg-surface p-5 shadow-soft ring-1 {% if has_critical_alerts %}ring-danger-line{% else %}ring-warning-line{% endif %}"
+>
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div class="flex items-start gap-3">
+            <span aria-hidden="true" class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl {% if has_critical_alerts %}bg-danger-soft text-danger{% else %}bg-warning-soft text-warning{% endif %}">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                </svg>
+            </span>
+            <div class="min-w-0">
+                <h3 id="patient-alerts-title" class="text-base font-semibold text-content">
+                    Alertas clínicas activas
+                    <span class="ml-1 align-middle text-sm font-medium text-content-subtle">({{ active_alerts|length }})</span>
+                </h3>
+                <p class="mt-1 text-sm text-content-subtle">Tenlas en cuenta antes de cualquier tratamiento.</p>
+            </div>
+        </div>
+
+        {# Atajo a la pestaña de alertas: enlace real, con el mismo swap que la barra. #}
+        <a
+            href="{% url 'patients:tab-alerts' patient.id %}"
+            hx-get="{% url 'patients:tab-alerts' patient.id %}"
+            hx-target="#patient-tab-region"
+            hx-swap="innerHTML"
+            hx-push-url="true"
+            class="btn-secondary flex-shrink-0 max-sm:w-full"
+        >
+            Ver detalle
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+            </svg>
+        </a>
+    </div>
+
+    <ul class="mt-4 flex flex-wrap gap-2">
+        {% for alert in active_alerts %}
+        <li>
+            <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 {% if alert.severity == 'critical' %}bg-danger-soft text-danger ring-danger-line{% elif alert.severity == 'warning' %}bg-warning-soft text-warning ring-warning-line{% else %}bg-info-soft text-info ring-info-line{% endif %}">
+                <svg class="h-3.5 w-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                    {% if alert.severity == 'critical' %}
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                    {% elif alert.severity == 'warning' %}
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                    {% else %}
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                    {% endif %}
+                </svg>
+                <span class="sr-only">{{ alert.get_severity_display }}:</span>
+                {{ alert.get_alert_type_display }}
+            </span>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}

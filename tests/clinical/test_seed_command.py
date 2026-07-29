@@ -11,6 +11,7 @@ from django.core.management.base import CommandError
 from clinical.models import (
     ClinicalNote,
     Episode,
+    Lesion,
     MedicalHistory,
     QuestionnaireResponse,
     QuestionnaireTemplate,
@@ -57,11 +58,47 @@ class TestSeedClinical:
 
     def test_running_twice_does_not_duplicate(self, clinic_a, patient_a, professional_a):
         call_command('seed_clinical', clinic=clinic_a.clinic_id)
+        lesions = Lesion.objects.filter(episode__history__patient=patient_a).count()
         call_command('seed_clinical', clinic=clinic_a.clinic_id)
 
         assert Episode.objects.filter(history__patient=patient_a).count() == 2
         assert QuestionnaireTemplate.objects.filter(clinic=clinic_a).count() == 1
         assert QuestionnaireResponse.objects.filter(patient=patient_a).count() == 1
+        # La comprobación de las lesiones es por pieza (pie + vista + zona), que
+        # es lo que permite completar una base antigua sin duplicar la anterior.
+        assert Lesion.objects.filter(episode__history__patient=patient_a).count() == lesions
+
+    def test_seeds_lesions_across_views_and_both_feet(
+        self, clinic_a, patient_a, professional_a
+    ):
+        """Sin esto, el mapa del pie solo se podría mirar en una vista.
+
+        Las cuatro vistas y los dos pies tienen que salir sembrados: es la única
+        forma de comprobar que el mapa filtra de verdad y no pinta siempre lo
+        mismo.
+        """
+        call_command('seed_clinical', clinic=clinic_a.clinic_id)
+
+        lesions = Lesion.objects.filter(episode__history__patient=patient_a)
+        assert set(lesions.values_list('view', flat=True)) == set(Lesion.View.values)
+        assert set(lesions.values_list('laterality', flat=True)) == set(
+            Lesion.Laterality.values
+        )
+        # Coordenadas normalizadas, nunca píxeles.
+        assert all(0.0 <= lesion.x <= 1.0 and 0.0 <= lesion.y <= 1.0 for lesion in lesions)
+
+    def test_a_lesion_without_follow_up_creates_no_visit(
+        self, clinic_a, patient_a, professional_a
+    ):
+        """Una marca en el mapa no necesita observación, y no inventa visitas."""
+        call_command('seed_clinical', clinic=clinic_a.clinic_id)
+
+        sin_seguimiento = Lesion.objects.filter(
+            episode__history__patient=patient_a, view=Lesion.View.MEDIAL
+        ).first()
+        assert sin_seguimiento is not None
+        assert sin_seguimiento.observations.count() == 0
+        assert sin_seguimiento.detected_at is not None
 
     def test_a_declared_condition_seeds_its_derived_alert(self, clinic_a, patient_a, patient_b, professional_a):
         """El seed recorre la cadena entera: anamnesis → motor → alerta."""

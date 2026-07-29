@@ -541,13 +541,32 @@ python manage.py seed_clinical --dry-run             # enseña el plan, no escri
 python manage.py seed_clinical                       # siembra
 python manage.py seed_clinical --clinic 123456
 python manage.py seed_clinical --refresh-anamnesis   # anamnesis nueva a los ya sembrados
+python manage.py seed_clinical --skip-files          # sin subir nada al bucket privado
 ```
 
-Rellena la historia de los pacientes que ya existan: episodio cerrado con nota
-firmada y adenda, episodio abierto con nota en borrador —colgando de sus citas
-completadas cuando las hay— y el cuestionario «Anamnesis dental» con v1 y v2
-publicadas y una respuesta por paciente. Las preguntas van **codificadas**, así
-que el motor de derivación levanta sus alertas críticas.
+Rellena la historia de los pacientes que ya existan:
+
+- episodio cerrado con nota firmada y adenda, y episodio abierto con nota en
+  borrador —colgando de sus citas completadas cuando las hay—;
+- el cuestionario «Anamnesis dental» con v1 y v2 publicadas y una respuesta por
+  paciente. Las preguntas van **codificadas**, así que el motor de derivación
+  levanta sus alertas críticas;
+- **lesiones** sobre el mapa del pie con su serie de observaciones (medidas que
+  cambian visita a visita, que es de lo que va el modelo) y sus fotos, una
+  resuelta y las demás activas. Cada observación crea su visita de seguimiento en
+  el episodio abierto, porque una observación exige una visita del mismo
+  episodio;
+- **procedimientos realizados** sobre esas visitas, tomando nombre y precio del
+  catálogo real de la clínica. Uno lleva importe explícito distinto del catálogo:
+  es el caso del servicio de precio variable, y hace visible el congelado;
+- el consentimiento «Cirugía ungueal» con v1 y v2 publicadas, y **un
+  consentimiento firmado** por paciente sobre la vigente.
+
+Las fotos y las firmas van al **bucket privado** (`clinical_media`), con la misma
+validación por contenido que en producción: no hay ruta especial de siembra. Sin
+`R2_*` configurado, esas dos piezas se omiten con un aviso y el resto se siembra
+igual; `--skip-files` hace lo mismo a propósito. Un consentimiento sin firma no
+existe, así que se omite entero.
 
 `--refresh-anamnesis` registra una anamnesis nueva sobre la versión vigente a los
 pacientes que ya tienen historia, sin tocar nada de lo anterior. Es la forma de
@@ -555,9 +574,13 @@ ver el motor de alertas sobre datos ya sembrados. Si la versión vigente no tien
 códigos —sembrada antes de que existiera `Question.code`—, el comando publica una
 versión nueva con ellos en vez de intentar editar la publicada, que es inmutable.
 
-Es repetible: los pacientes que ya tengan episodios se saltan. **Se niega a
-ejecutarse con `DEBUG=False`**, y no por prudencia genérica: las notas firmadas
-que crea no se pueden borrar después, ni por ORM ni por SQL.
+Es repetible, y lo es **por pieza**: a un paciente que ya tenga episodios no se le
+duplica la historia, pero sí se le completa lo que le falte (lesiones,
+procedimientos, consentimiento firmado). Así una base sembrada antes de que
+existieran estos modelos se pone al día sin borrar nada, y volver a ejecutarlo no
+crea nada. **Se niega a ejecutarse con `DEBUG=False`**, y no por prudencia
+genérica: las notas firmadas que crea no se pueden borrar después, ni por ORM ni
+por SQL.
 
 ## Tests
 

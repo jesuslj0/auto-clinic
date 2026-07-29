@@ -1,0 +1,263 @@
+{% comment %}
+Panel «Lesiones»: el mapa del pie, en SOLO LECTURA.
+
+Qué hay aquí y qué no:
+
+- Se pintan los marcadores de las lesiones del paciente (`lesions`) sobre un SVG
+  de marcador de posición, con un selector de vista (dorsal/plantar/medial/
+  lateral) y otro de pie (izquierdo/derecho).
+- NO hay captura de coordenadas por clic, ni alta, ni detalle, ni observaciones,
+  ni fotos, ni evolución. Los marcadores son solo visuales.
+
+**Las coordenadas son fracciones, no píxeles.** `lesion.x`/`lesion.y` valen entre
+0 y 1 y se convierten a unidades del `viewBox` multiplicando por su ancho y su
+alto (`{% widthratio lesion.x 1 mapa_ancho %}`). Nada se mide en píxeles: el SVG
+se escala con el contenedor y los marcadores viajan con él a cualquier tamaño.
+Si mañana entra el dibujo definitivo, basta con cambiar el `viewBox` y las dos
+constantes de abajo — los datos no se tocan.
+
+**La zona anatómica y las coordenadas son dos datos distintos.** La zona
+(`get_anatomical_zone_display`) es lo clínico y sobrevive a un rediseño del
+dibujo; las coordenadas solo sirven para pintar. Ni se deriva una de la otra ni
+se rotula una lesión por dónde cayó su punto.
+
+**Alpine solo guarda dos cadenas** (`vista` y `pie`). Los recuentos por vista, el
+estado vacío y qué marcador pertenece a qué combinación los resuelve el servidor
+(`PatientLesionsTabView`): aquí no hay lógica de datos, solo mostrar y ocultar.
+
+Sobre los selectores: se marcan como `radiogroup`/`radio` y no como pestañas
+porque no son cuatro paneles distintos, sino un único mapa cuyo contenido cambia
+(y la ficha ya tiene una barra de pestañas por encima; anidar otra confundiría).
+Como en `_patient_tabs.html`, no hay `tabindex` de rol itinerante: todos los
+botones son alcanzables con el tabulador.
+{% endcomment %}
+{# Unidades del `viewBox`. Cambiarlas aquí cambia el mapa entero, dibujo y marcadores. #}
+{% with mapa_ancho=400 mapa_alto=520 %}
+<section
+    class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line"
+    x-data="{ vista: '{{ default_view }}', pie: '{{ default_laterality }}' }"
+>
+    <div class="border-b border-line px-6 py-5">
+        <h3 class="text-lg font-semibold text-content">Lesiones</h3>
+        <p class="mt-1 text-sm text-content-subtle">Localización de las lesiones registradas sobre el mapa del pie. Consulta en solo lectura: el detalle, las medidas y las fotografías llegan en una fase posterior.</p>
+    </div>
+
+    {# --- Selectores de vista y de pie ------------------------------------- #}
+    <div class="flex flex-col gap-3 border-b border-line px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div class="-mx-1 overflow-x-auto px-1 py-1">
+            <div role="radiogroup" aria-label="Vista del pie" class="flex w-max min-w-full items-center gap-1 rounded-2xl bg-muted p-1 ring-1 ring-line">
+                {% for value, label in lesion_views %}
+                <button
+                    type="button"
+                    role="radio"
+                    aria-checked="{% if value == default_view %}true{% else %}false{% endif %}"
+                    :aria-checked="vista === '{{ value }}' ? 'true' : 'false'"
+                    @click="vista = '{{ value }}'"
+                    :class="vista === '{{ value }}' ? 'bg-surface text-brand-fg shadow-sm ring-1 ring-line' : 'text-content-subtle hover:bg-surface/70 hover:text-content'"
+                    class="whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:px-4"
+                >{{ label }}</button>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="-mx-1 overflow-x-auto px-1 py-1">
+            <div role="radiogroup" aria-label="Pie" class="flex w-max min-w-full items-center gap-1 rounded-2xl bg-muted p-1 ring-1 ring-line">
+                {% for value, label in lesion_lateralities %}
+                <button
+                    type="button"
+                    role="radio"
+                    aria-checked="{% if value == default_laterality %}true{% else %}false{% endif %}"
+                    :aria-checked="pie === '{{ value }}' ? 'true' : 'false'"
+                    @click="pie = '{{ value }}'"
+                    :class="pie === '{{ value }}' ? 'bg-surface text-brand-fg shadow-sm ring-1 ring-line' : 'text-content-subtle hover:bg-surface/70 hover:text-content'"
+                    class="whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:px-4"
+                >{{ label }}</button>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="grid gap-6 px-6 py-6 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:gap-8">
+        {# --- El mapa ------------------------------------------------------ #}
+        <div class="mx-auto w-full max-w-xs rounded-2xl bg-muted p-4 ring-1 ring-line lg:mx-0">
+            <svg
+                viewBox="0 0 {{ mapa_ancho }} {{ mapa_alto }}"
+                class="h-auto w-full"
+                role="img"
+                aria-labelledby="mapa-lesiones-titulo mapa-lesiones-descripcion"
+                focusable="false"
+            >
+                <title id="mapa-lesiones-titulo">Mapa del pie</title>
+                <desc id="mapa-lesiones-descripcion">Dibujo esquemático del pie con un marcador por cada lesión registrada en la vista y el pie seleccionados. El resumen que acompaña al mapa da los mismos datos en texto.</desc>
+
+                {# Silueta vista desde arriba: sirve a la vista dorsal y a la plantar. #}
+                <g x-show="vista === 'dorsal' || vista === 'plantar'" x-cloak>
+                    <path
+                        d="M 118 178 C 110 140, 130 118, 166 114 C 208 110, 252 110, 278 116 C 298 121, 298 148, 291 180 C 283 232, 267 266, 263 310 C 259 356, 271 388, 267 426 C 263 472, 237 502, 200 502 C 163 502, 139 474, 137 428 C 135 388, 147 356, 143 310 C 139 266, 126 230, 118 178 Z"
+                        class="fill-surface stroke-line-strong" stroke-width="3" stroke-linejoin="round" />
+                    <ellipse cx="146" cy="80" rx="27" ry="31" class="fill-surface stroke-line-strong" stroke-width="3" />
+                    <circle cx="193" cy="66" r="17" class="fill-surface stroke-line-strong" stroke-width="3" />
+                    <circle cx="226" cy="71" r="15" class="fill-surface stroke-line-strong" stroke-width="3" />
+                    <circle cx="254" cy="79" r="13.5" class="fill-surface stroke-line-strong" stroke-width="3" />
+                    <circle cx="278" cy="92" r="12" class="fill-surface stroke-line-strong" stroke-width="3" />
+
+                    {# Zonas rotuladas de la vista dorsal #}
+                    <g x-show="vista === 'dorsal'" x-cloak class="fill-content-subtle" font-size="12">
+                        <circle cx="146" cy="80" r="3" class="fill-content-faint" />
+                        <text x="108" y="84" text-anchor="end">Hallux</text>
+                        <circle cx="278" cy="92" r="3" class="fill-content-faint" />
+                        <text x="296" y="96" text-anchor="start">5.º dedo</text>
+                        <circle cx="152" cy="196" r="3" class="fill-content-faint" />
+                        <text x="112" y="200" text-anchor="end">1.er meta.</text>
+                        <circle cx="268" cy="206" r="3" class="fill-content-faint" />
+                        <text x="296" y="210" text-anchor="start">5.º meta.</text>
+                        <circle cx="196" cy="320" r="3" class="fill-content-faint" />
+                        <text x="128" y="324" text-anchor="end">Mediopié</text>
+                        <circle cx="200" cy="470" r="3" class="fill-content-faint" />
+                        <text x="258" y="474" text-anchor="start">Tobillo</text>
+                    </g>
+
+                    {# Zonas rotuladas de la vista plantar #}
+                    <g x-show="vista === 'plantar'" x-cloak class="fill-content-subtle" font-size="12">
+                        <circle cx="146" cy="80" r="3" class="fill-content-faint" />
+                        <text x="108" y="84" text-anchor="end">Hallux</text>
+                        <circle cx="152" cy="196" r="3" class="fill-content-faint" />
+                        <text x="112" y="200" text-anchor="end">1.er meta.</text>
+                        <circle cx="268" cy="206" r="3" class="fill-content-faint" />
+                        <text x="296" y="210" text-anchor="start">5.º meta.</text>
+                        <circle cx="160" cy="330" r="3" class="fill-content-faint" />
+                        <text x="120" y="334" text-anchor="end">Arco medial</text>
+                        <circle cx="200" cy="452" r="3" class="fill-content-faint" />
+                        <text x="258" y="456" text-anchor="start">Talón</text>
+                    </g>
+                </g>
+
+                {# Silueta de perfil: sirve a la vista medial y a la lateral. El
+                   dibujo definitivo tendrá una para cada lado; este es provisional. #}
+                <g x-show="vista === 'medial' || vista === 'lateral'" x-cloak>
+                    <path
+                        d="M 46 404 C 42 378, 58 362, 86 358 C 142 350, 194 340, 234 320 C 270 302, 288 270, 294 228 C 298 198, 314 186, 334 190 C 354 194, 362 214, 358 246 C 352 302, 346 350, 338 388 C 332 414, 314 428, 288 428 L 92 428 C 64 428, 48 420, 46 404 Z"
+                        class="fill-surface stroke-line-strong" stroke-width="3" stroke-linejoin="round" />
+
+                    {# Zonas rotuladas de la vista medial #}
+                    <g x-show="vista === 'medial'" x-cloak class="fill-content-subtle" font-size="12">
+                        <circle cx="62" cy="392" r="3" class="fill-content-faint" />
+                        <text x="62" y="340" text-anchor="middle">Hallux</text>
+                        <circle cx="126" cy="382" r="3" class="fill-content-faint" />
+                        <text x="126" y="322" text-anchor="middle">1.er meta.</text>
+                        <circle cx="200" cy="410" r="3" class="fill-content-faint" />
+                        <text x="200" y="462" text-anchor="middle">Arco medial</text>
+                        <circle cx="326" cy="400" r="3" class="fill-content-faint" />
+                        <text x="330" y="462" text-anchor="middle">Talón</text>
+                        <circle cx="330" cy="220" r="3" class="fill-content-faint" />
+                        <text x="330" y="176" text-anchor="middle">Tobillo</text>
+                    </g>
+
+                    {# Zonas rotuladas de la vista lateral #}
+                    <g x-show="vista === 'lateral'" x-cloak class="fill-content-subtle" font-size="12">
+                        <circle cx="62" cy="392" r="3" class="fill-content-faint" />
+                        <text x="62" y="340" text-anchor="middle">5.º dedo</text>
+                        <circle cx="128" cy="384" r="3" class="fill-content-faint" />
+                        <text x="128" y="322" text-anchor="middle">5.º meta.</text>
+                        <circle cx="210" cy="412" r="3" class="fill-content-faint" />
+                        <text x="210" y="462" text-anchor="middle">Borde lateral</text>
+                        <circle cx="326" cy="400" r="3" class="fill-content-faint" />
+                        <text x="330" y="462" text-anchor="middle">Talón</text>
+                        <circle cx="330" cy="220" r="3" class="fill-content-faint" />
+                        <text x="330" y="176" text-anchor="middle">Tobillo</text>
+                    </g>
+                </g>
+
+                {# --- Marcadores ------------------------------------------------
+                   Uno por lesión, en unidades del `viewBox`: (x · ancho, y · alto).
+                   Van los del paciente entero y cada uno se enseña solo en su
+                   combinación de vista y pie; el filtro lo escribe Django en el
+                   `x-show`, Alpine solo lo evalúa. Sin `click`: son visuales. #}
+                {% for lesion in lesions %}
+                {% widthratio lesion.x 1 mapa_ancho as marcador_x %}
+                {% widthratio lesion.y 1 mapa_alto as marcador_y %}
+                <g
+                    x-show="vista === '{{ lesion.view }}' && pie === '{{ lesion.laterality }}'"
+                    x-cloak
+                    role="img"
+                    data-lesion="{{ lesion.pk }}"
+                >
+                    <title>{{ lesion.get_lesion_type_display }} en {{ lesion.get_anatomical_zone_display }} · {{ lesion.get_status_display|lower }} · detectada el {{ lesion.detected_at|date:"j \d\e F \d\e Y" }}</title>
+                    <circle
+                        cx="{{ marcador_x }}" cy="{{ marcador_y }}" r="18"
+                        class="{% if lesion.status == 'active' %}fill-danger-soft stroke-danger{% else %}fill-success-soft stroke-success{% endif %}"
+                        stroke-width="3" />
+                    <circle
+                        cx="{{ marcador_x }}" cy="{{ marcador_y }}" r="6"
+                        class="{% if lesion.status == 'active' %}fill-danger{% else %}fill-success{% endif %}" />
+                </g>
+                {% endfor %}
+            </svg>
+        </div>
+
+        {# --- Resumen de la vista actual ----------------------------------- #}
+        <div class="min-w-0">
+            <div aria-live="polite">
+                {% for scene in lesion_scenes %}
+                <div x-show="vista === '{{ scene.view }}' && pie === '{{ scene.laterality }}'" x-cloak>
+                    <p class="text-sm font-semibold text-content">Vista {{ scene.view_label|lower }} · {{ scene.laterality_label|lower }}</p>
+
+                    {% if scene.total %}
+                    <p class="mt-1 text-sm text-content-subtle">
+                        {% if scene.total == 1 %}1 lesión registrada{% else %}{{ scene.total }} lesiones registradas{% endif %} en esta combinación de vista y pie.
+                    </p>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        {% if scene.active %}
+                        <span class="inline-flex items-center gap-1.5 rounded-full bg-danger-soft px-3 py-1 text-xs font-semibold text-danger ring-1 ring-danger-line">
+                            <span aria-hidden="true" class="h-2 w-2 rounded-full bg-danger"></span>
+                            {{ scene.active }} activa{{ scene.active|pluralize:"s" }}
+                        </span>
+                        {% endif %}
+                        {% if scene.resolved %}
+                        <span class="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-3 py-1 text-xs font-semibold text-success ring-1 ring-success-line">
+                            <span aria-hidden="true" class="h-2 w-2 rounded-full bg-success"></span>
+                            {{ scene.resolved }} resuelta{{ scene.resolved|pluralize:"s" }}
+                        </span>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <div class="mt-3 flex items-start gap-3 rounded-2xl bg-muted px-4 py-4 ring-1 ring-line">
+                        <span aria-hidden="true" class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-2xl bg-muted-strong text-content-subtle">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                            </svg>
+                        </span>
+                        <div class="min-w-0">
+                            <p class="text-sm font-semibold text-content">Sin lesiones en esta vista</p>
+                            <p class="mt-1 text-sm text-content-subtle">No hay ninguna lesión registrada en la vista {{ scene.view_label|lower }} del {{ scene.laterality_label|lower }}. Prueba con otra vista o con el otro pie.</p>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+
+            {# Leyenda: el color por sí solo no es un dato accesible. #}
+            <dl class="mt-6 space-y-3 border-t border-line pt-4">
+                <div class="flex items-start gap-3">
+                    <span aria-hidden="true" class="mt-0.5 h-3.5 w-3.5 flex-shrink-0 rounded-full bg-danger-soft ring-2 ring-danger"></span>
+                    <div class="min-w-0">
+                        <dt class="text-sm font-semibold text-content">Lesión activa</dt>
+                        <dd class="text-sm text-content-subtle">En seguimiento, sin fecha de resolución.</dd>
+                    </div>
+                </div>
+                <div class="flex items-start gap-3">
+                    <span aria-hidden="true" class="mt-0.5 h-3.5 w-3.5 flex-shrink-0 rounded-full bg-success-soft ring-2 ring-success"></span>
+                    <div class="min-w-0">
+                        <dt class="text-sm font-semibold text-content">Lesión resuelta</dt>
+                        <dd class="text-sm text-content-subtle">Cerrada, con su fecha de alta registrada.</dd>
+                    </div>
+                </div>
+            </dl>
+
+            <p class="mt-4 text-xs text-content-faint">El dibujo del pie es provisional. La zona anatómica de cada lesión es el dato clínico y no depende de él: un rediseño del mapa no la cambia.</p>
+        </div>
+    </div>
+</section>
+{% endwith %}

@@ -1,0 +1,99 @@
+{% comment %}
+Panel «Consentimientos». Consentimientos firmados por el paciente (`consents`).
+
+Dos pruebas, y las dos con su regla:
+
+  1. El TEXTO. Se pinta `consent.text_copy`, la copia literal de lo que firmó,
+     nunca `consent.version.text`: la versión pudo republicarse después y
+     entonces la ficha enseñaría un texto que el paciente jamás aceptó. Como son
+     ~1.800 caracteres, va plegado y con scroll propio.
+  2. La FIRMA. Vive en el bucket privado y solo se sirve por
+     `clinical:consent-signature`, que comprueba el permiso, firma una URL de
+     vida corta y registra la descarga. Aquí solo hay un enlace a esa vista:
+     nunca `signature_image.url` ni una URL del bucket montada a mano. Es un
+     enlace y no un `<img>` a propósito — pintarla dejaría un registro de
+     descarga cada vez que alguien abre la pestaña, aunque no fuera a mirarla.
+{% endcomment %}
+<section class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+    <div class="flex flex-col gap-2 border-b border-line px-6 py-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+            <h3 class="text-lg font-semibold text-content">Consentimientos</h3>
+            <p class="mt-1 text-sm text-content-subtle">Documentos firmados por el paciente. Se conserva el texto exacto que aceptó, aunque después se publiquen versiones nuevas.</p>
+        </div>
+        {% if consents %}
+        <span class="inline-flex flex-shrink-0 items-center gap-1.5 self-start rounded-full bg-muted-strong px-3 py-1 text-xs font-semibold text-content-muted">
+            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {{ consents|length }} firmado{{ consents|length|pluralize:"s" }}
+        </span>
+        {% endif %}
+    </div>
+
+    <div class="divide-y divide-line">
+        {% for consent in consents %}
+        <article class="px-6 py-5" x-data="{ open: false }">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div class="min-w-0">
+                    <p class="break-words text-sm font-semibold text-content">{{ consent.version.template.name }}</p>
+                    <p class="mt-1 text-sm text-content-subtle">
+                        Firmado el {{ consent.signed_at|date:"j \d\e F \d\e Y" }} · {{ consent.signed_at|date:"H:i" }}
+                    </p>
+                </div>
+                <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                    <span class="inline-flex items-center rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-semibold text-brand-fg ring-1 ring-brand-line" title="Versión del documento que se firmó">v{{ consent.version.number }}</span>
+                    <span class="inline-flex items-center gap-1 rounded-full bg-success-soft px-2.5 py-0.5 text-xs font-semibold text-success ring-1 ring-success-line">
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                        Firmado
+                    </span>
+                </div>
+            </div>
+
+            <div class="mt-3 flex flex-wrap items-center gap-4">
+                <button type="button"
+                        @click="open = !open"
+                        :aria-expanded="open ? 'true' : 'false'"
+                        aria-expanded="false"
+                        aria-controls="consentimiento-texto-{{ consent.pk }}"
+                        class="inline-flex items-center gap-1.5 rounded-xl text-sm font-semibold text-brand-fg transition hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-surface">
+                    <span x-text="open ? 'Ocultar el texto firmado' : 'Ver el texto firmado'">Ver el texto firmado</span>
+                    <svg class="h-4 w-4 transition-transform duration-200" :class="open && 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </button>
+
+                <a href="{% url 'clinical:consent-signature' consent.public_id %}"
+                   target="_blank" rel="noopener"
+                   class="inline-flex items-center gap-1.5 rounded-xl text-sm font-semibold text-content-muted transition hover:text-brand-fg focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-surface">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                    </svg>
+                    Ver la firma
+                    <span class="sr-only">de {{ consent.version.template.name }} (se abre en una pestaña nueva)</span>
+                </a>
+            </div>
+
+            <div id="consentimiento-texto-{{ consent.pk }}" x-show="open" x-collapse x-cloak>
+                <div class="mt-3 rounded-2xl bg-muted ring-1 ring-line">
+                    <div class="max-h-80 overflow-y-auto px-4 py-3">
+                        <p class="whitespace-pre-line break-words text-sm leading-relaxed text-content-muted">{{ consent.text_copy }}</p>
+                    </div>
+                    <p class="border-t border-line px-4 py-2 text-xs text-content-faint">Texto literal firmado el {{ consent.signed_at|date:"j M, Y" }}. No se actualiza con las versiones posteriores.</p>
+                </div>
+            </div>
+        </article>
+        {% empty %}
+        <div class="flex flex-col items-center gap-3 px-6 py-14 text-center">
+            <span aria-hidden="true" class="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-soft text-brand-fg ring-1 ring-brand-line">
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M10.125 2.25h-4.5c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125v-9M10.125 2.25h.375a9 9 0 019 9v.375M10.125 2.25A3.375 3.375 0 0113.5 5.625v1.5c0 .621.504 1.125 1.125 1.125h1.5a3.375 3.375 0 013.375 3.375M9 15l2.25 2.25L15 12" />
+                </svg>
+            </span>
+            <p class="text-sm font-semibold text-content">Aún no hay consentimientos firmados</p>
+            <p class="max-w-sm text-sm text-content-subtle">Cuando el paciente firme un consentimiento informado, se guardará aquí con el texto exacto que aceptó y su firma.</p>
+        </div>
+        {% endfor %}
+    </div>
+</section>

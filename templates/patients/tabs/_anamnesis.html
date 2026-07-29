@@ -1,0 +1,125 @@
+{% load patient_extras %}
+{% comment %}
+Panel «Anamnesis». Cuestionarios contestados por el paciente (`responses`).
+
+Lo que se pinta de cada respuesta es su `snapshot`: la copia literal de las
+preguntas tal y como se le mostraron ese día, con lo que contestó. NUNCA las
+preguntas vivas de la versión — pueden haber cambiado, y entonces la ficha
+diría algo que el paciente no contestó. Por eso se itera `response.questions`
+(que lee el snapshot) y no `response.version.questions`.
+
+El número de versión se enseña en cabecera de cada respuesta a propósito: es lo
+único que hace visible el versionado (una respuesta de la v1 tiene ocho
+preguntas, una de la v2 tiene diez).
+
+Solo lectura e inmutable: aquí no hay editar ni borrar, y no los habrá.
+{% endcomment %}
+<section class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+    <div class="flex flex-col gap-2 border-b border-line px-6 py-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+            <h3 class="text-lg font-semibold text-content">Anamnesis</h3>
+            <p class="mt-1 text-sm text-content-subtle">Cuestionarios de historia clínica respondidos por el paciente. Se conserva lo que se preguntó y lo que se contestó ese día.</p>
+        </div>
+        <div class="flex flex-shrink-0 items-center gap-2 self-start">
+            {% if responses %}
+            <span class="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-muted-strong px-3 py-1 text-xs font-semibold text-content-muted">
+                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 3.75V16.5L12 14.25 7.5 16.5V3.75m9 0H18A2.25 2.25 0 0120.25 6v12A2.25 2.25 0 0118 20.25H6A2.25 2.25 0 013.75 18V6A2.25 2.25 0 016 3.75h1.5m9 0h-9" />
+                </svg>
+                {{ responses|length }} respuesta{{ responses|length|pluralize:"s" }}
+            </span>
+            {% endif %}
+            {# Enlace normal, no HTMX: el alta es una página propia con su POST. #}
+            <a href="{% url 'patients:anamnesis-create' patient.pk %}" class="btn-primary max-sm:px-3" aria-label="Nueva anamnesis">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                <span class="hidden sm:inline">Nueva anamnesis</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="divide-y divide-line">
+        {% for response in responses %}
+        <article class="px-6 py-5" x-data="{ open: false }">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div class="min-w-0">
+                    <p class="break-words text-sm font-semibold text-content">{{ response.version.template.name }}</p>
+                    <p class="mt-1 text-sm text-content-subtle">
+                        {{ response.filled_at|date:"j \d\e F \d\e Y" }} · {{ response.filled_at|date:"H:i" }}
+                        {% if response.created_by %} · registrada por {{ response.created_by }}{% endif %}
+                    </p>
+                </div>
+                <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                    <span class="inline-flex items-center rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-semibold text-brand-fg ring-1 ring-brand-line" title="Versión de la plantilla que se le pasó">v{{ response.version.number }}</span>
+                    <span class="inline-flex items-center rounded-full bg-muted-strong px-2.5 py-0.5 text-xs font-semibold text-content-muted">{{ response.get_source_display }}</span>
+                    {% if response.is_complete %}
+                    <span class="inline-flex items-center gap-1 rounded-full bg-success-soft px-2.5 py-0.5 text-xs font-semibold text-success ring-1 ring-success-line">
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                        Completa
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2.5 py-0.5 text-xs font-semibold text-warning ring-1 ring-warning-line">
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m0 3.75h.008M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Incompleta
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <button type="button"
+                    @click="open = !open"
+                    :aria-expanded="open ? 'true' : 'false'"
+                    aria-expanded="false"
+                    aria-controls="anamnesis-detalle-{{ response.pk }}"
+                    class="mt-3 inline-flex items-center gap-1.5 rounded-xl text-sm font-semibold text-brand-fg transition hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-surface">
+                <span x-text="open ? 'Ocultar respuestas' : 'Ver respuestas'">Ver respuestas</span>
+                <span class="text-content-faint">({{ response.questions|length }})</span>
+                <svg class="h-4 w-4 transition-transform duration-200" :class="open && 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                </svg>
+            </button>
+
+            <div id="anamnesis-detalle-{{ response.pk }}" x-show="open" x-collapse x-cloak>
+                <dl class="mt-4 space-y-2">
+                    {% for entry in response.questions %}
+                    <div class="rounded-2xl bg-muted px-4 py-3 ring-1 ring-line">
+                        <dt class="text-sm text-content-muted">
+                            {{ entry.text }}
+                            {% if entry.required %}<span class="text-danger" title="Pregunta obligatoria" aria-label="Pregunta obligatoria">*</span>{% endif %}
+                        </dt>
+                        {% with texto=entry|answer_display %}
+                        <dd class="mt-1 text-sm font-semibold {% if texto %}text-content{% else %}italic text-content-faint{% endif %}">
+                            {{ texto|default:"Sin responder" }}
+                        </dd>
+                        {% endwith %}
+                    </div>
+                    {% empty %}
+                    <p class="rounded-2xl bg-muted px-4 py-3 text-sm text-content-subtle ring-1 ring-line">Esta respuesta no conserva ninguna pregunta.</p>
+                    {% endfor %}
+                </dl>
+            </div>
+        </article>
+        {% empty %}
+        <div class="flex flex-col items-center gap-3 px-6 py-14 text-center">
+            <span aria-hidden="true" class="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-soft text-brand-fg ring-1 ring-brand-line">
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" />
+                </svg>
+            </span>
+            <p class="text-sm font-semibold text-content">Aún no hay anamnesis registrada</p>
+            <p class="max-w-sm text-sm text-content-subtle">Cuando el paciente responda un cuestionario, aparecerá aquí con la versión que se le pasó y lo que contestó ese día.</p>
+            <a href="{% url 'patients:anamnesis-create' patient.pk %}" class="btn-primary mt-2">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                Nueva anamnesis
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+</section>

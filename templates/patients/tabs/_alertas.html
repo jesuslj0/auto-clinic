@@ -1,0 +1,55 @@
+{% comment %}
+Panel «Alertas». Lista las alertas vigentes del paciente (`active_alerts`, la
+misma consulta que alimenta la banda superior). Solo lectura en esta fase: dar de
+alta y desactivar alertas llega en una fase posterior — recuerda entonces que una
+alerta no se borra, se desactiva.
+{% endcomment %}
+<section class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+    <div class="border-b border-line px-6 py-5">
+        <h3 class="text-lg font-semibold text-content">Alertas clínicas</h3>
+        <p class="mt-1 text-sm text-content-subtle">Avisos vigentes del paciente. Las desactivadas se conservan, pero no se muestran aquí.</p>
+    </div>
+
+    <div class="divide-y divide-line">
+        {% for alert in active_alerts %}
+        <article class="flex flex-col gap-3 px-6 py-5 sm:flex-row sm:items-start sm:gap-4">
+            <span aria-hidden="true" class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl {% if alert.severity == 'critical' %}bg-danger-soft text-danger{% elif alert.severity == 'warning' %}bg-warning-soft text-warning{% else %}bg-info-soft text-info{% endif %}">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    {% if alert.severity == 'critical' %}
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                    {% elif alert.severity == 'warning' %}
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                    {% else %}
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                    {% endif %}
+                </svg>
+            </span>
+
+            <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                    <p class="text-sm font-semibold text-content">{{ alert.get_alert_type_display }}</p>
+                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 {% if alert.severity == 'critical' %}bg-danger-soft text-danger ring-danger-line{% elif alert.severity == 'warning' %}bg-warning-soft text-warning ring-warning-line{% else %}bg-info-soft text-info ring-info-line{% endif %}">{{ alert.get_severity_display }}</span>
+                    <span class="inline-flex items-center rounded-full bg-muted-strong px-2.5 py-0.5 text-xs font-semibold text-content-muted">{{ alert.get_source_display }}</span>
+                </div>
+                {% if alert.note %}
+                    <p class="mt-2 whitespace-pre-line break-words text-sm text-content-muted">{{ alert.note }}</p>
+                {% endif %}
+                <p class="mt-2 text-xs text-content-faint">
+                    Registrada el {{ alert.created_at|date:"j M, Y" }}
+                    {% if alert.created_by %} por {{ alert.created_by }}{% endif %}
+                </p>
+            </div>
+        </article>
+        {% empty %}
+        <div class="flex flex-col items-center gap-3 px-6 py-14 text-center">
+            <span aria-hidden="true" class="flex h-12 w-12 items-center justify-center rounded-2xl bg-success-soft text-success">
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </span>
+            <p class="text-sm font-semibold text-content">Sin alertas activas</p>
+            <p class="max-w-sm text-sm text-content-subtle">Este paciente no tiene ningún aviso vigente. Las alertas aparecerán aquí y en la banda superior de la ficha.</p>
+        </div>
+        {% endfor %}
+    </div>
+</section>
