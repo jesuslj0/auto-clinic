@@ -1,0 +1,152 @@
+{% comment %}
+Anotar cómo está la lesión en una visita.
+
+Se pinta dentro del panel de detalle, debajo de la cabecera de la lesión: lo que
+se está midiendo es ESA lesión, y sacarlo a otra pantalla obligaría a recordar de
+cuál se venía.
+
+Qué pone el usuario y qué pone el sistema:
+
+- La **visita** se elige entre las del episodio de la lesión (el modelo exige que
+  sean del mismo) o se deja en «registrar la visita de hoy», y entonces la crea
+  la vista. Si el episodio está cerrado no hay visita nueva posible y el campo
+  pasa a ser obligatorio; el formulario lo dice en su texto de ayuda.
+- La **fecha**, las **medidas** (largo, ancho y profundidad, en milímetros) y la
+  **descripción** las pone quien observa. Las medidas son opcionales —una
+  hiperqueratosis se describe, no se mide— pero nunca negativas.
+- El **autor** no se pregunta: es quien está registrando. Solo cuando ese usuario
+  no tiene ficha de profesional aparece un selector, y únicamente para saber a
+  quién atribuir la visita que se va a crear.
+
+- Las **fotografías** (una o varias) van al almacén clínico privado con clave
+  UUID y se validan por su contenido, no por su extensión. El formulario solo
+  adelanta el rechazo para que sea legible: quien manda es
+  `LesionAttachment.save()`.
+
+El envío va por `hx-post` a la misma URL que sirvió el formulario. Lleva
+`hx-encoding="multipart/form-data"` porque con ficheros no vale el codificado por
+defecto de htmx, y el `enctype` del propio formulario cubre la vía sin
+JavaScript. El token de CSRF lo hereda del `hx-headers` del `<body>`
+(`templates/base.html`). Sin JavaScript sigue siendo un `<form method="post">`
+normal contra esa misma URL, que responde con la página completa; por eso el
+`action` está escrito.
+{% endcomment %}
+<form
+    method="post"
+    action="{{ observation_create_url }}"
+    enctype="multipart/form-data"
+    novalidate
+    class="mt-4 space-y-4 border-t border-line pt-4"
+    hx-post="{{ observation_create_url }}"
+    hx-target="#lesiones-region"
+    hx-swap="innerHTML"
+    hx-encoding="multipart/form-data"
+    x-data="{ visita: '{{ observation_form.visit.value|default_if_none:'' }}' }"
+    {# El foco entra en el primer control del formulario, no en el panel que lo
+       contiene: Alpine inicializa el padre antes que el hijo, así que este gana. #}
+    x-init="$nextTick(() => $el.querySelector('select, input')?.focus())"
+>
+    {% csrf_token %}
+
+    <p class="text-sm font-semibold text-content">Nueva observación</p>
+
+    {% if observation_form.non_field_errors %}
+    <div class="rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line" role="alert">
+        {% for error in observation_form.non_field_errors %}<p class="text-sm text-danger">{{ error }}</p>{% endfor %}
+    </div>
+    {% endif %}
+
+    {# --- Visita ---------------------------------------------------------- #}
+    <div>
+        <label for="{{ observation_form.visit.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+            {{ observation_form.visit.label }}{% if observation_form.fields.visit.required %}<span class="ml-0.5 text-danger" title="Campo obligatorio" aria-label="obligatorio">*</span>{% endif %}
+        </label>
+        {{ observation_form.visit }}
+        <p id="{{ observation_form.visit.auto_id }}_helptext" class="mt-1.5 text-xs text-content-faint">{{ observation_form.visit.help_text }}</p>
+        {% if observation_form.visit.errors %}
+        <p id="error-visit" class="mt-1.5 text-xs text-danger">{{ observation_form.visit.errors|join:", " }}</p>
+        {% endif %}
+    </div>
+
+    {% if observation_form.visit_professional %}
+    {% comment %}Solo cuando quien registra no es profesional Y se va a crear la
+    visita: si se elige una que ya existe, el profesional es el que la
+    atendió.{% endcomment %}
+    <div x-show="visita === ''" x-collapse x-cloak>
+        <label for="{{ observation_form.visit_professional.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+            {{ observation_form.visit_professional.label }}
+        </label>
+        {{ observation_form.visit_professional }}
+        <p id="{{ observation_form.visit_professional.auto_id }}_helptext" class="mt-1.5 text-xs text-content-faint">{{ observation_form.visit_professional.help_text }}</p>
+        {% if observation_form.visit_professional.errors %}
+        <p id="error-visit_professional" class="mt-1.5 text-xs text-danger">{{ observation_form.visit_professional.errors|join:", " }}</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {# --- Fecha ----------------------------------------------------------- #}
+    <div>
+        <label for="{{ observation_form.observed_at.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+            {{ observation_form.observed_at.label }}<span class="ml-0.5 text-danger" title="Campo obligatorio" aria-label="obligatorio">*</span>
+        </label>
+        {{ observation_form.observed_at }}
+        {% if observation_form.observed_at.errors %}
+        <p id="error-observed_at" class="mt-1.5 text-xs text-danger">{{ observation_form.observed_at.errors|join:", " }}</p>
+        {% endif %}
+    </div>
+
+    {# --- Medidas --------------------------------------------------------- #}
+    <fieldset>
+        <legend class="mb-1.5 text-sm font-medium text-content-muted">Medidas (mm)</legend>
+        <div class="grid grid-cols-3 gap-3">
+            {% for field in observation_form.measurement_fields %}
+            <div>
+                <label for="{{ field.id_for_label }}" class="mb-1.5 block text-xs text-content-faint">{{ field.label }}</label>
+                {{ field }}
+                {% if field.errors %}
+                <p id="error-{{ field.name }}" class="mt-1.5 text-xs text-danger">{{ field.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        <p class="mt-1.5 text-xs text-content-faint">Opcionales: no toda lesión se mide. Cuando se miden, se miden siempre igual.</p>
+    </fieldset>
+
+    {# --- Fotografías ------------------------------------------------------ #}
+    <div>
+        <label for="{{ observation_form.photos.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+            {{ observation_form.photos.label }}
+        </label>
+        {{ observation_form.photos }}
+        <p id="{{ observation_form.photos.auto_id }}_helptext" class="mt-1.5 text-xs text-content-faint">{{ observation_form.photos.help_text }}</p>
+        {% if observation_form.photos.errors %}
+        <div id="error-photos" class="mt-1.5 space-y-1" role="alert">
+            {% for error in observation_form.photos.errors %}
+            <p class="text-xs text-danger">{{ error }}</p>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    {# --- Descripción ----------------------------------------------------- #}
+    <div>
+        <label for="{{ observation_form.description.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+            {{ observation_form.description.label }}
+        </label>
+        {{ observation_form.description }}
+        {% if observation_form.description.errors %}
+        <p id="error-description" class="mt-1.5 text-xs text-danger">{{ observation_form.description.errors|join:", " }}</p>
+        {% endif %}
+    </div>
+
+    <div class="flex items-center justify-between gap-3">
+        <a
+            href="{{ lesion_detail_url }}"
+            class="btn-secondary"
+            hx-get="{{ lesion_detail_url }}"
+            hx-target="#lesiones-region"
+            hx-swap="innerHTML"
+        >Cancelar</a>
+        <button type="submit" class="btn-primary">Registrar observación</button>
+    </div>
+</form>

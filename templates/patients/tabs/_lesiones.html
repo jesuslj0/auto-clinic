@@ -7,8 +7,12 @@ Qué hay aquí y qué no:
   de marcador de posición, con un selector de vista (dorsal/plantar/medial/
   lateral) y otro de pie (izquierdo/derecho).
 - Se puede **marcar un punto en el mapa y registrar allí una lesión**.
-- NO hay detalle de la lesión, ni observaciones, ni fotos, ni evolución. Los
-  marcadores ya registrados siguen sin ser pulsables.
+- Pulsando un marcador se abre el **detalle** de esa lesión al lado del mapa, con
+  su seguimiento: se pueden **anotar observaciones con sus fotos** y **darla por
+  resuelta**.
+- Desde ese detalle se llega a la **evolución** (`patients:lesion-evolution`),
+  que es una página propia: la serie entera con fotos grandes y el comparador de
+  dos visitas.
 
 **Alpine guarda tres cosas y ninguna es un dato**: qué vista y qué pie se están
 mirando, y si el modo de marcado está activo. Las coordenadas del clic no llegan
@@ -114,6 +118,31 @@ botones son alcanzables con el tabulador.
                     swap: 'innerHTML',
                 });
             },
+
+            /**
+             * Abre el detalle de una lesión ya registrada.
+             *
+             * Con el modo de marcado activo NO hace nada y **deja que el evento
+             * siga subiendo** hasta el SVG, que lo convertirá en el punto de la
+             * lesión nueva: quien está marcando no quiere abrir la de al lado.
+             * Por eso la propagación se detiene aquí dentro y no con un `.stop`
+             * en el atributo, que la cortaría siempre.
+             *
+             * Lo que se pide es la región entera (mapa + panel) y no solo el
+             * panel: el marcador seleccionado se resalta y, al cerrar una
+             * lesión, su color cambia en la misma respuesta. Una sola región,
+             * ninguna contradicción posible.
+             */
+            abrirDetalle(evento, url, desdeTeclado = false) {
+                if (this.captura && !desdeTeclado) return;
+                this.captura = false;
+                evento.stopPropagation();
+                htmx.ajax('GET', url, {
+                    source: this.$el,
+                    target: '#lesiones-region',
+                    swap: 'innerHTML',
+                });
+            },
         };
     };
 </script>
@@ -126,7 +155,7 @@ botones son alcanzables con el tabulador.
     <div class="flex flex-col gap-4 border-b border-line px-6 py-5 sm:flex-row sm:items-start sm:justify-between">
         <div class="min-w-0">
             <h3 class="text-lg font-semibold text-content">Lesiones</h3>
-            <p class="mt-1 text-sm text-content-subtle">Localización de las lesiones registradas sobre el mapa del pie. El detalle, las medidas y las fotografías llegan en una fase posterior.</p>
+            <p class="mt-1 text-sm text-content-subtle">Localización de las lesiones registradas sobre el mapa del pie. Pulsa un marcador para ver su detalle y anotar cómo evoluciona; las fotografías llegan en una fase posterior.</p>
         </div>
         <div class="flex flex-shrink-0 items-center gap-2">
             {# Indicador de carga: htmx le pone la clase `htmx-request` mientras vuela la petición. #}

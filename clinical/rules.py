@@ -117,6 +117,15 @@ def _render_answer(answer) -> str:
 # Las críticas de podología: las que cambian el tratamiento o lo contraindican.
 # Para añadir una regla se añade una fila aquí y se le pone el `code` a la
 # pregunta correspondiente en la versión del cuestionario. Nada más.
+#
+# **Un `alert_type` es una alerta, no una regla.** La identidad de una alerta
+# derivada es `(paciente, alert_type, respuesta)` —lo respalda un índice único
+# parcial—, así que varias reglas pueden apuntar al mismo tipo pero solo una
+# saldrá en la ficha. Se usa a propósito con los antiagregantes (dos preguntas,
+# un mismo riesgo operativo: sangrado), y es la razón de que `OTHER` solo pueda
+# llevar UNA regla: una segunda taparía a la primera en silencio. Lo que hoy
+# ocupa ese hueco es el tabaquismo; una condición nueva que también lo necesite
+# pide un `AlertType` propio, no compartir `OTHER`.
 
 PODIATRY_RULES: tuple[AlertRule, ...] = (
     AlertRule(
@@ -135,6 +144,13 @@ PODIATRY_RULES: tuple[AlertRule, ...] = (
         question_code='takes_anticoagulants',
         alert_type=ClinicalAlert.AlertType.ANTICOAGULANTS,
     ),
+    # Antiagregantes (AAS, clopidogrel): no son anticoagulantes, pero para lo que
+    # aquí importa —deslaminar, desbridar, una matricectomía— el aviso es el
+    # mismo, así que comparten tipo en vez de duplicar el aviso en la ficha.
+    AlertRule(
+        question_code='takes_antiplatelets',
+        alert_type=ClinicalAlert.AlertType.ANTICOAGULANTS,
+    ),
     AlertRule(
         question_code='allergy_latex',
         alert_type=ClinicalAlert.AlertType.ALLERGY_LATEX,
@@ -142,6 +158,17 @@ PODIATRY_RULES: tuple[AlertRule, ...] = (
     AlertRule(
         question_code='allergy_local_anesthetics',
         alert_type=ClinicalAlert.AlertType.ALLERGY_LOCAL_ANESTHETICS,
+    ),
+    # Tabaquismo ACTIVO: no contraindica nada, retrasa la cicatrización, así que
+    # es advertencia y no crítica. Va por `answer_in` porque la pregunta es de
+    # elección: haberlo dejado no levanta aviso.
+    AlertRule(
+        question_code='smokes',
+        alert_type=ClinicalAlert.AlertType.OTHER,
+        severity=ClinicalAlert.Severity.WARNING,
+        note_template='Tabaquismo activo: retrasa la cicatrización y agrava el '
+                      'riesgo vascular — «{question}»: {answer}',
+        when=answer_in('Sí, actualmente'),
     ),
 )
 

@@ -1,6 +1,6 @@
 {% comment %}
-Contenido de `#lesiones-region`: el mapa y, a su lado, el resumen de la vista o
-el formulario de alta.
+Contenido de `#lesiones-region`: el mapa y, a su lado, una de tres cosas — el
+formulario de alta, el detalle de la lesión abierta, o el resumen de la vista.
 
 **Es una sola región intercambiable, y no dos.** Marcar en el mapa, cancelar y
 registrar cambian a la vez el marcador provisional, el resumen con sus recuentos
@@ -12,9 +12,11 @@ Lo que **no** entra aquí es el estado de Alpine (`vista`, `pie`, `captura`): vi
 en la sección de arriba, fuera del intercambio, para que cambiar de vista o abrir
 el alta no reinicie lo que se estaba mirando.
 
-La sirven tres vistas, siempre con el mismo contexto: `PatientLesionsTabView` (la
-pestaña), `PatientLesionMapView` (cancelar) y `PatientLesionCreateView` (abrir el
-alta, y devolverla registrada).
+La sirven seis vistas, siempre con el mismo contexto: `PatientLesionsTabView` (la
+pestaña), `PatientLesionMapView` (cancelar), `PatientLesionCreateView` (abrir el
+alta, y devolverla registrada), `PatientLesionDetailView` (abrir una lesión),
+`PatientLesionObservationCreateView` (anotar el seguimiento) y
+`PatientLesionResolveView` (darla por resuelta).
 {% endcomment %}
 
 {% if lesion_created %}
@@ -49,10 +51,12 @@ principio del documento.{% endcomment %}
     {% include 'patients/_lesion_map.html' %}
 </div>
 
-{# --- Al lado del mapa: el alta, o el resumen de la vista -------------- #}
+{# --- Al lado del mapa: el alta, el detalle, o el resumen de la vista --- #}
 <div class="min-w-0">
     {% if lesion_form %}
     {% include 'patients/_lesion_form.html' %}
+    {% elif selected_lesion %}
+    {% include 'patients/_lesion_detail.html' %}
     {% else %}
 
     <div aria-live="polite">
