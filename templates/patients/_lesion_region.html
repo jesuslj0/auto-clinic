@@ -1,0 +1,119 @@
+{% comment %}
+Contenido de `#lesiones-region`: el mapa y, a su lado, el resumen de la vista o
+el formulario de alta.
+
+**Es una sola región intercambiable, y no dos.** Marcar en el mapa, cancelar y
+registrar cambian a la vez el marcador provisional, el resumen con sus recuentos
+y el panel de la derecha; separarlos en dos objetivos de htmx obligaría a un
+`hx-swap-oob` y abriría la puerta a que el mapa y sus cuentas se contradijeran.
+Con una región, cada respuesta del servidor es coherente por construcción.
+
+Lo que **no** entra aquí es el estado de Alpine (`vista`, `pie`, `captura`): vive
+en la sección de arriba, fuera del intercambio, para que cambiar de vista o abrir
+el alta no reinicie lo que se estaba mirando.
+
+La sirven tres vistas, siempre con el mismo contexto: `PatientLesionsTabView` (la
+pestaña), `PatientLesionMapView` (cancelar) y `PatientLesionCreateView` (abrir el
+alta, y devolverla registrada).
+{% endcomment %}
+
+{% if lesion_created %}
+{% comment %}Confirmación de lo registrado. Recibe el foco porque el botón que
+envió el formulario ya no existe tras el intercambio: sin esto, el foco caería al
+principio del documento.{% endcomment %}
+<div
+    class="lg:col-span-2"
+    role="status"
+    tabindex="-1"
+    x-init="$nextTick(() => $el.focus())"
+>
+    <div class="flex items-start gap-3 rounded-2xl bg-success-soft px-4 py-3 ring-1 ring-success-line">
+        <span aria-hidden="true" class="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+        </span>
+        <p class="text-sm text-success">
+            Lesión registrada: <strong class="font-semibold">{{ lesion_created.get_lesion_type_display|lower }} en {{ lesion_created.get_anatomical_zone_display|lower }}</strong>,
+            vista {{ lesion_created.get_view_display|lower }} del {{ lesion_created.get_laterality_display|lower }}. Ya aparece en el mapa.
+        </p>
+    </div>
+</div>
+{% endif %}
+
+{# --- El mapa --------------------------------------------------------- #}
+<div
+    class="mx-auto w-full max-w-xs rounded-2xl bg-muted p-4 ring-1 ring-line lg:mx-0"
+    :class="captura ? 'outline outline-2 outline-offset-2 outline-brand-500' : ''"
+>
+    {% include 'patients/_lesion_map.html' %}
+</div>
+
+{# --- Al lado del mapa: el alta, o el resumen de la vista -------------- #}
+<div class="min-w-0">
+    {% if lesion_form %}
+    {% include 'patients/_lesion_form.html' %}
+    {% else %}
+
+    <div aria-live="polite">
+        {% for scene in lesion_scenes %}
+        <div x-show="vista === '{{ scene.view }}' && pie === '{{ scene.laterality }}'" x-cloak>
+            <p class="text-sm font-semibold text-content">Vista {{ scene.view_label|lower }} · {{ scene.laterality_label|lower }}</p>
+
+            {% if scene.total %}
+            <p class="mt-1 text-sm text-content-subtle">
+                {% if scene.total == 1 %}1 lesión registrada{% else %}{{ scene.total }} lesiones registradas{% endif %} en esta combinación de vista y pie.
+            </p>
+            <div class="mt-3 flex flex-wrap gap-2">
+                {% if scene.active %}
+                <span class="inline-flex items-center gap-1.5 rounded-full bg-danger-soft px-3 py-1 text-xs font-semibold text-danger ring-1 ring-danger-line">
+                    <span aria-hidden="true" class="h-2 w-2 rounded-full bg-danger"></span>
+                    {{ scene.active }} activa{{ scene.active|pluralize:"s" }}
+                </span>
+                {% endif %}
+                {% if scene.resolved %}
+                <span class="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-3 py-1 text-xs font-semibold text-success ring-1 ring-success-line">
+                    <span aria-hidden="true" class="h-2 w-2 rounded-full bg-success"></span>
+                    {{ scene.resolved }} resuelta{{ scene.resolved|pluralize:"s" }}
+                </span>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="mt-3 flex items-start gap-3 rounded-2xl bg-muted px-4 py-4 ring-1 ring-line">
+                <span aria-hidden="true" class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-2xl bg-muted-strong text-content-subtle">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                    </svg>
+                </span>
+                <div class="min-w-0">
+                    <p class="text-sm font-semibold text-content">Sin lesiones en esta vista</p>
+                    <p class="mt-1 text-sm text-content-subtle">No hay ninguna lesión registrada en la vista {{ scene.view_label|lower }} del {{ scene.laterality_label|lower }}. Prueba con otra vista o con el otro pie.</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    {# Leyenda: el color por sí solo no es un dato accesible. #}
+    <dl class="mt-6 space-y-3 border-t border-line pt-4">
+        <div class="flex items-start gap-3">
+            <span aria-hidden="true" class="mt-0.5 h-3.5 w-3.5 flex-shrink-0 rounded-full bg-danger-soft ring-2 ring-danger"></span>
+            <div class="min-w-0">
+                <dt class="text-sm font-semibold text-content">Lesión activa</dt>
+                <dd class="text-sm text-content-subtle">En seguimiento, sin fecha de resolución.</dd>
+            </div>
+        </div>
+        <div class="flex items-start gap-3">
+            <span aria-hidden="true" class="mt-0.5 h-3.5 w-3.5 flex-shrink-0 rounded-full bg-success-soft ring-2 ring-success"></span>
+            <div class="min-w-0">
+                <dt class="text-sm font-semibold text-content">Lesión resuelta</dt>
+                <dd class="text-sm text-content-subtle">Cerrada, con su fecha de alta registrada.</dd>
+            </div>
+        </div>
+    </dl>
+
+    <p class="mt-4 text-xs text-content-faint">El dibujo del pie es provisional. La zona anatómica de cada lesión es el dato clínico y no depende de él: un rediseño del mapa no la cambia.</p>
+    {% endif %}
+</div>

@@ -14,7 +14,24 @@
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     {% block extra_head %}{% endblock %}
 </head>
-<body class="h-full text-content antialiased" x-data="{ sidebarOpen: false }" @keydown.escape.window="sidebarOpen = false">
+{% comment %}
+CSRF para htmx, en un solo sitio y para toda la aplicación.
+
+`hx-headers` se hereda por todo el árbol, así que declarándolo en el `<body>`
+cualquier `hx-post` de cualquier plantilla viaja ya firmado: no hay que repetir
+el token formulario a formulario (y no se puede olvidar en uno). Se prefiere a un
+escuchador de `htmx:configRequest` porque es declarativo, no depende de que el
+JavaScript se haya cargado antes de la primera petición y se lee en el marcado.
+
+Escribir `{{ csrf_token }}` aquí, además, garantiza que la cookie de CSRF se
+emite en toda página del panel, aunque no contenga ningún formulario.
+{% endcomment %}
+<body
+    class="h-full text-content antialiased"
+    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+    x-data="{ sidebarOpen: false }"
+    @keydown.escape.window="sidebarOpen = false"
+>
 
     <!-- Mobile overlay -->
     {% if request.user.is_authenticated %}

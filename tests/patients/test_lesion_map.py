@@ -1,4 +1,7 @@
-"""El mapa del pie de la pestaña «Lesiones», en solo lectura.
+"""El mapa del pie de la pestaña «Lesiones»: cómo se pinta.
+
+El alta de una lesión sobre ese mapa (captura del clic, formulario y refresco de
+los marcadores) tiene sus propias pruebas en `test_lesion_create.py`.
 
 Lo que se defiende aquí:
 
@@ -311,19 +314,27 @@ class TestResumenDeLaVista:
 
         assert '<title>Úlcera en Talón · activa' in html
 
-    def test_los_marcadores_no_son_pulsables(
+    def test_los_marcadores_registrados_no_son_pulsables(
         self, client, admin_user, patient_a, episode_a
     ):
-        """Fase de solo lectura: ni clic, ni alta, ni detalle."""
-        make_lesion(episode_a)
+        """El mapa captura el clic para el alta; un marcador no abre nada.
+
+        El detalle de una lesión no existe todavía, así que el grupo de cada
+        marcador no puede insinuar que sí: ni `@click`, ni `hx-`, ni `href`. El
+        único `@click` del dibujo es el del propio `<svg>`, que marca el punto
+        de la lesión que se va a registrar.
+        """
+        lesion = make_lesion(episode_a)
 
         client.force_login(admin_user)
         html = client.get(url(patient_a)).content.decode()
-        mapa = html.split('<svg')[1].split('</svg>')[0]
+        # El grupo del marcador, desde su `data-lesion` hasta que se cierra.
+        marcador = html.split(f'data-lesion="{lesion.pk}"')[1].split('</g>')[0]
 
-        assert '@click' not in mapa
-        assert 'x-on:click' not in mapa
-        assert 'hx-' not in mapa
+        assert '@click' not in marcador
+        assert 'x-on:click' not in marcador
+        assert 'hx-' not in marcador
+        assert 'href' not in marcador
 
 
 # ---------------------------------------------------------------------------

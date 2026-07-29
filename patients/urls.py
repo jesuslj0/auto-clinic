@@ -8,6 +8,8 @@ from patients.views import (
     PatientCreateView,
     PatientDetailView,
     PatientEditView,
+    PatientLesionCreateView,
+    PatientLesionMapView,
     PatientLesionsTabView,
     PatientListView,
     PatientProceduresTabView,
@@ -32,6 +34,17 @@ urlpatterns = [
     ),
     path('<int:id>/alertas/', PatientAlertsTabView.as_view(), name='tab-alerts'),
     path('<int:id>/lesiones/', PatientLesionsTabView.as_view(), name='tab-lesions'),
+    # Registrar una lesión marcada sobre el mapa. Con htmx devuelve solo la
+    # región del mapa (formulario primero, marcadores después); sin htmx es una
+    # página normal, así que el alta también funciona sin JavaScript.
+    path(
+        '<int:id>/lesiones/nueva/',
+        PatientLesionCreateView.as_view(),
+        name='lesion-create',
+    ),
+    # El mapa a secas: lo que se pide al cancelar el alta para volver a pintar la
+    # región sin el formulario.
+    path('<int:id>/lesiones/mapa/', PatientLesionMapView.as_view(), name='lesion-map'),
     path('<int:id>/consentimientos/', PatientConsentsTabView.as_view(), name='tab-consents'),
     path('<int:id>/procedimientos/', PatientProceduresTabView.as_view(), name='tab-procedures'),
     path('<int:id>/editar/', PatientEditView.as_view(), name='edit'),

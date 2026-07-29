@@ -1,0 +1,169 @@
+{% comment %}
+Alta de una lesión, al lado del mapa donde se ha marcado.
+
+Va aquí y no en un modal a propósito: **el punto marcado tiene que seguir a la
+vista** mientras se rellena, y un modal lo taparía justo cuando importa.
+
+Qué pone el usuario y qué pone el mapa:
+
+- El mapa fija el **pie**, la **vista** y el **punto** (`x`/`y`). Viajan ocultos y
+  se enseñan escritos, en texto, porque no son controles: se cambian volviendo al
+  mapa. Y **quedan congelados al guardar** (`Lesion.FROZEN_FIELDS`): una lesión
+  no se mueve, así que la interfaz no insinúa en ningún sitio que se pueda.
+- El usuario pone la **zona anatómica** (el dato clínico, elegido a mano: no se
+  deduce de dónde cayó el clic), el tipo y la fecha de detección.
+
+El envío va por `hx-post` a la misma URL que sirvió el formulario. El token de
+CSRF **no se repite aquí**: lo hereda del `hx-headers` del `<body>`
+(`templates/base.html`), que es el único sitio donde se declara.
+
+Sin JavaScript esto sigue siendo un `<form method="post">` normal contra la misma
+URL, que responde con la página completa. Por eso el `action` está escrito.
+{% endcomment %}
+<div
+    id="lesion-form-panel"
+    class="rounded-2xl bg-muted p-5 ring-1 ring-line focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+    tabindex="-1"
+    {# El foco entra en el panel al abrirse (y al volver con errores). #}
+    x-init="$nextTick(() => $el.focus())"
+    x-data="{ episodio: '{{ lesion_form.episode.value|default_if_none:'' }}' }"
+>
+    <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+            <h4 class="text-base font-semibold text-content">Nueva lesión</h4>
+            <p class="mt-1 text-sm text-content-subtle">
+                Vista {{ lesion_point.view_label|lower }} · {{ lesion_point.laterality_label|lower }}
+            </p>
+        </div>
+        <span aria-hidden="true" class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-brand-fg ring-1 ring-brand-line">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+            </svg>
+        </span>
+    </div>
+
+    {% comment %}Dónde va a quedar el punto. Es información, no un control: las
+    coordenadas solo sirven para dibujar y no se editan a mano.{% endcomment %}
+    <p class="mt-3 rounded-xl bg-surface px-4 py-3 text-sm text-content-subtle ring-1 ring-line">
+        {% if lesion_point.marked %}
+        <span class="font-medium text-content">Punto marcado en el mapa.</span>
+        Quedará fijo al guardar: para cambiarlo, cancela y vuelve a marcarlo.
+        {% else %}
+        <span class="font-medium text-content">Sin punto marcado.</span>
+        La lesión se situará en el centro de esta vista. Puedes cancelar y marcar el punto exacto sobre el dibujo; la zona anatómica es, en todo caso, el dato clínico.
+        {% endif %}
+    </p>
+
+    <form
+        method="post"
+        action="{{ lesion_create_url }}"
+        novalidate
+        class="mt-4 space-y-4"
+        hx-post="{{ lesion_create_url }}"
+        hx-target="#lesiones-region"
+        hx-swap="innerHTML"
+    >
+        {% csrf_token %}
+
+        {# El pie, la vista y el punto: los fija el mapa. #}
+        {{ lesion_form.laterality }}
+        {{ lesion_form.view }}
+        {{ lesion_form.x }}
+        {{ lesion_form.y }}
+        {% comment %}El alta es siempre de una lesión activa; se cierra después,
+        con su fecha de resolución (`Lesion.resolve()`).{% endcomment %}
+        {{ lesion_form.status }}
+
+        {% if lesion_form.non_field_errors or lesion_form.laterality.errors or lesion_form.view.errors or lesion_form.x.errors or lesion_form.y.errors or lesion_form.status.errors %}
+        {% comment %}Los errores de los campos ocultos no tienen dónde pintarse
+        al lado de su control: se juntan aquí, que es donde el usuario mira.{% endcomment %}
+        <div class="rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line" role="alert">
+            {% for error in lesion_form.non_field_errors %}<p class="text-sm text-danger">{{ error }}</p>{% endfor %}
+            {% for error in lesion_form.laterality.errors %}<p class="text-sm text-danger">{{ error }}</p>{% endfor %}
+            {% for error in lesion_form.view.errors %}<p class="text-sm text-danger">{{ error }}</p>{% endfor %}
+            {% for error in lesion_form.x.errors %}<p class="text-sm text-danger">{{ error }}</p>{% endfor %}
+            {% for error in lesion_form.y.errors %}<p class="text-sm text-danger">{{ error }}</p>{% endfor %}
+            {% for error in lesion_form.status.errors %}<p class="text-sm text-danger">{{ error }}</p>{% endfor %}
+        </div>
+        {% endif %}
+
+        {# --- Episodio ---------------------------------------------------- #}
+        {% if lesion_form.has_open_episodes %}
+        <div>
+            <label for="{{ lesion_form.episode.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+                {{ lesion_form.episode.label }}
+            </label>
+            {{ lesion_form.episode }}
+            {# El `id` es el que Django referencia desde `aria-describedby`. #}
+            <p id="{{ lesion_form.episode.auto_id }}_helptext" class="mt-1.5 text-xs text-content-faint">{{ lesion_form.episode.help_text }}</p>
+            {% if lesion_form.episode.errors %}
+            <p id="error-episode" class="mt-1.5 text-xs text-danger">{{ lesion_form.episode.errors|join:", " }}</p>
+            {% endif %}
+        </div>
+        {% else %}
+        <p class="rounded-xl bg-brand-soft px-4 py-3 text-sm text-brand-fg ring-1 ring-brand-line">
+            Este paciente no tiene ningún episodio abierto: se abrirá uno con el motivo que indiques.
+        </p>
+        {% endif %}
+
+        <div {% if lesion_form.has_open_episodes %}x-show="episodio === ''" x-collapse x-cloak{% endif %}>
+            <label for="{{ lesion_form.episode_reason.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+                {{ lesion_form.episode_reason.label }}
+            </label>
+            {{ lesion_form.episode_reason }}
+            {% if lesion_form.episode_reason.errors %}
+            <p id="error-episode_reason" class="mt-1.5 text-xs text-danger">{{ lesion_form.episode_reason.errors|join:", " }}</p>
+            {% endif %}
+        </div>
+
+        {# --- Zona anatómica ------------------------------------------------ #}
+        <div>
+            <label for="{{ lesion_form.anatomical_zone.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+                {{ lesion_form.anatomical_zone.label }}<span class="ml-0.5 text-danger" title="Campo obligatorio" aria-label="obligatorio">*</span>
+            </label>
+            {{ lesion_form.anatomical_zone }}
+            <p id="{{ lesion_form.anatomical_zone.auto_id }}_helptext" class="mt-1.5 text-xs text-content-faint">{{ lesion_form.anatomical_zone.help_text }}</p>
+            {% if lesion_form.anatomical_zone.errors %}
+            <p id="error-anatomical_zone" class="mt-1.5 text-xs text-danger">{{ lesion_form.anatomical_zone.errors|join:", " }}</p>
+            {% endif %}
+        </div>
+
+        {# --- Tipo y fecha -------------------------------------------------- #}
+        <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+                <label for="{{ lesion_form.lesion_type.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+                    {{ lesion_form.lesion_type.label }}
+                </label>
+                {{ lesion_form.lesion_type }}
+                {% if lesion_form.lesion_type.errors %}
+                <p id="error-lesion_type" class="mt-1.5 text-xs text-danger">{{ lesion_form.lesion_type.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+            <div>
+                <label for="{{ lesion_form.detected_at.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+                    {{ lesion_form.detected_at.label }}
+                </label>
+                {{ lesion_form.detected_at }}
+                {% if lesion_form.detected_at.errors %}
+                <p id="error-detected_at" class="mt-1.5 text-xs text-danger">{{ lesion_form.detected_at.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <p class="text-xs text-content-faint">
+            Se registrará como <span class="font-semibold text-content-subtle">lesión activa</span>. El seguimiento —medidas, fotografías y cierre— llega en una fase posterior.
+        </p>
+
+        <div class="flex items-center justify-between gap-3 border-t border-line pt-4">
+            <a
+                href="{% url 'patients:tab-lesions' patient.id %}"
+                class="btn-secondary"
+                hx-get="{{ lesion_map_url }}"
+                hx-target="#lesiones-region"
+                hx-swap="innerHTML"
+            >Cancelar</a>
+            <button type="submit" class="btn-primary">Registrar lesión</button>
+        </div>
+    </form>
+</div>
