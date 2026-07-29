@@ -1,0 +1,243 @@
+{% extends 'base.html' %}
+
+{% comment %}
+Alta de una anamnesis para un paciente.
+
+La página tiene cuatro estados posibles (`state`), y ninguno es una pantalla en
+blanco:
+
+  · `formulario`          — se contesta la versión VIGENTE del cuestionario.
+  · `elegir_cuestionario` — la clínica tiene varios activos: se elige antes.
+  · `sin_version`         — el cuestionario existe pero no tiene versión vigente
+                            publicada (solo borradores). Se dice, no se rompe.
+  · `sin_cuestionarios`   — la clínica aún no tiene ningún cuestionario activo.
+
+El formulario se construye en `clinical/forms.py` a partir de las preguntas de
+la versión, así que aquí NO se codifica ninguna pregunta ni ninguna opción: la
+plantilla solo decide el marcado según `question.answer_type`.
+
+Es un POST clásico con CSRF, sin HTMX y sin API: esta capa no tiene endpoints a
+propósito, para que el `Api-Key` del agente de n8n no llegue hasta ella.
+{% endcomment %}
+
+{% block title %}Nueva anamnesis · {{ patient }} · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Nueva anamnesis{% endblock %}
+{% block page_subheading %}<p class="truncate text-xs text-content-subtle sm:text-sm">{{ patient }}</p>{% endblock %}
+
+{% block page_actions %}
+<a href="{{ cancel_url }}" class="btn-secondary max-sm:px-3" aria-label="Volver a la ficha del paciente">
+    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+    </svg>
+    <span class="hidden sm:inline">Volver a la ficha</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-3xl space-y-6">
+
+    {% if state == 'formulario' %}
+    {# ------------------------------------------------------------------- #}
+    {# Contestar la versión vigente                                         #}
+    {# ------------------------------------------------------------------- #}
+    <form method="post" novalidate class="space-y-6">
+        {% csrf_token %}
+        {# Se reenvía el cuestionario elegido: sin esto, un POST con varios #}
+        {# cuestionarios activos no sabría cuál se estaba contestando.      #}
+        <input type="hidden" name="{{ template_param }}" value="{{ questionnaire_template.pk }}">
+
+        <section class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+            <div class="flex flex-col gap-3 border-b border-line px-6 py-5 sm:flex-row sm:items-start sm:justify-between">
+                <div class="min-w-0">
+                    <h3 class="text-lg font-semibold text-content">{{ questionnaire_template.name }}</h3>
+                    <p class="mt-1 text-sm text-content-subtle">
+                        Se contesta la versión vigente. Lo que se guarde queda congelado tal y como se pregunta hoy.
+                    </p>
+                </div>
+                <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                    <span class="inline-flex items-center rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-semibold text-brand-fg ring-1 ring-brand-line"
+                          title="Versión vigente del cuestionario">v{{ version.number }}</span>
+                    {% if questionnaire_template.specialty %}
+                    <span class="inline-flex items-center rounded-full bg-muted-strong px-2.5 py-0.5 text-xs font-semibold text-content-muted">{{ questionnaire_template.specialty }}</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if form.non_field_errors %}
+            <div class="px-6 pt-5">
+                <div class="rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line" role="alert">
+                    {% for error in form.non_field_errors %}
+                    <p class="text-sm text-danger">{{ error }}</p>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {# --- Episodio ------------------------------------------------ #}
+            <div class="border-b border-line px-6 py-5"
+                 x-data="{ episodio: '{{ form.episode.value|default_if_none:'' }}' }">
+                <h4 class="text-sm font-semibold text-content">Episodio</h4>
+                <p class="mt-1 text-sm text-content-subtle">
+                    Toda anamnesis cuelga de un proceso asistencial. Elige uno abierto o abre uno nuevo.
+                </p>
+
+                {% if form.has_open_episodes %}
+                <div class="mt-4">
+                    <label for="{{ form.episode.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+                        {{ form.episode.label }}
+                    </label>
+                    {{ form.episode }}
+                    {# El `id` es el que Django referencia desde `aria-describedby`. #}
+                    <p id="{{ form.episode.auto_id }}_helptext" class="mt-1.5 text-xs text-content-faint">{{ form.episode.help_text }}</p>
+                    {% if form.episode.errors %}
+                    <p id="error-episode" class="mt-1.5 text-xs text-danger">{{ form.episode.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="mt-4 rounded-xl bg-brand-soft px-4 py-3 text-sm text-brand-fg ring-1 ring-brand-line">
+                    Este paciente no tiene ningún episodio abierto: se abrirá uno con el motivo que indiques.
+                </p>
+                {% endif %}
+
+                <div class="mt-4"
+                     {% if form.has_open_episodes %}x-show="episodio === ''" x-collapse x-cloak{% endif %}>
+                    <label for="{{ form.episode_reason.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+                        {{ form.episode_reason.label }}
+                    </label>
+                    {{ form.episode_reason }}
+                    {% if form.episode_reason.errors %}
+                    <p id="error-episode_reason" class="mt-1.5 text-xs text-danger">{{ form.episode_reason.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# --- Preguntas ----------------------------------------------- #}
+            <div class="divide-y divide-line">
+                {% for row in form.question_rows %}
+                <div class="px-6 py-5">
+                    {% if row.question.answer_type == 'boolean' or row.question.answer_type == 'single_choice' or row.question.answer_type == 'multiple_choice' %}
+                    {# Grupos de opciones: fieldset + legend, para que el lector #}
+                    {# de pantalla anuncie la pregunta antes de cada opción.     #}
+                    <fieldset {% if row.field.errors %}aria-describedby="{{ row.error_id }}"{% endif %}>
+                        <legend class="text-sm font-medium text-content-muted">
+                            {{ row.question.text }}{% if row.question.is_required %}<span class="ml-0.5 text-danger" title="Pregunta obligatoria" aria-label="obligatoria">*</span>{% endif %}
+                        </legend>
+                        <div class="mt-2.5 {% if row.question.answer_type == 'boolean' %}flex flex-wrap gap-x-8 gap-y-2{% else %}flex flex-col gap-2{% endif %}">
+                            {% for choice in row.field %}
+                            <label for="{{ choice.id_for_label }}" class="inline-flex cursor-pointer items-center gap-2.5 text-sm text-content">
+                                {{ choice.tag }}
+                                <span>{{ choice.choice_label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </fieldset>
+                    {% else %}
+                    <label for="{{ row.field.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+                        {{ row.question.text }}{% if row.question.is_required %}<span class="ml-0.5 text-danger" title="Pregunta obligatoria" aria-label="obligatoria">*</span>{% endif %}
+                    </label>
+                    {{ row.field }}
+                    {% endif %}
+
+                    {% if row.field.errors %}
+                    <p id="{{ row.error_id }}" class="mt-1.5 text-xs text-danger">{{ row.field.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                {% empty %}
+                <p class="px-6 py-5 text-sm text-content-subtle">Esta versión no tiene ninguna pregunta.</p>
+                {% endfor %}
+            </div>
+
+            <div class="flex items-center justify-between gap-3 border-t border-line px-6 py-5">
+                <a href="{{ cancel_url }}" class="btn-secondary">Cancelar</a>
+                <button type="submit" class="btn-primary">Guardar anamnesis</button>
+            </div>
+        </section>
+
+        <p class="px-2 text-xs text-content-faint">
+            Las respuestas quedan congeladas al guardarse y pueden levantar alertas clínicas en la ficha del paciente.
+        </p>
+    </form>
+
+    {% elif state == 'elegir_cuestionario' %}
+    {# ------------------------------------------------------------------- #}
+    {# Varios cuestionarios activos: se elige antes de contestar            #}
+    {# ------------------------------------------------------------------- #}
+    <section class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+        <div class="border-b border-line px-6 py-5">
+            <h3 class="text-lg font-semibold text-content">Elige el cuestionario</h3>
+            <p class="mt-1 text-sm text-content-subtle">Tu clínica tiene varios cuestionarios activos. Se contestará siempre su versión vigente.</p>
+        </div>
+        <ul class="divide-y divide-line">
+            {% for template in questionnaire_templates %}
+            <li>
+                <a href="?{{ template_param }}={{ template.pk }}"
+                   class="flex items-center justify-between gap-4 px-6 py-4 transition hover:bg-muted focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500">
+                    <span class="min-w-0">
+                        <span class="block break-words text-sm font-semibold text-content">{{ template.name }}</span>
+                        {% if template.specialty %}
+                        <span class="mt-0.5 block text-sm text-content-subtle">{{ template.specialty }}</span>
+                        {% endif %}
+                    </span>
+                    <span class="flex flex-shrink-0 items-center gap-2">
+                        {% if template.current_version %}
+                        <span class="inline-flex items-center rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-semibold text-brand-fg ring-1 ring-brand-line">v{{ template.current_version.number }}</span>
+                        {% else %}
+                        <span class="inline-flex items-center rounded-full bg-warning-soft px-2.5 py-0.5 text-xs font-semibold text-warning ring-1 ring-warning-line">Sin versión vigente</span>
+                        {% endif %}
+                        <svg class="h-5 w-5 text-content-faint" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                        </svg>
+                    </span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+
+    {% elif state == 'sin_version' %}
+    {# ------------------------------------------------------------------- #}
+    {# El cuestionario existe, pero solo en borrador                        #}
+    {# ------------------------------------------------------------------- #}
+    <section class="rounded-3xl bg-surface p-6 shadow-soft ring-1 ring-line sm:p-8">
+        <div class="flex flex-col items-center gap-3 text-center">
+            <span aria-hidden="true" class="flex h-12 w-12 items-center justify-center rounded-2xl bg-warning-soft text-warning ring-1 ring-warning-line">
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+            </span>
+            <h3 class="text-base font-semibold text-content">«{{ questionnaire_template.name }}» no tiene versión vigente</h3>
+            <p class="max-w-md text-sm text-content-subtle">
+                Solo se puede contestar una versión publicada y vigente: una en borrador no es un documento definitivo,
+                y una antigua registraría una anamnesis obsoleta. Publica una versión del cuestionario para poder rellenarlo.
+            </p>
+            <div class="mt-2 flex flex-wrap justify-center gap-3">
+                {% if questionnaire_templates|length > 1 %}
+                <a href="{{ request.path }}" class="btn-secondary">Elegir otro cuestionario</a>
+                {% endif %}
+                <a href="{{ cancel_url }}" class="btn-primary">Volver a la ficha</a>
+            </div>
+        </div>
+    </section>
+
+    {% else %}
+    {# ------------------------------------------------------------------- #}
+    {# La clínica no tiene ningún cuestionario activo                       #}
+    {# ------------------------------------------------------------------- #}
+    <section class="rounded-3xl bg-surface p-6 shadow-soft ring-1 ring-line sm:p-8">
+        <div class="flex flex-col items-center gap-3 text-center">
+            <span aria-hidden="true" class="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-soft text-brand-fg ring-1 ring-brand-line">
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" />
+                </svg>
+            </span>
+            <h3 class="text-base font-semibold text-content">Aún no hay cuestionarios de anamnesis</h3>
+            <p class="max-w-md text-sm text-content-subtle">
+                Tu clínica no tiene ningún cuestionario activo. Cuando exista uno con una versión publicada,
+                podrás rellenar la anamnesis desde aquí.
+            </p>
+            <a href="{{ cancel_url }}" class="btn-primary mt-2">Volver a la ficha</a>
+        </div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}

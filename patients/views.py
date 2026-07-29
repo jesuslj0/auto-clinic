@@ -1,15 +1,28 @@
+from decimal import Decimal
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Count, Prefetch, Q
+from django.db import transaction
+from django.db.models import Case, Count, IntegerField, Prefetch, Q, Sum, When
 from django.shortcuts import redirect
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from rest_framework import viewsets
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 
 from appointments.models import Appointment
 from audit.mixins import AccessLogMixin, AuditedViewSetMixin
+from clinical.forms import AnamnesisForm, LesionForm
+from clinical.models import (
+    ClinicalAlert,
+    Episode,
+    Lesion,
+    MedicalHistory,
+    QuestionnaireResponse,
+    QuestionnaireTemplate,
+    PerformedProcedure,
+    SignedConsent,
+)
 from core.authentication import ClinicAgent
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
 from core.permissions import IsAgentClinicKey, IsStaffOrAdmin
@@ -66,24 +79,749 @@ class PatientListView(AccessLogMixin, LoginRequiredMixin, ListView):
         return queryset
 
 
-class PatientDetailView(AccessLogMixin, LoginRequiredMixin, DetailView):
+# ---------------------------------------------------------------------------
+# Ficha del paciente (pestañas)
+# ---------------------------------------------------------------------------
+
+#: Pestañas de la ficha, en orden de presentación. Vive aquí y no repartido por
+#: las plantillas para que añadir una sección en fases posteriores sea una línea
+#: (más su ruta y su parcial).
+PATIENT_TABS = [
+    {'key': 'general', 'label': 'Datos generales', 'url_name': 'patients:detail'},
+    {'key': 'anamnesis', 'label': 'Anamnesis', 'url_name': 'patients:tab-anamnesis'},
+    {'key': 'alerts', 'label': 'Alertas', 'url_name': 'patients:tab-alerts'},
+    {'key': 'lesions', 'label': 'Lesiones', 'url_name': 'patients:tab-lesions'},
+    {'key': 'consents', 'label': 'Consentimientos', 'url_name': 'patients:tab-consents'},
+    {'key': 'procedures', 'label': 'Procedimientos', 'url_name': 'patients:tab-procedures'},
+]
+
+#: Orden de presentación de las alertas: primero lo que puede contraindicar un
+#: tratamiento. El campo es texto, así que ordenar por él daría un orden
+#: alfabético sin sentido clínico (crítica, informativa, advertencia).
+_SEVERITY_RANK = Case(
+    When(severity=ClinicalAlert.Severity.CRITICAL, then=0),
+    When(severity=ClinicalAlert.Severity.WARNING, then=1),
+    default=2,
+    output_field=IntegerField(),
+)
+
+
+class PatientTabView(AccessLogMixin, LoginRequiredMixin, DetailView):
+    """Base de las seis pestañas de la ficha del paciente.
+
+    Cada pestaña es una URL real y una vista propia, no un parámetro: pegar la
+    dirección en el navegador o recargar con F5 llega exactamente al mismo sitio
+    que hacer clic. HTMX solo es una mejora encima; si no hay JavaScript, los
+    enlaces navegan y todo sigue funcionando.
+
+    La única diferencia entre una petición normal y una de HTMX es la plantilla:
+    la primera devuelve la página completa y la segunda solo el fragmento
+    intercambiable (barra de pestañas + panel).
+
+    Cada subclase registra su propio `AccessLog` — lo hace `AccessLogMixin`, que
+    va delante en las bases. Es obligatorio: esta ficha expone datos clínicos y
+    las lecturas no emiten señales. Ninguna de estas rutas es alcanzable con el
+    `Api-Key` del agente: son vistas de sesión y la capa clínica no tiene API.
+
+    **Sobre `access_action`:** ahora que cada pestaña enseña datos clínicos
+    propios (anamnesis, procedimientos, consentimientos) se ha valorado afinar la
+    acción por pestaña, y se ha decidido no hacerlo. `AccessLog.Action` es un
+    juego cerrado de valores del modelo de auditoría, y ampliarlo para etiquetar
+    pestañas del panel sería meter vocabulario de interfaz en el registro legal.
+    No hace falta: el registro ya guarda `path`, así que «qué pestaña se
+    consultó» se responde igual, y el sujeto del acceso —el paciente— es el
+    mismo en todas. La acción que sí se afina es la de la firma de un
+    consentimiento, que no se pinta aquí: se sirve por `clinical:consent-
+    signature` y queda como `download_attachment`, que es lo que es.
+    """
+
     model = Patient
     pk_url_kwarg = 'id'
     context_object_name = 'patient'
     template_name = 'patients/detail.html'
+    #: Fragmento que se devuelve a HTMX (barra + panel).
+    partial_template_name = 'patients/_tab_region.html'
+    #: Contenido del panel de esta pestaña.
+    panel_template = None
+    #: Clave de `PATIENT_TABS` que queda marcada como activa.
+    tab = None
+
+    def get_queryset(self):
+        # Mismo aislamiento multi-tenant que el resto de vistas del panel: un
+        # paciente de otra clínica es un 404, no un 403 (y sin AccessLog: no se
+        # ha llegado a leer nada).
+        user = self.request.user
+        queryset = Patient.objects.select_related('clinic')
+        if not user.clinic_id:
+            return queryset
+        return queryset.filter(clinic=user.clinic)
+
+    def is_htmx_swap(self):
+        """¿Hay que devolver solo el fragmento?
+
+        `HX-History-Restore-Request` se excluye a propósito: cuando el usuario
+        vuelve atrás y htmx no tiene la página en su caché, la vuelve a pedir
+        con `HX-Request` para restaurar el `body` entero. Devolverle el
+        fragmento dejaría la página reducida al panel.
+        """
+        headers = self.request.headers
+        return bool(headers.get('HX-Request')) and not headers.get('HX-History-Restore-Request')
+
+    def get_template_names(self):
+        if self.is_htmx_swap():
+            return [self.partial_template_name]
+        return [self.template_name]
+
+    def get_active_alerts(self):
+        """Alertas vigentes del paciente, ordenadas por gravedad.
+
+        Alimenta a la vez la banda superior (visible en todas las pestañas) y la
+        pestaña de alertas. Las desactivadas y las borradas lógicamente quedan
+        fuera: el manager ya excluye las segundas.
+        """
+        return list(
+            ClinicalAlert.objects.for_patient(self.object)
+            .active()
+            .annotate(_severity_rank=_SEVERITY_RANK)
+            .order_by('_severity_rank', '-created_at', '-id')
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['section'] = 'patients'
+        context['patient_tabs'] = PATIENT_TABS
+        context['active_tab'] = self.tab
+        context['panel_template'] = self.panel_template
+        alerts = self.get_active_alerts()
+        context['active_alerts'] = alerts
+        context['has_critical_alerts'] = any(
+            alert.severity == ClinicalAlert.Severity.CRITICAL for alert in alerts
+        )
         return context
 
+
+class PatientDetailView(PatientTabView):
+    """Pestaña «Datos generales»: la URL histórica de la ficha (`patients:detail`)."""
+
+    tab = 'general'
+    panel_template = 'patients/tabs/_general.html'
+
     def get_queryset(self):
+        appointment_queryset = (
+            Appointment.objects
+            .select_related('service', 'professional__user')
+            .order_by('-scheduled_at')
+        )
+        return super().get_queryset().prefetch_related(
+            Prefetch('appointments', queryset=appointment_queryset)
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['appointments'] = self.object.appointments.all()
+        return context
+
+
+class PatientAnamnesisTabView(PatientTabView):
+    """Pestaña «Anamnesis»: los cuestionarios que contestó el paciente.
+
+    Lo que se pinta es el `snapshot` de cada respuesta —la copia literal de las
+    preguntas tal y como se le mostraron ese día—, nunca las `Question` vivas por
+    FK. Por eso el queryset no las precarga: no hacen falta para leer la
+    respuesta, y traerlas invitaría a usarlas. La FK a `TemplateVersion` sí, pero
+    solo para decir de qué documento salió (plantilla y número de versión).
+
+    Solo lectura: una respuesta es inmutable en cuanto existe.
+    """
+
+    tab = 'anamnesis'
+    panel_template = 'patients/tabs/_anamnesis.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['responses'] = list(
+            QuestionnaireResponse.objects
+            .filter(patient=self.object)
+            .select_related('version', 'version__template', 'created_by__user')
+            # El modelo ya ordena por `-filled_at`; el desempate por id evita que
+            # dos respuestas de la misma fecha bailen entre recargas.
+            .order_by('-filled_at', '-id')
+        )
+        return context
+
+
+class PatientAlertsTabView(PatientTabView):
+    tab = 'alerts'
+    panel_template = 'patients/tabs/_alertas.html'
+
+
+class PatientLesionsTabView(PatientTabView):
+    """Pestaña «Lesiones»: el mapa del pie.
+
+    Pinta el mapa y su resumen, y es también la base de las dos vistas que lo
+    modifican (`PatientLesionMapView` y `PatientLesionCreateView`): las tres
+    devuelven la misma región (`patients/_lesion_region.html`) con el mismo
+    contexto, así que el mapa no puede acabar diciendo una cosa y sus recuentos
+    otra.
+
+    **Todas las lesiones de una vez, y el filtrado en el cliente.** La pestaña es
+    del PACIENTE, no de un episodio, así que se traen las lesiones de toda su
+    historia (`episode__history__patient`) y se pintan las ocho combinaciones de
+    vista y pie en el mismo marcado; Alpine solo enseña u oculta la que toca. Con
+    el volumen real —unas pocas lesiones por pie— es una consulta contra ocho, y
+    cambiar de vista es instantáneo y sin viaje al servidor.
+
+    Por eso NO se usa `Lesion.objects.for_view()`: ese helper filtra por episodio,
+    pie y vista, que es la consulta de un mapa de un episodio concreto. Aquí la
+    unidad es el paciente y el filtro por vista ocurre después, al pintar. El
+    helper sigue siendo el camino correcto cuando el mapa se acote a un episodio.
+
+    Lo que va al contexto son los datos ya resueltos —incluidos los recuentos por
+    combinación—, porque contarlos en Alpine sería meter lógica de datos en la
+    interfaz. Alpine solo guarda tres cosas, y ninguna es un dato: qué vista y qué
+    pie se están mirando, y si el modo de marcado está activo.
+
+    Las coordenadas se pasan crudas: `x`/`y` son fracciones (0–1) del SVG y la
+    multiplicación por el `viewBox` la hace la plantilla, que es la única que
+    sabe cuánto mide el dibujo. La zona anatómica se lee aparte
+    (`get_anatomical_zone_display`): es el dato clínico, y no se deriva de las
+    coordenadas ni al revés.
+    """
+
+    tab = 'lesions'
+    panel_template = 'patients/tabs/_lesiones.html'
+    #: Nombre del parámetro con el que llega la vista marcada en el mapa.
+    view_param = 'vista'
+    #: Nombre del parámetro con el que llega el pie marcado en el mapa.
+    laterality_param = 'pie'
+    #: Dónde se sitúa una lesión de la que no se ha marcado punto: en el centro
+    #: de la vista. `x`/`y` no admiten nulo (solo sirven para dibujar), así que
+    #: «sin marcar» necesita un valor, y el centro es el único neutro.
+    default_point = 0.5
+
+    def get_lesions(self):
+        """Lesiones del paciente, de todos sus episodios. Las borradas, fuera.
+
+        Sin `select_related`: de la lesión solo se pintan campos propios y sus
+        `get_*_display`, así que traer el episodio solo serviría para invitar a
+        usarlo.
+        """
+        return list(
+            Lesion.objects
+            .filter(episode__history__patient=self.object)
+            .order_by('-detected_at', '-id')
+        )
+
+    def build_scenes(self, lesions):
+        """Las ocho combinaciones de vista y pie, con sus recuentos.
+
+        Se generan siempre las ocho, tengan lesiones o no: la plantilla necesita
+        poder decir «en esta vista no hay ninguna» sin preguntárselo a nadie.
+        """
+        counts = {}
+        for lesion in lesions:
+            entry = counts.setdefault(
+                (lesion.view, lesion.laterality),
+                {'total': 0, 'active': 0, 'resolved': 0},
+            )
+            entry['total'] += 1
+            if lesion.status == Lesion.Status.ACTIVE:
+                entry['active'] += 1
+            else:
+                entry['resolved'] += 1
+
+        scenes = []
+        for view, view_label in Lesion.View.choices:
+            for laterality, laterality_label in Lesion.Laterality.choices:
+                entry = counts.get(
+                    (view, laterality), {'total': 0, 'active': 0, 'resolved': 0}
+                )
+                scenes.append({
+                    'view': view,
+                    'view_label': view_label,
+                    'laterality': laterality,
+                    'laterality_label': laterality_label,
+                    **entry,
+                })
+        return scenes
+
+    def default_scene(self, scenes):
+        """Por dónde se abre el mapa: por donde haya algo que ver.
+
+        Abrir siempre en «dorsal, pie izquierdo» dejaría el mapa vacío en la
+        mayoría de fichas y obligaría a buscar a mano. Se elige la combinación
+        con más lesiones y, en empate, la primera en el orden de los choices
+        (`max` devuelve el primer máximo), para que la ficha no baile entre
+        recargas. Sin lesiones, la primera combinación.
+        """
+        return max(scenes, key=lambda scene: scene['total'])
+
+    # -- punto marcado en el mapa -------------------------------------------
+
+    def read_fraction(self, raw):
+        """Una coordenada que llega del cliente: fracción 0–1, o `None`.
+
+        Se usa solo para **prerrellenar** el formulario, así que un valor
+        ausente, ilegible o fuera de rango no es un error: se cae al centro de la
+        vista. Lo que sí se valida de verdad es el POST, en `LesionForm`.
+        """
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return None
+        if not (0.0 <= value <= 1.0):
+            return None
+        # Cuatro decimales sobre el `viewBox` es una décima de unidad: más
+        # precisión que la que tiene el dedo de nadie, y números legibles.
+        return round(value, 4)
+
+    def build_point(self, form):
+        """Dónde se pinta el marcador provisional mientras el alta está abierta.
+
+        Sale del propio formulario (`form['x'].value()`), así que vale igual para
+        el alta recién abierta y para el formulario que vuelve con errores: en
+        los dos casos el punto que se ve es el que se va a guardar.
+        """
+        views = dict(Lesion.View.choices)
+        lateralities = dict(Lesion.Laterality.choices)
+
+        x = self.read_fraction(form['x'].value())
+        y = self.read_fraction(form['y'].value())
+        if x is None or y is None:
+            x = y = self.default_point
+        view = form['view'].value()
+        laterality = form['laterality'].value()
+        return {
+            'x': x,
+            'y': y,
+            # Sin clic, el punto es el centro exacto de la vista, y eso es justo
+            # lo que dice el panel. Que alguien acierte el centro al milímetro y
+            # lea «sin marcar» es un caso imposible de distinguir y sin
+            # consecuencias: el texto seguiría siendo verdad.
+            'marked': not (x == self.default_point and y == self.default_point),
+            'view': view,
+            'laterality': laterality,
+            'view_label': views.get(view, ''),
+            'laterality_label': lateralities.get(laterality, ''),
+        }
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        lesions = self.get_lesions()
+        scenes = self.build_scenes(lesions)
+        opening = self.default_scene(scenes)
+        context.update({
+            'lesions': lesions,
+            'lesion_views': Lesion.View.choices,
+            'lesion_lateralities': Lesion.Laterality.choices,
+            'lesion_scenes': scenes,
+            'default_view': opening['view'],
+            'default_laterality': opening['laterality'],
+            'lesion_create_url': reverse(
+                'patients:lesion-create', kwargs={'id': self.object.pk}
+            ),
+            'lesion_map_url': reverse(
+                'patients:lesion-map', kwargs={'id': self.object.pk}
+            ),
+            'view_param': self.view_param,
+            'laterality_param': self.laterality_param,
+        })
+        # El mapa se pinta igual con formulario y sin él; la plantilla decide.
+        context.setdefault('lesion_form', None)
+        context.setdefault('lesion_point', None)
+        context.setdefault('lesion_created', None)
+        return context
+
+
+class PatientConsentsTabView(PatientTabView):
+    """Pestaña «Consentimientos»: qué firmó el paciente, y la prueba de ello.
+
+    Las dos pruebas son el texto literal firmado (`text_copy`, que puede no
+    parecerse al de la versión vigente) y la imagen de la firma. La firma **no**
+    se pinta aquí: vive en el bucket privado y solo se sirve por
+    `clinical:consent-signature`, que comprueba el permiso, firma la URL y deja
+    su propio `AccessLog` de descarga. La plantilla enlaza a esa vista y nada
+    más; nunca a `signature_image.url`.
+
+    `version__template` se precarga porque de la versión se enseñan el nombre de
+    la plantilla y el número, no su texto actual.
+    """
+
+    tab = 'consents'
+    panel_template = 'patients/tabs/_consentimientos.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['consents'] = list(
+            SignedConsent.objects
+            .filter(patient=self.object)
+            .select_related('version', 'version__template')
+            .order_by('-signed_at', '-id')
+        )
+        return context
+
+
+class PatientProceduresTabView(PatientTabView):
+    """Pestaña «Procedimientos»: qué se le hizo al paciente y por cuánto.
+
+    Se llega por la cadena clínica (`visit__episode__history__patient`) y no por
+    la propiedad `patient` del modelo, que resolvería la cadena una vez por fila.
+
+    **El catálogo no se toca.** Ni aquí ni en la plantilla se lee `service.name`
+    ni `service.price`: lo que se enseña —y lo que se suma— son los campos
+    congelados, que es el sentido entero del modelo. Por eso `service` queda
+    fuera del `select_related`: no se necesita, y traerlo solo serviría para
+    caer en la tentación.
+
+    El total se agrega en la base de datos: sumar en la plantilla obligaría a un
+    filtro de acumulación y dejaría el importe a merced del orden de pintado.
+    """
+
+    tab = 'procedures'
+    panel_template = 'patients/tabs/_procedimientos.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        procedures = (
+            PerformedProcedure.objects
+            .filter(visit__episode__history__patient=self.object)
+            .select_related('visit', 'created_by__user')
+            .order_by('-performed_at', '-id')
+        )
+        context['procedures'] = list(procedures)
+        context['procedures_total'] = (
+            procedures.aggregate(total=Sum('frozen_price'))['total'] or Decimal('0.00')
+        )
+        return context
+
+
+# ---------------------------------------------------------------------------
+# Altas clínicas desde la ficha (anamnesis, lesiones)
+# ---------------------------------------------------------------------------
+
+
+class EpisodeAuthoringMixin:
+    """Quién registra y de qué episodio cuelga lo registrado.
+
+    Lo comparten el alta de anamnesis y el alta de lesión, que resuelven el
+    episodio igual: el que se ha elegido en el formulario (siempre uno abierto
+    del paciente, validado por `EpisodeSelectionMixin`) o uno nuevo con el motivo
+    de consulta indicado. `self.object` es el paciente.
+    """
+
+    def get_professional(self):
+        """El `Professional` del usuario, o `None` si no tiene perfil.
+
+        Un administrativo puede registrar lo que ha dictado el profesional; los
+        modelos admiten `created_by` vacío precisamente porque no todo canal de
+        entrada tiene profesional detrás.
+        """
+        return getattr(self.request.user, 'professional_profile', None)
+
+    def create_episode(self, reason, professional):
+        history = MedicalHistory.objects.filter(patient=self.object).first()
+        if history is None:
+            # Los pacientes de alta desde que existe la capa clínica ya tienen
+            # historia (la crea una señal); esto cubre a los anteriores.
+            history = MedicalHistory.objects.create(
+                patient=self.object, clinic=self.object.clinic
+            )
+        return Episode.objects.create(
+            history=history,
+            reason=reason.strip(),
+            responsible_professional=professional,
+        )
+
+    def resolve_episode(self, form, professional):
+        """El episodio elegido en el formulario o, si no hay, uno recién abierto."""
+        return form.cleaned_data.get('episode') or self.create_episode(
+            form.cleaned_data['episode_reason'], professional
+        )
+
+
+class PatientAnamnesisCreateView(
+    EpisodeAuthoringMixin, AccessLogMixin, LoginRequiredMixin, DetailView
+):
+    """Rellenar una anamnesis para un paciente, desde el panel.
+
+    **Siempre la versión vigente.** El formulario se construye sobre
+    `template.current_version` y solo sobre ella: un borrador lo rechazaría el
+    propio modelo (`TemplateVersionNotPublished`) y una versión antigua sería
+    peor todavía, porque colaría sin error una anamnesis obsoleta. Si el
+    cuestionario no tiene versión vigente publicada, la página lo dice; no
+    revienta.
+
+    El alta va por `QuestionnaireResponse.record()`, nunca por
+    `objects.create()`: es la vía que congela el snapshot y dispara el motor de
+    alertas. Y se llama SIN `derive=False`, que es justo lo que hace que
+    contestar «sí» a la diabetes levante su aviso crítico en la ficha.
+
+    Sin API REST y sin `hx-post`: es un formulario de sesión con CSRF. Esta capa
+    no tiene endpoints a propósito, para que el `Api-Key` del agente de n8n no
+    llegue hasta aquí. La escritura queda en el `ChangeLog` por las señales de
+    auditoría (`QuestionnaireResponse` está registrado en `ClinicalConfig.ready`);
+    la lectura de esta pantalla la registra `AccessLogMixin`.
+    """
+
+    model = Patient
+    pk_url_kwarg = 'id'
+    context_object_name = 'patient'
+    template_name = 'patients/anamnesis_form.html'
+    #: Nombre del parámetro con el que se elige cuestionario cuando hay varios.
+    template_param = 'cuestionario'
+
+    def get_queryset(self):
+        # Mismo aislamiento multi-tenant que `PatientTabView`: un paciente de
+        # otra clínica es un 404.
         user = self.request.user
-        appointment_queryset = Appointment.objects.select_related('service', 'professional__user').order_by('-scheduled_at')
-        queryset = Patient.objects.prefetch_related(Prefetch('appointments', queryset=appointment_queryset))
+        queryset = Patient.objects.select_related('clinic')
         if not user.clinic_id:
             return queryset
         return queryset.filter(clinic=user.clinic)
+
+    # -- resolución del cuestionario y la versión ---------------------------
+
+    def get_questionnaire_templates(self):
+        """Cuestionarios activos de la clínica DEL PACIENTE, siempre filtrados."""
+        return list(
+            QuestionnaireTemplate.objects
+            .filter(clinic_id=self.object.clinic_id, is_active=True)
+            .order_by('name')
+        )
+
+    def resolve_template(self, templates):
+        """Cuál se rellena: el pedido, el único que hay, o ninguno (hay que elegir)."""
+        requested = self.request.POST.get(self.template_param) or self.request.GET.get(
+            self.template_param
+        )
+        if requested:
+            for template in templates:
+                if str(template.pk) == str(requested):
+                    return template
+            return None
+        if len(templates) == 1:
+            return templates[0]
+        return None
+
+    def get_form(self, version, data=None):
+        return AnamnesisForm(data, version=version, patient=self.object)
+
+    # -- render -------------------------------------------------------------
+
+    def get_context_data(self, **kwargs):
+        """Estado de la pantalla + formulario.
+
+        No se sobrescribe `get()` a propósito: el `get()` de `AccessLogMixin`
+        quedaría eclipsado por el de la subclase y la lectura no se registraría.
+        Todo el trabajo cabe aquí, que es donde `DetailView` lo espera.
+        """
+        context = super().get_context_data(**kwargs)
+        templates = self.get_questionnaire_templates()
+        template = self.resolve_template(templates)
+        version = template.current_version if template else None
+
+        if not templates:
+            state = 'sin_cuestionarios'
+        elif template is None:
+            state = 'elegir_cuestionario'
+        elif version is None:
+            state = 'sin_version'
+        else:
+            state = 'formulario'
+
+        context.update({
+            'section': 'patients',
+            'cancel_url': reverse('patients:tab-anamnesis', kwargs={'id': self.object.pk}),
+            'questionnaire_templates': templates,
+            'questionnaire_template': template,
+            'version': version,
+            'state': state,
+            'template_param': self.template_param,
+        })
+        # Un formulario ya ligado (POST con errores) llega por `kwargs` y manda.
+        if context.get('form') is None:
+            context['form'] = self.get_form(version) if state == 'formulario' else None
+        return context
+
+    # -- alta ---------------------------------------------------------------
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        templates = self.get_questionnaire_templates()
+        template = self.resolve_template(templates)
+        version = template.current_version if template else None
+
+        if version is None:
+            # No hay nada que contestar: se vuelve a la página, que explicará por
+            # qué (sin cuestionarios, sin versión vigente o hay que elegir uno).
+            # El cuestionario pedido viaja de vuelta en la query string para no
+            # perder de vista cuál era.
+            messages.error(request, 'No hay ningún cuestionario vigente que rellenar.')
+            requested = request.POST.get(self.template_param)
+            if requested:
+                return redirect(
+                    f'{request.path}?{urlencode({self.template_param: requested})}'
+                )
+            return redirect(request.path)
+
+        form = self.get_form(version, data=request.POST)
+        if not form.is_valid():
+            return self.render_to_response(self.get_context_data(form=form))
+
+        professional = self.get_professional()
+        # El episodio y la respuesta se crean juntos o no se crea ninguno: un
+        # fallo a medias dejaría un episodio abierto sin anamnesis dentro.
+        with transaction.atomic():
+            episode = self.resolve_episode(form, professional)
+            response = QuestionnaireResponse.record(
+                version=version,
+                patient=self.object,
+                episode=episode,
+                answers=form.answers(),
+                source=QuestionnaireResponse.Source.PROFESSIONAL,
+                created_by=professional,
+            )
+
+        self.announce(response)
+        return redirect('patients:tab-anamnesis', id=self.object.pk)
+
+    def announce(self, response):
+        """Avisa de lo que ha pasado, incluidas las alertas que se han levantado.
+
+        Contar las alertas derivadas de ESTA respuesta es lo que hace visible que
+        el motor ha funcionado: sin este número, la derivación ocurre en silencio
+        y hay que irse a otra pestaña para descubrirlo.
+        """
+        raised = ClinicalAlert.objects.filter(source_response=response).count()
+        if raised:
+            messages.success(
+                self.request,
+                f'Anamnesis registrada. Se {"ha" if raised == 1 else "han"} levantado '
+                f'{raised} alerta{"s" if raised != 1 else ""} clínica'
+                f'{"s" if raised != 1 else ""} en la ficha del paciente.',
+            )
+        else:
+            messages.success(self.request, 'Anamnesis registrada correctamente.')
+
+
+class PatientLesionMapView(PatientLesionsTabView):
+    """Solo el mapa y su resumen, sin la barra de pestañas.
+
+    Existe por una sola razón: **cerrar el alta**. Al cancelar hay que volver a
+    pintar la región del mapa (`#lesiones-region`) sin el formulario, y la
+    pestaña completa devolvería la barra y el panel enteros, que no es lo que
+    hay bajo ese objetivo.
+
+    Sin htmx sigue siendo una página normal (hereda `template_name`), así que el
+    «Cancelar» es un enlace de verdad y no un callejón sin salida.
+    """
+
+    partial_template_name = 'patients/_lesion_region.html'
+
+
+class PatientLesionCreateView(EpisodeAuthoringMixin, PatientLesionMapView):
+    """Alta de una lesión sobre el mapa del pie.
+
+    **La captura del punto es del cliente; la validación, del servidor.** Alpine
+    convierte el clic a fracciones 0–1 del `viewBox` y las manda por la query
+    string; aquí solo sirven para prerrellenar. Lo que decide es el POST, que
+    pasa por `LesionForm` (rango 0–1 como error de campo), por `Lesion.save()` y
+    por el `CheckConstraint` de la tabla.
+
+    **El permiso es el mismo que el del resto de la ficha**: el `get_queryset()`
+    heredado filtra por la clínica del usuario, así que un paciente ajeno es un
+    404 también aquí, que es una URL invocable directamente y no solo el destino
+    de un `hx-post`.
+
+    **Sin API y sin operaciones masivas.** La escritura queda en el `ChangeLog`
+    por las señales de auditoría (`Lesion` está registrada en
+    `ClinicalConfig.ready`), lo que exige crear la lesión objeto a objeto. La
+    lectura de esta pantalla la registra `AccessLogMixin`.
+
+    Responde en dos modos:
+
+    - con htmx, devuelve el fragmento del mapa (`_lesion_region.html`) para que
+      el marcador nuevo aparezca sin recargar;
+    - sin htmx, la página completa de la ficha y, si el alta cuaja, una
+      redirección a la pestaña con su mensaje.
+    """
+
+    def get_form(self, data=None):
+        if data is not None:
+            return LesionForm(data, patient=self.object)
+        return LesionForm(patient=self.object, initial=self.get_initial())
+
+    def get_initial(self):
+        """Vista, pie y punto tal y como estaba el mapa al abrir el alta.
+
+        La vista y el pie se validan contra los `choices`: lo que llegue por la
+        query string y no sea uno de ellos se ignora y manda el valor con el que
+        abre el mapa.
+        """
+        params = self.request.GET
+        views = dict(Lesion.View.choices)
+        lateralities = dict(Lesion.Laterality.choices)
+
+        scenes = self.build_scenes(self.get_lesions())
+        opening = self.default_scene(scenes)
+
+        view = params.get(self.view_param)
+        laterality = params.get(self.laterality_param)
+        x = self.read_fraction(params.get('x'))
+        y = self.read_fraction(params.get('y'))
+        if x is None or y is None:
+            # Se ha abierto el formulario sin marcar (por teclado, por ejemplo).
+            x = y = self.default_point
+
+        return {
+            'view': view if view in views else opening['view'],
+            'laterality': laterality if laterality in lateralities else opening['laterality'],
+            'x': x,
+            'y': y,
+        }
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Registrada la lesión, el formulario se cierra: lo que se devuelve es el
+        # mapa con el marcador nuevo, no otro formulario en blanco.
+        if context.get('lesion_created') is None and context.get('lesion_form') is None:
+            context['lesion_form'] = self.get_form()
+        if context.get('lesion_form') is not None:
+            point = self.build_point(context['lesion_form'])
+            context['lesion_point'] = point
+            # Sin htmx se pinta la página entera, y el mapa tiene que abrirse
+            # donde está el punto: si no, el marcador provisional quedaría en una
+            # vista que no se está mirando.
+            context['default_view'] = point['view']
+            context['default_laterality'] = point['laterality']
+        return context
+
+    def post(self, request, *args, **kwargs):
+        # Resolver el objeto es lo que aplica el aislamiento: paciente de otra
+        # clínica, 404, y no se ha tocado nada.
+        self.object = self.get_object()
+        form = self.get_form(data=request.POST)
+
+        if not form.is_valid():
+            return self.render_to_response(self.get_context_data(lesion_form=form))
+
+        professional = self.get_professional()
+        # El episodio y la lesión se crean juntos o no se crea ninguno: un fallo
+        # a medias dejaría un episodio abierto sin la lesión que lo motivó.
+        with transaction.atomic():
+            episode = self.resolve_episode(form, professional)
+            lesion = form.save(commit=False)
+            lesion.episode = episode
+            lesion.created_by = professional
+            lesion.save()
+
+        if self.is_htmx_swap():
+            # Nada de `messages` aquí: no hay recarga que los vacíe y el aviso
+            # saldría luego, fuera de sitio. El fragmento trae el suyo.
+            return self.render_to_response(self.get_context_data(lesion_created=lesion))
+
+        messages.success(request, 'Lesión registrada correctamente.')
+        return redirect('patients:tab-lesions', id=self.object.pk)
 
 
 class PatientCreateView(LoginRequiredMixin, CreateView):

@@ -27,3 +27,35 @@ class EpisodeClosed(Exception):
 
     Un episodio cerrado no admite visitas nuevas sin reabrirse explícitamente.
     """
+
+
+class TemplateVersionPublished(Exception):
+    """Se intentó modificar una versión de cuestionario ya publicada o sus preguntas.
+
+    Una versión publicada es el documento que se respondió: su contenido queda
+    congelado. Para cambiar el cuestionario se publica una versión nueva.
+    """
+
+
+class TemplateVersionNotPublished(Exception):
+    """Se intentó responder (o marcar como vigente) una versión en borrador.
+
+    Solo se responde lo que está publicado: un borrador aún puede cambiar, y una
+    respuesta debe poder señalar siempre a un documento estable.
+    """
+
+
+class ConsentVersionPublished(Exception):
+    """Se intentó modificar una versión de consentimiento ya publicada.
+
+    Una versión publicada es el documento que los pacientes han firmado: su texto
+    queda congelado. Para cambiar el consentimiento se publica una versión nueva,
+    y las firmas anteriores no se tocan.
+    """
+
+
+class ConsentVersionNotPublished(Exception):
+    """Se intentó firmar (o marcar como vigente) un consentimiento en borrador.
+
+    No se le hace firmar a un paciente un texto que aún puede cambiar.
+    """

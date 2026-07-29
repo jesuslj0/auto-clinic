@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load patient_extras %}
 
 {% block title %}Pacientes · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
 {% block page_heading %}Pacientes{% endblock %}
@@ -38,7 +39,9 @@
             </div>
             <div class="mt-2 space-y-1 text-xs text-content-subtle">
                 {% if patient.email %}<p class="truncate">{{ patient.email }}</p>{% endif %}
-                <p>{{ patient.phone }}</p>
+                {% with tel=patient.phone|phone_parts %}
+                <p>{% if tel.prefix %}<span class="text-content-faint">{{ tel.prefix }}</span> {% endif %}<span class="text-content-muted">{{ tel.number }}</span></p>
+                {% endwith %}
             </div>
         </a>
         {% empty %}
@@ -63,7 +66,9 @@
                     <tr>
                         <td class="px-6 py-4 font-medium text-content"><a href="{% url 'patients:detail' patient.id %}" class="hover:text-brand-fg">{{ patient }}</a></td>
                         <td class="px-6 py-4 text-content-muted">{{ patient.email|default:'—' }}</td>
-                        <td class="px-6 py-4 text-content-muted">{{ patient.phone }}</td>
+                        {% with tel=patient.phone|phone_parts %}
+                        <td class="whitespace-nowrap px-6 py-4">{% if tel.prefix %}<span class="text-content-faint">{{ tel.prefix }}</span> {% endif %}<span class="text-content-muted">{{ tel.number }}</span></td>
+                        {% endwith %}
                         <td class="px-6 py-4 text-content-muted">{{ patient.date_of_birth|date:"j M, Y"|default:'—' }}</td>
                         <td class="px-6 py-4 text-content-muted">{{ patient.appointments.count|default:0 }}</td>                    </tr>
                 {% empty %}

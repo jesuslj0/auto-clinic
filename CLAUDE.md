@@ -50,7 +50,7 @@ python manage.py runserver    # Uses config.settings.dev by default
 | `agent` | WhatsApp bot state: `AgentMemory` (contexto del LLM), `ConversationSession` (hilo), `ChatMessage` (historial append-only), `WorkflowError` |
 | `knowledge` | Clinic knowledge base: `ClinicKnowledgeBase`, `ClinicInfoQuery`, `ClinicInfoCache` |
 | `audit` | Append-only audit trail: `ChangeLog` (writes, via signals) and `AccessLog` (reads, instrumented per view) |
-| `clinical` | Clinical core: `MedicalHistory`, `Episode`, `Visit`, `ClinicalNote` (SOAP), `Addendum`. Immutable after signing; soft-delete only |
+| `clinical` | Clinical core: `MedicalHistory`, `Episode`, `Visit`, `ClinicalNote` (SOAP), `Addendum`. Immutable after signing; soft-delete only. Also versioned anamnesis: `QuestionnaireTemplate`, `TemplateVersion`, `Question`, `QuestionnaireResponse` (immutable literal snapshot) , `ClinicalAlert` (per-patient, deactivated never deleted), `Lesion` (foot-map, coded zone + normalized coords) and its follow-up: `LesionObservation` (measurements per visit) + `LesionAttachment` (photo in a private R2 bucket, signed URLs only). `PerformedProcedure` links a visit to the service catalogue with the price frozen. Versioned informed consent: `ConsentTemplate`, `ConsentVersion`, `SignedConsent` (literal `text_copy` + signature in the private bucket) |
 | `core.models.SoftDeleteModel` | Reusable soft-delete mixin (`deleted_at`, `objects`/`all_objects`, `can_be_deleted()`) |
 
 ### Auditing (mandatory for clinical data)
@@ -81,13 +81,72 @@ touching it — see `clinical/README.md` for the full picture:
   `UPDATE` and no `DELETE`, ever — enforced both in `save()`/`can_be_deleted()`
   and by a PostgreSQL trigger (`clinical/migrations/0002`). The only possible
   change is adding an `Addendum` (append-only). Never weaken this.
+- **Anamnesis is versioned, and answers are frozen.** Publishing a
+  `TemplateVersion` freezes it and its `Question`s; changing a questionnaire
+  means publishing a new version, never editing the old one. A
+  `QuestionnaireResponse` stores a literal `snapshot` (question text + answer),
+  not FKs to `Question`, so later edits can never rewrite what a patient
+  answered. Same two levels (`clinical/migrations/0004`).
+- **Informed consent is versioned, and the signed text is copied.** Same two
+  levels as the anamnesis: publishing a `ConsentVersion` freezes it (here the
+  text itself is frozen — the document *is* the text) and a draft cannot be
+  signed. `SignedConsent.text_copy` stores the **full literal text** signed, not
+  just the FK to the version, so republishing or restructuring can never rewrite
+  what a patient agreed to. `SignedConsent.sign()` is the normal path; the record
+  is immutable and never deleted (`clinical/migrations/0011`).
+- **A `Lesion` stores its clinical zone and its drawing coordinates
+  separately.** `anatomical_zone` is coded (never free text) and survives an SVG
+  redesign; `x`/`y` are 0–1 fractions of the SVG, never pixels, and are only for
+  rendering. Never derive one from the other. Location is frozen once created.
+- **A lesion is a series, not a datum.** `LesionObservation` holds what was seen
+  on each visit (measurements in mm as separate numeric fields — comparing them
+  over time is the whole point) and `LesionAttachment` holds that day's photo.
+  The visit must belong to the lesion's episode; `lesion`/`visit` are frozen.
+  `lesion.evolution()` returns the series oldest-first, explicitly.
+- **Clinical photos live in a private bucket, never in `MEDIA_URL`.** The
+  `clinical_media` storage (Cloudflare R2, `default_acl=None`,
+  `querystring_auth=True`) is separate from public media. Store the **object key
+  only, never a URL** — signed URLs are generated per request and expire. Keys
+  are UUIDs (`clinical/files.py`), never patient-derived names. Uploads are
+  validated by **content** (size → byte signature → Pillow decode), allow-list
+  JPEG/PNG/WebP, with a tighter size limit for non-professional sources; this
+  happens in `save()`, so every intake path goes through it. An attachment is
+  frozen once uploaded, and soft-deleting it keeps the bucket object. Consent
+  signatures live in the same private bucket under their own key prefix, with
+  the same rules.
+- **Serving any clinical file goes through `signed_url_for(document, user)`**,
+  which checks permission and signs in the same function — there is no
+  sign-without-checking path. It works for anything exposing `.file` and
+  `.patient` (lesion photos, consent signatures). `GET
+  /clinical/attachments/<public_id>/` and `GET
+  /clinical/consents/<public_id>/signature/` share one base view
+  (`ProtectedFileRedirectView`), log an `AccessLog` `download_attachment` and
+  redirect; the agent is denied explicitly.
+- **A performed procedure freezes the catalogue, it does not read it.**
+  `PerformedProcedure` copies `frozen_service_name` and `frozen_price` from the
+  `Service` on its first `save()` and never re-reads the catalogue — a later
+  price rise must not rewrite what last year's procedures cost. The FK to
+  `Service` is provenance only (`DO_NOTHING`, `db_constraint=False`, so retiring
+  a service neither cascades nor emits an unaudited bulk `UPDATE`). The frozen
+  fields, the visit and the service are immutable afterwards; the treated zone is
+  coded, never free text.
+- **Alerts derive from the anamnesis by `Question.code`, never by text or
+  order.** Rules live as data in `clinical/rules.py`; `evaluate_snapshot()` is
+  pure (no DB) and `clinical/derivation.py` does the DB work, triggered by an
+  explicit call in `QuestionnaireResponse.record()` — not a signal — so the
+  panel, the patient form and the n8n path all go through it. The engine must
+  never touch `source='manual'` alerts, and corrections deactivate, never
+  delete.
 - **Nothing is physically deleted.** Every model uses `SoftDeleteModel`; deletion
   is logical and cascades manually (`delete()` overrides). `Addendum` is
-  append-only.
+  append-only. A `ClinicalAlert` is never deleted either — `deactivate()` sets
+  `is_active=False` and keeps the row, so "what was known back then" stays
+  answerable.
 - **Off-limits to the n8n token.** This layer has **no REST API** on purpose, so
   the agent's `Api-Key` cannot reach clinical data. `Visit` links *to*
-  `Appointment`, never the reverse. **Any new endpoint over this layer must
-  instrument `AccessLog` and stay denied to the agent.**
+  `Appointment`, never the reverse. The only HTTP surface is the session-only
+  attachment view above. **Any new endpoint over this layer must instrument
+  `AccessLog` and stay denied to the agent.**
 - **Retention is not fixed in code.** `CLINICAL_RETENTION_YEARS` is a setting with
   a conservative default; there is no automatic purge (pending autonomic law).
 
@@ -173,9 +232,29 @@ CELERY_BROKER_URL=redis://redis:6379/1
 CELERY_RESULT_BACKEND=redis://redis:6379/2
 ```
 
+Clinical photo storage (Cloudflare R2, private bucket — the `clinical_media`
+backend). Without these, uploading a `LesionAttachment` fails; nothing else does:
+```
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=
+R2_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
+```
+Keep the bucket **private** (no public access, no custom public domain). Optional
+overrides: `CLINICAL_MEDIA_URL_EXPIRE` (signed-URL seconds, default 600),
+`CLINICAL_ATTACHMENT_MAX_BYTES`, `CLINICAL_ATTACHMENT_MAX_BYTES_EXTERNAL`.
+
 ## Key notes
 
-- **No tests exist** — the project has no test files or testing framework configured.
+- **Tests: pytest + pytest-django**, configured in `pytest.ini`
+  (`DJANGO_SETTINGS_MODULE = config.settings.test`). They live in `tests/`,
+  mirroring the app layout (`tests/clinical/`, `tests/audit/`, …), with shared
+  fixtures in `tests/conftest.py`. They need a reachable PostgreSQL — `.env`
+  points `POSTGRES_HOST` at the Docker service, so from the host run:
+  ```bash
+  POSTGRES_HOST=localhost pytest              # whole suite
+  POSTGRES_HOST=localhost pytest tests/clinical
+  ```
 - **No linting configuration** — no flake8, black, or isort setup.
 - Templates are in Spanish (recent migration from English).
 - Static files served by WhiteNoise in production.

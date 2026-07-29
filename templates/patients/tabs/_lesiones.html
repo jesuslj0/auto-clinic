@@ -1,0 +1,219 @@
+{% comment %}
+Panel «Lesiones»: el mapa del pie, con captura por clic y alta.
+
+Qué hay aquí y qué no:
+
+- Se pintan los marcadores de las lesiones del paciente (`lesions`) sobre un SVG
+  de marcador de posición, con un selector de vista (dorsal/plantar/medial/
+  lateral) y otro de pie (izquierdo/derecho).
+- Se puede **marcar un punto en el mapa y registrar allí una lesión**.
+- NO hay detalle de la lesión, ni observaciones, ni fotos, ni evolución. Los
+  marcadores ya registrados siguen sin ser pulsables.
+
+**Alpine guarda tres cosas y ninguna es un dato**: qué vista y qué pie se están
+mirando, y si el modo de marcado está activo. Las coordenadas del clic no llegan
+a guardarse en el estado: se convierten y viajan en el acto a la petición que
+abre el formulario. Todo lo demás —los recuentos, el estado vacío, qué marcador
+pertenece a qué combinación y la validación del punto— lo resuelve el servidor.
+
+**El alta la hace htmx, no Alpine**: `hx-post` a `patients:lesion-create`, que
+devuelve la región del mapa ya repintada con el marcador nuevo. El token de CSRF
+sale del `hx-headers` del `<body>` (`templates/base.html`); aquí no se repite.
+
+Sobre los selectores: se marcan como `radiogroup`/`radio` y no como pestañas
+porque no son cuatro paneles distintos, sino un único mapa cuyo contenido cambia
+(y la ficha ya tiene una barra de pestañas por encima; anidar otra confundiría).
+Como en `_patient_tabs.html`, no hay `tabindex` de rol itinerante: todos los
+botones son alcanzables con el tabulador.
+{% endcomment %}
+<script>
+    /**
+     * Estado de interfaz del mapa del pie.
+     *
+     * Se define aquí, junto al panel que lo usa, porque el panel llega por htmx:
+     * el navegador evalúa este `<script>` al insertarlo, de forma síncrona, y
+     * Alpine inicializa los nodos nuevos después, así que la función siempre
+     * está definida cuando se evalúa el `x-data`.
+     */
+    window.mapaLesiones = function (config) {
+        return {
+            vista: config.vista,
+            pie: config.pie,
+            //: Modo de marcado: el siguiente clic sobre el mapa sitúa la lesión.
+            captura: false,
+
+            alternarCaptura() {
+                this.captura = !this.captura;
+            },
+
+            salirDeCaptura() {
+                this.captura = false;
+            },
+
+            /**
+             * Convierte un clic del ratón en fracciones 0–1 del `viewBox`.
+             *
+             * Se usa `getScreenCTM()`, la matriz que el propio SVG expone para
+             * pasar de píxeles de pantalla a sus unidades internas, y NO la
+             * proporción sobre `getBoundingClientRect()`. La razón es que el
+             * rectángulo del elemento y el área del dibujo no son lo mismo: con
+             * `preserveAspectRatio` (el valor por defecto) el `viewBox` se
+             * encaja centrado dentro del elemento y sobran bandas a los lados o
+             * arriba y abajo. Dividir por el ancho del rectángulo daría un punto
+             * desplazado en cuanto la caja no tuviera exactamente la proporción
+             * del dibujo, y además ignoraría cualquier transformación heredada
+             * (zoom, `transform` de un contenedor). La matriz lo contempla todo,
+             * a cualquier tamaño de pantalla.
+             */
+            fraccionesDelClic(evento) {
+                const svg = evento.currentTarget;
+                const matriz = svg.getScreenCTM();
+                if (!matriz) return null;
+
+                const caja = svg.viewBox.baseVal;
+                const punto = new DOMPoint(evento.clientX, evento.clientY)
+                    .matrixTransform(matriz.inverse());
+
+                // Un clic en las bandas sobrantes cae fuera del dibujo: se
+                // recorta al borde en vez de descartarlo, que es lo que el
+                // usuario quería decir. El servidor lo revalida igualmente.
+                const recortar = (valor) => Math.min(1, Math.max(0, valor));
+                return {
+                    // Cuatro decimales sobre el `viewBox` es una décima de
+                    // unidad: más precisión de la que tiene el dedo de nadie.
+                    x: recortar((punto.x - caja.x) / caja.width).toFixed(4),
+                    y: recortar((punto.y - caja.y) / caja.height).toFixed(4),
+                };
+            },
+
+            marcarPunto(evento) {
+                if (!this.captura) return;
+                const punto = this.fraccionesDelClic(evento);
+                if (!punto) return;
+                this.abrirAlta(punto);
+            },
+
+            /**
+             * Pide el formulario de alta con lo que hay puesto en el mapa.
+             * `punto` puede ser nulo: es la vía sin ratón, y el servidor sitúa
+             * entonces la lesión en el centro de la vista.
+             */
+            abrirAlta(punto) {
+                this.captura = false;
+                const parametros = new URLSearchParams({
+                    vista: this.vista,
+                    pie: this.pie,
+                });
+                if (punto) {
+                    parametros.set('x', punto.x);
+                    parametros.set('y', punto.y);
+                }
+                htmx.ajax('GET', config.urlAlta + '?' + parametros.toString(), {
+                    source: this.$el,
+                    target: '#lesiones-region',
+                    swap: 'innerHTML',
+                });
+            },
+        };
+    };
+</script>
+<section
+    class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line"
+    x-data="mapaLesiones({ vista: '{{ default_view }}', pie: '{{ default_laterality }}', urlAlta: '{{ lesion_create_url }}' })"
+    @keydown.escape.window="salirDeCaptura()"
+    hx-indicator="#lesiones-spinner"
+>
+    <div class="flex flex-col gap-4 border-b border-line px-6 py-5 sm:flex-row sm:items-start sm:justify-between">
+        <div class="min-w-0">
+            <h3 class="text-lg font-semibold text-content">Lesiones</h3>
+            <p class="mt-1 text-sm text-content-subtle">Localización de las lesiones registradas sobre el mapa del pie. El detalle, las medidas y las fotografías llegan en una fase posterior.</p>
+        </div>
+        <div class="flex flex-shrink-0 items-center gap-2">
+            {# Indicador de carga: htmx le pone la clase `htmx-request` mientras vuela la petición. #}
+            <span id="lesiones-spinner" class="htmx-indicator text-brand-fg" aria-hidden="true">
+                <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
+                    <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"></path>
+                </svg>
+            </span>
+            <button
+                type="button"
+                class="btn-primary max-sm:px-3"
+                :class="{ 'btn-primary': !captura, 'btn-secondary': captura }"
+                @click="alternarCaptura()"
+                aria-pressed="false"
+                :aria-pressed="captura ? 'true' : 'false'"
+                :aria-label="captura ? 'Salir del modo de marcado' : 'Añadir una lesión marcándola en el mapa'"
+            >
+                <svg x-show="!captura" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                <svg x-show="captura" x-cloak class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span class="hidden sm:inline" x-text="captura ? 'Salir del marcado' : 'Añadir lesión'">Añadir lesión</span>
+            </button>
+        </div>
+    </div>
+
+    {% comment %}El aviso del modo de marcado se anuncia por un texto que cambia,
+    no por un bloque que aparece: una región activa avisa de lo que se escribe en
+    ella, no de que algo se haya vuelto visible.{% endcomment %}
+    <p class="sr-only" aria-live="polite"
+       x-text="captura ? 'Modo de marcado activado. Haz clic sobre el mapa para situar la lesión, usa el botón para abrir el formulario sin marcar, o pulsa Escape para salir.' : ''"></p>
+
+    <div x-show="captura" x-cloak x-collapse class="border-b border-line bg-brand-soft/60">
+        <div class="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <p class="text-sm text-brand-fg">
+                <span class="font-semibold">Marca la lesión:</span> haz clic sobre el punto del mapa donde está. Con el teclado, abre el formulario sin marcar. Escape sale del modo.
+            </p>
+            {% comment %}La vía sin ratón. Es un enlace de verdad: sin JavaScript
+            lleva a la misma alta en una página completa.{% endcomment %}
+            <a
+                href="{{ lesion_create_url }}?{{ view_param }}={{ default_view }}&amp;{{ laterality_param }}={{ default_laterality }}"
+                @click.prevent="abrirAlta(null)"
+                class="btn-secondary flex-shrink-0"
+            >Abrir el formulario sin marcar</a>
+        </div>
+    </div>
+
+    {# --- Selectores de vista y de pie ------------------------------------- #}
+    <div class="flex flex-col gap-3 border-b border-line px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div class="-mx-1 overflow-x-auto px-1 py-1">
+            <div role="radiogroup" aria-label="Vista del pie" class="flex w-max min-w-full items-center gap-1 rounded-2xl bg-muted p-1 ring-1 ring-line">
+                {% for value, label in lesion_views %}
+                <button
+                    type="button"
+                    role="radio"
+                    aria-checked="{% if value == default_view %}true{% else %}false{% endif %}"
+                    :aria-checked="vista === '{{ value }}' ? 'true' : 'false'"
+                    @click="vista = '{{ value }}'"
+                    :class="vista === '{{ value }}' ? 'bg-surface text-brand-fg shadow-sm ring-1 ring-line' : 'text-content-subtle hover:bg-surface/70 hover:text-content'"
+                    class="whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:px-4"
+                >{{ label }}</button>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="-mx-1 overflow-x-auto px-1 py-1">
+            <div role="radiogroup" aria-label="Pie" class="flex w-max min-w-full items-center gap-1 rounded-2xl bg-muted p-1 ring-1 ring-line">
+                {% for value, label in lesion_lateralities %}
+                <button
+                    type="button"
+                    role="radio"
+                    aria-checked="{% if value == default_laterality %}true{% else %}false{% endif %}"
+                    :aria-checked="pie === '{{ value }}' ? 'true' : 'false'"
+                    @click="pie = '{{ value }}'"
+                    :class="pie === '{{ value }}' ? 'bg-surface text-brand-fg shadow-sm ring-1 ring-line' : 'text-content-subtle hover:bg-surface/70 hover:text-content'"
+                    class="whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:px-4"
+                >{{ label }}</button>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    {# --- Región intercambiable: mapa + resumen (o formulario de alta) ------ #}
+    <div id="lesiones-region" class="grid gap-6 px-6 py-6 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:gap-8">
+        {% include 'patients/_lesion_region.html' %}
+    </div>
+</section>

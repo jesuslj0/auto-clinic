@@ -12,6 +12,8 @@ Dos cosas más allá del alta normal de modelos:
    borrado. Coherente con la barrera del modelo y el trigger de base de datos.
 """
 from django.contrib import admin
+from django.urls import reverse
+from django.utils.html import format_html
 
 from audit import registry
 from audit.mixins import log_access
@@ -19,9 +21,21 @@ from audit.models import AccessLog
 
 from clinical.models import (
     Addendum,
+    ClinicalAlert,
     ClinicalNote,
+    ConsentTemplate,
+    ConsentVersion,
     Episode,
+    Lesion,
+    LesionAttachment,
+    LesionObservation,
     MedicalHistory,
+    PerformedProcedure,
+    Question,
+    QuestionnaireResponse,
+    QuestionnaireTemplate,
+    SignedConsent,
+    TemplateVersion,
     Visit,
 )
 
@@ -116,6 +130,441 @@ class AddendumAdmin(AuditedAdminMixin, admin.ModelAdmin):
     def has_change_permission(self, request, obj=None):
         # De solo inserción: se puede crear y consultar, nunca editar.
         return obj is None
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Anamnesis
+# ---------------------------------------------------------------------------
+#
+# El admin es la tercera barrera de la inmutabilidad (modelo, trigger y aquí):
+# una versión publicada se muestra en solo lectura, sin borrar y sin poder tocar
+# sus preguntas. Si se colara un cambio, el `save()` del modelo lo rechazaría con
+# una excepción fea; esto es lo que hace que el admin ni lo ofrezca.
+
+
+@admin.register(QuestionnaireTemplate)
+class QuestionnaireTemplateAdmin(admin.ModelAdmin):
+    list_display = ('name', 'clinic', 'specialty', 'is_active', 'current_version')
+    list_filter = ('clinic', 'is_active')
+    search_fields = ('name', 'specialty')
+    readonly_fields = ('deleted_at',)
+
+    @admin.display(description='versión vigente')
+    def current_version(self, obj):
+        version = obj.current_version
+        return version.number if version else '—'
+
+
+class QuestionInline(admin.TabularInline):
+    model = Question
+    extra = 1
+    fields = ('order', 'code', 'text', 'answer_type', 'is_required', 'options')
+    ordering = ('order', 'id')
+
+    def _version_is_published(self, obj):
+        return obj is not None and obj.is_published
+
+    def get_readonly_fields(self, request, obj=None):
+        if self._version_is_published(obj):
+            return self.fields
+        return ()
+
+    def has_add_permission(self, request, obj=None):
+        return not self._version_is_published(obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return not self._version_is_published(obj)
+
+
+@admin.register(TemplateVersion)
+class TemplateVersionAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'template', 'number', 'is_published', 'is_current', 'published_at')
+    list_filter = ('is_published', 'is_current', 'template')
+    search_fields = ('template__name',)
+    raw_id_fields = ('template',)
+    inlines = [QuestionInline]
+    actions = ['publish_versions']
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is not None and obj.is_published:
+            # Publicada = congelada. `is_current` sigue siendo editable porque es
+            # ciclo de vida, no contenido: así se puede cambiar la vigente.
+            return ('template', 'number', 'is_published', 'published_at', 'deleted_at')
+        return ('number', 'is_published', 'published_at', 'deleted_at')
+
+    def has_delete_permission(self, request, obj=None):
+        # Una versión publicada pudo haber sido respondida: no se borra.
+        return not (obj is not None and obj.is_published)
+
+    @admin.action(description='Publicar las versiones seleccionadas')
+    def publish_versions(self, request, queryset):
+        published = 0
+        for version in queryset:
+            if version.is_published:
+                continue
+            try:
+                version.publish()
+            except Exception as exc:  # noqa: BLE001 — el motivo se muestra al usuario
+                self.message_user(request, f'{version}: {exc}', level='error')
+            else:
+                published += 1
+        if published:
+            self.message_user(request, f'{published} versión(es) publicada(s).')
+
+
+@admin.register(Question)
+class QuestionAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'version', 'order', 'code', 'answer_type', 'is_required')
+    list_filter = ('answer_type', 'is_required')
+    search_fields = ('text', 'code')
+    raw_id_fields = ('version',)
+    readonly_fields = ('deleted_at',)
+
+    def _is_frozen(self, obj):
+        return obj is not None and obj.version.is_published
+
+    def get_readonly_fields(self, request, obj=None):
+        if self._is_frozen(obj):
+            return [f.name for f in self.model._meta.fields]
+        return self.readonly_fields
+
+    def has_delete_permission(self, request, obj=None):
+        return not self._is_frozen(obj)
+
+
+@admin.register(Lesion)
+class LesionAdmin(AuditedAdminMixin, admin.ModelAdmin):
+    """Lesiones del mapa del pie. La localización, en solo lectura tras crearse.
+
+    Recolocar una lesión ya registrada no es una corrección de formulario: es
+    reescribir dónde estaba. Si la marca se puso mal, se borra y se registra otra.
+    """
+
+    list_display = ('__str__', 'episode', 'view', 'status', 'detected_at', 'resolved_at')
+    list_filter = ('status', 'laterality', 'view', 'lesion_type', 'anatomical_zone')
+    search_fields = ('episode__history__number',)
+    raw_id_fields = ('episode', 'created_by')
+    date_hierarchy = 'detected_at'
+    actions = ['resolve_lesions']
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is None:
+            return ('deleted_at',)
+        return ('episode', 'laterality', 'view', 'anatomical_zone', 'x', 'y', 'deleted_at')
+
+    def save_model(self, request, obj, form, change):
+        if not change and obj.created_by_id is None:
+            obj.created_by = getattr(request.user, 'professional_profile', None)
+        super().save_model(request, obj, form, change)
+
+    @admin.action(description='Marcar como resueltas (hoy)')
+    def resolve_lesions(self, request, queryset):
+        # Una a una: `resolve()` pone estado y fecha a la vez, que es la única
+        # combinación que la base de datos acepta. Un `update()` masivo del
+        # estado chocaría con el CheckConstraint, y además se saltaría el log.
+        resolved = 0
+        for lesion in queryset.filter(status=Lesion.Status.ACTIVE):
+            lesion.resolve()
+            resolved += 1
+        self.message_user(request, f'{resolved} lesión(es) marcada(s) como resuelta(s).')
+
+
+class LesionAttachmentInline(admin.TabularInline):
+    """Fotos de la observación. Se suben desde aquí; no se editan después."""
+
+    model = LesionAttachment
+    extra = 0
+    fields = ('file', 'source', 'mime_type', 'size_bytes', 'download_link')
+    readonly_fields = ('mime_type', 'size_bytes', 'download_link')
+
+    @admin.display(description='descarga')
+    def download_link(self, obj):
+        if obj is None or obj.pk is None:
+            return '—'
+        url = reverse('clinical:lesion-attachment', args=[obj.public_id])
+        return format_html('<a href="{}" target="_blank" rel="noopener">Ver foto</a>', url)
+
+    def has_change_permission(self, request, obj=None):
+        # Un adjunto subido está congelado: se añade o se borra, no se retoca.
+        return False
+
+
+@admin.register(LesionObservation)
+class LesionObservationAdmin(AuditedAdminMixin, admin.ModelAdmin):
+    """Seguimiento de una lesión. La lesión y la visita, fijas tras crearse."""
+
+    list_display = (
+        '__str__', 'lesion', 'visit', 'observed_at',
+        'length_mm', 'width_mm', 'depth_mm', 'attachment_count',
+    )
+    list_filter = ('observed_at', 'lesion__lesion_type', 'lesion__anatomical_zone')
+    search_fields = ('lesion__episode__history__number',)
+    raw_id_fields = ('lesion', 'visit', 'created_by')
+    date_hierarchy = 'observed_at'
+    inlines = [LesionAttachmentInline]
+
+    @admin.display(description='fotos')
+    def attachment_count(self, obj):
+        return obj.attachments.count()
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is None:
+            return ('deleted_at',)
+        return ('lesion', 'visit', 'deleted_at')
+
+    def save_model(self, request, obj, form, change):
+        if not change and obj.created_by_id is None:
+            obj.created_by = getattr(request.user, 'professional_profile', None)
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(LesionAttachment)
+class LesionAttachmentAdmin(AuditedAdminMixin, admin.ModelAdmin):
+    """Adjuntos clínicos. Ni un enlace directo al bucket: siempre la vista firmada.
+
+    El admin **no muestra la URL del objeto** ni la firma por su cuenta. El
+    enlace apunta a la vista protegida, que vuelve a comprobar permisos y deja el
+    acceso en `AccessLog`; si el enlace se copia y se pega, sigue pasando por ahí.
+    """
+
+    list_display = ('__str__', 'observation', 'source', 'mime_type', 'size_bytes', 'uploaded_at')
+    list_filter = ('source', 'mime_type')
+    search_fields = ('observation__lesion__episode__history__number', 'checksum')
+    raw_id_fields = ('observation',)
+    date_hierarchy = 'uploaded_at'
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is None:
+            return ('mime_type', 'size_bytes', 'checksum', 'deleted_at')
+        # Subido = congelado.
+        return [f.name for f in self.model._meta.fields] + ['download_link']
+
+    def get_fields(self, request, obj=None):
+        if obj is None:
+            return ('observation', 'file', 'source', 'uploaded_at')
+        return (
+            'observation', 'file', 'download_link', 'source',
+            'mime_type', 'size_bytes', 'checksum', 'uploaded_at', 'deleted_at',
+        )
+
+    @admin.display(description='descarga')
+    def download_link(self, obj):
+        if obj is None or obj.pk is None:
+            return '—'
+        url = reverse('clinical:lesion-attachment', args=[obj.public_id])
+        return format_html('<a href="{}" target="_blank" rel="noopener">Ver foto</a>', url)
+
+    def has_change_permission(self, request, obj=None):
+        return obj is None
+
+
+# ---------------------------------------------------------------------------
+# Consentimiento informado
+# ---------------------------------------------------------------------------
+#
+# Mismo trato que la anamnesis: una versión publicada se muestra en solo lectura
+# y sin borrar, y una firma recogida no se edita ni se borra desde aquí. Si se
+# colara un cambio, el `save()` del modelo y el trigger lo rechazarían; esto es
+# lo que hace que el admin ni lo ofrezca.
+
+
+@admin.register(ConsentTemplate)
+class ConsentTemplateAdmin(admin.ModelAdmin):
+    list_display = ('name', 'clinic', 'specialty', 'is_active', 'current_version')
+    list_filter = ('clinic', 'is_active')
+    search_fields = ('name', 'specialty')
+    readonly_fields = ('deleted_at',)
+
+    @admin.display(description='versión vigente')
+    def current_version(self, obj):
+        version = obj.current_version
+        return version.number if version else '—'
+
+
+@admin.register(ConsentVersion)
+class ConsentVersionAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'template', 'number', 'is_published', 'is_current', 'published_at')
+    list_filter = ('is_published', 'is_current', 'template')
+    search_fields = ('template__name', 'text')
+    raw_id_fields = ('template',)
+    actions = ['publish_versions']
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is not None and obj.is_published:
+            # Publicada = congelada, texto incluido. `is_current` sigue siendo
+            # editable porque es ciclo de vida: así se cambia la vigente.
+            return ('template', 'number', 'text', 'is_published', 'published_at', 'deleted_at')
+        return ('number', 'is_published', 'published_at', 'deleted_at')
+
+    def has_delete_permission(self, request, obj=None):
+        # Una versión publicada pudo haber sido firmada: no se borra.
+        return not (obj is not None and obj.is_published)
+
+    @admin.action(description='Publicar las versiones seleccionadas')
+    def publish_versions(self, request, queryset):
+        published = 0
+        for version in queryset:
+            if version.is_published:
+                continue
+            try:
+                version.publish()
+            except Exception as exc:  # noqa: BLE001 — el motivo se muestra al usuario
+                self.message_user(request, f'{version}: {exc}', level='error')
+            else:
+                published += 1
+        if published:
+            self.message_user(request, f'{published} versión(es) publicada(s).')
+
+
+@admin.register(SignedConsent)
+class SignedConsentAdmin(AuditedAdminMixin, admin.ModelAdmin):
+    """Consultas y alta. Una firma recogida no se edita ni se borra.
+
+    Como con las fotos clínicas, el admin **no muestra la URL del bucket** ni la
+    firma por su cuenta: el enlace apunta a la vista protegida, que vuelve a
+    comprobar permisos y deja el acceso en `AccessLog`.
+    """
+
+    list_display = ('__str__', 'patient', 'version', 'episode', 'signed_at')
+    list_filter = ('version__template', 'signed_at')
+    search_fields = ('patient__first_name', 'patient__last_name', 'version__template__name')
+    raw_id_fields = ('version', 'patient', 'episode')
+    date_hierarchy = 'signed_at'
+
+    def get_fields(self, request, obj=None):
+        if obj is None:
+            # `text_copy` no se ofrece en el alta: se copia de la versión. Que lo
+            # escriba una persona sería justo perder la prueba de qué se firmó.
+            return ('version', 'patient', 'episode', 'signature_image', 'signed_at')
+        return (
+            'version', 'patient', 'episode', 'text_copy',
+            'signature_image', 'signature_link',
+            'mime_type', 'size_bytes', 'checksum', 'signed_at', 'deleted_at',
+        )
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is None:
+            return ('mime_type', 'size_bytes', 'checksum', 'deleted_at')
+        # Firmado = congelado.
+        return [f.name for f in self.model._meta.fields] + ['signature_link']
+
+    @admin.display(description='firma')
+    def signature_link(self, obj):
+        if obj is None or obj.pk is None:
+            return '—'
+        url = reverse('clinical:consent-signature', args=[obj.public_id])
+        return format_html('<a href="{}" target="_blank" rel="noopener">Ver firma</a>', url)
+
+    def has_change_permission(self, request, obj=None):
+        return obj is None
+
+    def has_delete_permission(self, request, obj=None):
+        # Un consentimiento firmado es la prueba de qué aceptó el paciente.
+        return False
+
+
+@admin.register(PerformedProcedure)
+class PerformedProcedureAdmin(AuditedAdminMixin, admin.ModelAdmin):
+    """Procedimientos hechos. El servicio y el importe, en solo lectura tras el alta.
+
+    Editar aquí el precio congelado sería reescribir lo que costó aquel día, que
+    es justo lo que el modelo impide. El admin ni lo ofrece: se da de baja el
+    procedimiento y se registra otro.
+    """
+
+    list_display = (
+        '__str__', 'visit', 'frozen_service_name', 'frozen_price',
+        'affected_zone', 'performed_at',
+    )
+    list_filter = ('affected_zone', 'laterality', 'service')
+    search_fields = ('frozen_service_name', 'visit__episode__history__number')
+    raw_id_fields = ('visit', 'service', 'created_by')
+    date_hierarchy = 'performed_at'
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is None:
+            # En el alta se dejan editables: en blanco se copian del catálogo, y
+            # un servicio de precio variable necesita poder decir lo que se cobró.
+            return ('deleted_at',)
+        return ('visit', 'service', 'frozen_service_name', 'frozen_price', 'deleted_at')
+
+    def save_model(self, request, obj, form, change):
+        if not change and obj.created_by_id is None:
+            obj.created_by = getattr(request.user, 'professional_profile', None)
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(ClinicalAlert)
+class ClinicalAlertAdmin(AuditedAdminMixin, admin.ModelAdmin):
+    """Alta y baja manual de alertas. Es el flujo manual mientras no hay ficha.
+
+    Nada de borrar: se desactiva. Y la procedencia (`source`/`source_response`)
+    es de solo lectura, porque marcar a mano una alerta como «derivada» sería
+    falsificar de dónde salió.
+    """
+
+    list_display = ('__str__', 'patient', 'alert_type', 'severity', 'source', 'is_active', 'created_by', 'created_at')
+    list_filter = ('is_active', 'severity', 'alert_type', 'source')
+    search_fields = ('patient__first_name', 'patient__last_name', 'note')
+    raw_id_fields = ('patient', 'created_by', 'source_response')
+    readonly_fields = ('source', 'source_response', 'deleted_at')
+    actions = ['deactivate_alerts', 'reactivate_alerts']
+
+    def save_model(self, request, obj, form, change):
+        # Alta manual desde el admin: la firma quien la está creando, sin tener
+        # que acordarse de rellenar el campo.
+        if not change and obj.created_by_id is None:
+            obj.created_by = getattr(request.user, 'professional_profile', None)
+        super().save_model(request, obj, form, change)
+
+    def has_delete_permission(self, request, obj=None):
+        # Una alerta no se borra nunca: se desactiva y la fila se conserva.
+        return False
+
+    @admin.action(description='Desactivar las alertas seleccionadas')
+    def deactivate_alerts(self, request, queryset):
+        # Una a una y no con `update()`: los bulk se saltan la auditoría, y
+        # quitar un aviso de una ficha clínica no puede quedar sin registrar.
+        changed = 0
+        for alert in queryset.filter(is_active=True):
+            alert.deactivate()
+            changed += 1
+        self.message_user(request, f'{changed} alerta(s) desactivada(s).')
+
+    @admin.action(description='Reactivar las alertas seleccionadas')
+    def reactivate_alerts(self, request, queryset):
+        changed = 0
+        for alert in queryset.filter(is_active=False):
+            alert.reactivate()
+            changed += 1
+        self.message_user(request, f'{changed} alerta(s) reactivada(s).')
+
+
+@admin.register(QuestionnaireResponse)
+class QuestionnaireResponseAdmin(AuditedAdminMixin, admin.ModelAdmin):
+    """Solo consulta: una respuesta se registra desde su canal, nunca a mano.
+
+    Muestra dato clínico (el snapshot), así que instrumenta `AccessLog` como el
+    resto de la capa.
+    """
+
+    list_display = ('__str__', 'patient', 'episode', 'version', 'source', 'created_by', 'filled_at')
+    list_filter = ('source', 'version__template')
+    search_fields = ('patient__first_name', 'patient__last_name')
+    raw_id_fields = ('version', 'patient', 'episode', 'created_by')
+    date_hierarchy = 'filled_at'
+
+    def get_readonly_fields(self, request, obj=None):
+        return [f.name for f in self.model._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
     def has_delete_permission(self, request, obj=None):
         return False

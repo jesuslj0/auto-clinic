@@ -1,0 +1,26 @@
+{% comment %}
+Fragmento intercambiable de la ficha: barra de pestañas + panel.
+
+Es lo que devuelven las vistas de pestaña cuando la petición trae `HX-Request`,
+y también lo que la página completa incluye dentro de `#patient-tab-region`, así
+que el marcado resultante es idéntico se llegue por clic, por F5 o por enlace
+pegado en el navegador.
+
+**Por qué la barra viaja dentro del fragmento y no por `hx-swap-oob`:** la
+pestaña activa es un estado del propio fragmento, no un aviso lateral a otra
+parte de la página. Metiéndola dentro, el servidor devuelve una sola respuesta
+coherente (barra y panel siempre concuerdan) y no hay que mantener un segundo
+bloque fuera de banda ni duplicar `id`. htmx devuelve el foco al elemento con el
+mismo `id` tras el intercambio, así que la pestaña pulsada no lo pierde.
+{% endcomment %}
+{% include 'patients/_patient_tabs.html' %}
+
+<div
+    id="patient-tab-panel"
+    class="mt-4 focus:outline-none"
+    role="tabpanel"
+    tabindex="0"
+    aria-labelledby="patient-tab-{{ active_tab }}"
+>
+    {% include panel_template %}
+</div>

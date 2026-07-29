@@ -1,0 +1,56 @@
+{% comment %}
+Barra de pestañas de la ficha. Las entradas salen de `PATIENT_TABS`
+(patients/views.py), así que añadir una sección en fases posteriores es una línea
+allí, su ruta y su parcial.
+
+Cada pestaña es un enlace real: sin JavaScript navega a su URL y la vista
+devuelve la página completa. Con htmx, `hx-get` pide la misma URL, sustituye
+`#patient-tab-region` (barra incluida) y empuja la dirección al historial.
+
+Sobre el teclado: no hay `tabindex` de rol itinerante (roving tabindex) a
+propósito. Al ser enlaces, todos son alcanzables con el tabulador; forzar
+`tabindex="-1"` en los inactivos exigiría implementar la navegación con flechas
+en JavaScript y, sin ella, dejaría cinco pestañas fuera del alcance del teclado.
+{% endcomment %}
+<div class="-mx-1 overflow-x-auto px-1 pb-1">
+    <div
+        role="tablist"
+        aria-label="Secciones de la ficha del paciente"
+        class="flex w-max min-w-full items-center gap-1 rounded-2xl bg-muted p-1 ring-1 ring-line"
+    >
+        {% for tab in patient_tabs %}
+            {% if tab.key == active_tab %}
+                <a
+                    id="patient-tab-{{ tab.key }}"
+                    role="tab"
+                    aria-selected="true"
+                    aria-controls="patient-tab-panel"
+                    href="{% url tab.url_name patient.id %}"
+                    class="whitespace-nowrap rounded-xl bg-surface px-3.5 py-2 text-sm font-semibold text-brand-fg shadow-sm ring-1 ring-line transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:px-4"
+                >{{ tab.label }}</a>
+            {% else %}
+                <a
+                    id="patient-tab-{{ tab.key }}"
+                    role="tab"
+                    aria-selected="false"
+                    aria-controls="patient-tab-panel"
+                    href="{% url tab.url_name patient.id %}"
+                    hx-get="{% url tab.url_name patient.id %}"
+                    hx-target="#patient-tab-region"
+                    hx-swap="innerHTML"
+                    hx-push-url="true"
+                    hx-indicator="#patient-tab-spinner"
+                    class="whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-medium text-content-subtle transition hover:bg-surface/70 hover:text-content focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:px-4"
+                >{{ tab.label }}</a>
+            {% endif %}
+        {% endfor %}
+
+        {# Indicador de carga: htmx le pone la clase `htmx-request` mientras vuela la petición. #}
+        <span id="patient-tab-spinner" class="htmx-indicator ml-auto pl-2 pr-1 text-brand-fg" aria-hidden="true">
+            <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
+                <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"></path>
+            </svg>
+        </span>
+    </div>
+</div>
