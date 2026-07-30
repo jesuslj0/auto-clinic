@@ -286,9 +286,17 @@ datos**: se le pasa una lista de diccionarios y devuelve qué alertas pide. Se
 puede probar y afinar sin montar nada. Los matchers (`is_affirmative`,
 `answer_in(...)`) cubren sí/no y preguntas de elección.
 
-Reglas iniciales de podología, todas críticas: diabetes, enfermedad vascular
-periférica, neuropatía, anticoagulantes, alergia al látex y a anestésicos
-locales.
+Reglas de podología. Críticas: diabetes, enfermedad vascular periférica,
+neuropatía, riesgo de sangrado (anticoagulantes **y** antiagregantes, que
+comparten tipo de alerta porque el aviso operativo es el mismo) y alergia al
+látex y a los anestésicos locales. Como advertencia, el tabaquismo activo, que
+retrasa la cicatrización sin contraindicar nada.
+
+**Un `alert_type` es una alerta, no una regla**: varias reglas pueden apuntar al
+mismo tipo, pero solo la primera que case sale en la ficha. Por eso `OTHER` solo
+admite una regla —hoy la del tabaco—; una condición nueva que no encaje en la
+lista pide un `AlertType` propio en vez de compartir `OTHER`, que la taparía en
+silencio.
 
 ### Idempotencia y correcciones
 
@@ -380,6 +388,45 @@ lesion.observations.all() # el orden de la ficha: la más reciente primero
   se borra lógicamente y se registra otra.
 - `evolution()` invierte el orden a propósito y de forma explícita: leer una
   serie al revés se presta a concluir «va a peor» cuando iba a mejor.
+
+### Desde el panel
+
+El seguimiento se registra en la pestaña «Lesiones» de la ficha: al pulsar un
+marcador se abre el **detalle** de esa lesión (`patients:lesion-detail`) con su
+serie, y desde ahí se anota una observación (`patients:observation-create`) o se
+da la lesión por resuelta (`patients:lesion-resolve`).
+
+- Las **observaciones se piden al abrir la lesión**, no viajan con el mapa: el
+  mapa solo necesita posición y estado, y precargar el seguimiento de todas
+  mandaría al navegador un historial entero para enseñar uno.
+- El detalle y el mapa son **una sola región intercambiable**: al cerrar una
+  lesión, el panel y el color de su marcador cambian en la misma respuesta.
+- **Sin visita elegida se registra una** (la vista, en la misma transacción que
+  la observación): observar una lesión es un encuentro clínico. Un episodio
+  cerrado no admite visitas nuevas, así que allí la visita pasa a ser obligatoria
+  y se anota sobre una de las que hubo.
+- Las **fotos se suben con la observación** (`patients:observation-create`,
+  `multipart`), una a una al bucket privado y nunca con `bulk_create` — los
+  adjuntos están auditados y un bulk se salta las señales. El formulario valida
+  por contenido *además* del modelo, solo para que un PDF renombrado a `.jpg` sea
+  un error de campo con el nombre del fichero y no una excepción a media
+  transacción. Si una foto no vale, no entra tampoco la observación.
+- La **evolución** (`patients:lesion-evolution`) es una página propia: la serie en
+  orden cronológico con sus fotos, el resumen de variación de cada medida (solo
+  de las medidas tomadas al menos dos veces) y un comparador de dos visitas. El
+  comparador es un fragmento del servidor (`patients:lesion-compare`); Alpine solo
+  recuerda cuáles están marcadas, los datos clínicos no viven en el navegador.
+- Todas son **vistas de sesión**, comprueban que la lesión sea del paciente de la
+  URL (404 si no) y registran su `AccessLog`. Como el resto de la capa, no hay API
+  y quedan fuera del alcance del token del agente.
+
+**Ninguna plantilla escribe una URL firmada.** Cada `<img>` apunta a
+`clinical:lesion-attachment`, que comprueba el permiso, firma contra el bucket en
+ese instante, deja su `AccessLog` de descarga y redirige. Además de no meter
+credenciales del almacén en el HTML, resuelve la caducidad de la firma: lo que
+expira es la URL del bucket —regenerada en cada petición de imagen—, mientras que
+el `src` de la página es un enlace de sesión que no caduca, así que una pantalla
+de evolución abierta media hora sigue enseñando las fotos.
 
 ### Fotos: bucket privado y URL firmada
 
@@ -544,13 +591,17 @@ python manage.py seed_clinical --refresh-anamnesis   # anamnesis nueva a los ya 
 python manage.py seed_clinical --skip-files          # sin subir nada al bucket privado
 ```
 
-Rellena la historia de los pacientes que ya existan:
+Rellena la historia de los pacientes que ya existan. Todo es **podología** y los
+casos son coherentes entre sí: el paciente con la úlcera plantar es el diabético
+de la anamnesis y es el que la tiene marcada en el mapa.
 
 - episodio cerrado con nota firmada y adenda, y episodio abierto con nota en
   borrador —colgando de sus citas completadas cuando las hay—;
-- el cuestionario «Anamnesis dental» con v1 y v2 publicadas y una respuesta por
-  paciente. Las preguntas van **codificadas**, así que el motor de derivación
-  levanta sus alertas críticas;
+- el cuestionario «Anamnesis podológica» con v1 y v2 publicadas y una respuesta
+  por paciente. Las preguntas van **codificadas**, así que el motor de derivación
+  levanta sus alertas críticas. Una base sembrada cuando el cuestionario era
+  «Anamnesis dental» conserva esa plantilla intacta —publicada es inmutable— y
+  simplemente convive con la nueva;
 - **lesiones** sobre el mapa del pie con su serie de observaciones (medidas que
   cambian visita a visita, que es de lo que va el modelo) y sus fotos, una
   resuelta y las demás activas. Cada observación crea su visita de seguimiento en

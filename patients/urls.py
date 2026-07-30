@@ -8,8 +8,13 @@ from patients.views import (
     PatientCreateView,
     PatientDetailView,
     PatientEditView,
+    PatientLesionCompareView,
     PatientLesionCreateView,
+    PatientLesionDetailView,
+    PatientLesionEvolutionView,
     PatientLesionMapView,
+    PatientLesionObservationCreateView,
+    PatientLesionResolveView,
     PatientLesionsTabView,
     PatientListView,
     PatientProceduresTabView,
@@ -45,6 +50,37 @@ urlpatterns = [
     # El mapa a secas: lo que se pide al cancelar el alta para volver a pintar la
     # región sin el formulario.
     path('<int:id>/lesiones/mapa/', PatientLesionMapView.as_view(), name='lesion-map'),
+    # Detalle de una lesión y su seguimiento. Son URLs de verdad, no fragmentos
+    # de adorno: cada una es invocable directamente, comprueba que la lesión sea
+    # de ESE paciente y registra su `AccessLog`.
+    path(
+        '<int:id>/lesiones/<int:lesion_id>/',
+        PatientLesionDetailView.as_view(),
+        name='lesion-detail',
+    ),
+    path(
+        '<int:id>/lesiones/<int:lesion_id>/observaciones/nueva/',
+        PatientLesionObservationCreateView.as_view(),
+        name='observation-create',
+    ),
+    path(
+        '<int:id>/lesiones/<int:lesion_id>/resolver/',
+        PatientLesionResolveView.as_view(),
+        name='lesion-resolve',
+    ),
+    # La evolución es una página propia y no un panel: comparar dos fotos de una
+    # úlcera necesita el ancho entero. El comparador de dos observaciones sí es
+    # un fragmento, y lo sirve el servidor (los datos no viven en el navegador).
+    path(
+        '<int:id>/lesiones/<int:lesion_id>/evolucion/',
+        PatientLesionEvolutionView.as_view(),
+        name='lesion-evolution',
+    ),
+    path(
+        '<int:id>/lesiones/<int:lesion_id>/evolucion/comparar/',
+        PatientLesionCompareView.as_view(),
+        name='lesion-compare',
+    ),
     path('<int:id>/consentimientos/', PatientConsentsTabView.as_view(), name='tab-consents'),
     path('<int:id>/procedimientos/', PatientProceduresTabView.as_view(), name='tab-procedures'),
     path('<int:id>/editar/', PatientEditView.as_view(), name='edit'),

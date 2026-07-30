@@ -1,0 +1,89 @@
+{% comment %}
+Dos observaciones de la misma lesión, una al lado de la otra.
+
+Lo sirve `PatientLesionCompareView` y se pinta dentro de `#comparador`, en la
+página de evolución. **Los datos vienen del servidor**: Alpine solo recordaba
+cuáles estaban marcadas.
+
+Van ordenadas por fecha, no por el orden en que se marcaron: una comparación en
+la que la de la izquierda sea la posterior se lee al revés sin que nada lo
+advierta.
+
+Las imágenes, como en el resto de la capa, apuntan a `clinical:lesion-attachment`
+y nunca a una URL firmada escrita en el HTML.
+{% endcomment %}
+{% if comparison|length == 2 %}
+{% with primera=comparison.0 segunda=comparison.1 %}
+<div class="space-y-4">
+    <p class="text-sm text-content-subtle">
+        Del <span class="font-semibold text-content">{{ primera.observed_at|date:"j/m/Y" }}</span>
+        al <span class="font-semibold text-content">{{ segunda.observed_at|date:"j/m/Y" }}</span>
+        {% if comparison_days %}<span class="text-content-faint">· {{ comparison_days }} día{{ comparison_days|pluralize:"s" }} de diferencia</span>{% endif %}
+    </p>
+
+    {% if comparison_trend %}
+    <dl class="flex flex-wrap gap-2">
+        {% for row in comparison_trend %}
+        <div class="rounded-xl bg-muted px-3 py-2 ring-1 ring-line">
+            <dt class="text-xs text-content-faint">{{ row.label }}</dt>
+            <dd class="text-sm text-content">
+                {{ row.first }} → <span class="font-semibold">{{ row.last }}</span> mm
+                <span class="ml-1 whitespace-nowrap text-xs {% if row.delta < 0 %}text-success{% elif row.delta > 0 %}text-danger{% else %}text-content-subtle{% endif %}">
+                    {% if row.delta < 0 %}▼ {{ row.delta|stringformat:"+.1f" }} mm{% elif row.delta > 0 %}▲ {{ row.delta|stringformat:"+.1f" }} mm{% else %}sin cambio{% endif %}
+                </span>
+            </dd>
+        </div>
+        {% endfor %}
+    </dl>
+    {% else %}
+    <p class="text-xs text-content-faint">Estas dos observaciones no comparten ninguna medida, así que no hay variación que calcular.</p>
+    {% endif %}
+
+    <div class="grid gap-4 sm:grid-cols-2">
+        {% for observation in comparison %}
+        <div class="rounded-2xl bg-muted p-4 ring-1 ring-line">
+            <p class="text-sm font-semibold text-content">{{ observation.observed_at|date:"j \d\e F \d\e Y" }}</p>
+            {% if observation.length_mm or observation.width_mm or observation.depth_mm %}
+            <p class="mt-1 text-xs text-content-subtle">
+                {% if observation.length_mm %}Largo {{ observation.length_mm }} mm{% endif %}
+                {% if observation.width_mm %} · Ancho {{ observation.width_mm }} mm{% endif %}
+                {% if observation.depth_mm %} · Prof. {{ observation.depth_mm }} mm{% endif %}
+            </p>
+            {% endif %}
+
+            {% if observation.attachments.all %}
+            <ul class="mt-3 grid grid-cols-2 gap-2">
+                {% for attachment in observation.attachments.all %}
+                <li>
+                    <a
+                        href="{% url 'clinical:lesion-attachment' attachment.public_id %}"
+                        target="_blank" rel="noopener"
+                        class="block overflow-hidden rounded-xl ring-1 ring-line focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                    >
+                        <img
+                            src="{% url 'clinical:lesion-attachment' attachment.public_id %}"
+                            alt="Fotografía de la lesión tomada el {{ observation.observed_at|date:'j/m/Y' }}"
+                            loading="lazy" decoding="async"
+                            class="aspect-square w-full bg-muted-strong object-cover"
+                        >
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="mt-3 text-xs text-content-faint">Sin fotografías en esta visita.</p>
+            {% endif %}
+
+            {% if observation.description %}
+            <p class="mt-3 whitespace-pre-line text-xs text-content-muted">{{ observation.description }}</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endwith %}
+{% else %}
+{% comment %}Es lo que se ve mientras se elige la segunda, y también si llega una
+observación que no es de esta lesión: no se compara nada y se dice.{% endcomment %}
+<p class="text-sm text-content-subtle">Marca dos observaciones de la serie para compararlas.</p>
+{% endif %}

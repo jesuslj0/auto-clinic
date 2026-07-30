@@ -1,5 +1,10 @@
 """Datos de ejemplo de la capa clínica, para desarrollo.
 
+Todo lo que siembra es **podología**: la anamnesis, los motivos de consulta, las
+notas SOAP, las lesiones del mapa del pie y el consentimiento de cirugía ungueal
+cuentan la historia de dos pacientes de una clínica podológica, no de dos
+especialidades mezcladas.
+
 Rellena la historia de los pacientes que ya existan en la base de datos:
 
 - episodio cerrado con nota firmada y adenda, y episodio abierto con borrador;
@@ -23,6 +28,12 @@ Las fotos de lesión y la firma del consentimiento van al **bucket privado**
 (`clinical_media`), igual que en producción: no hay ruta especial de siembra. Si
 no hay almacén configurado, esas dos piezas se omiten con un aviso y el resto se
 siembra igual; `--skip-files` hace lo mismo a propósito.
+
+Una base sembrada cuando el cuestionario era «Anamnesis dental» conserva esa
+plantilla con sus versiones y sus respuestas: no se toca ni se borra, porque una
+versión publicada es inmutable y una respuesta congelada prueba lo que se
+contestó. Simplemente convive con «Anamnesis podológica», que es la que el
+comando siembra y rellena a partir de ahora.
 """
 import io
 from datetime import timedelta
@@ -55,106 +66,198 @@ from clinical.models import (
 )
 from services.models import Service
 
-TEMPLATE_NAME = 'Anamnesis dental'
+TEMPLATE_NAME = 'Anamnesis podológica'
 
 # Cuestionario v1. `(código, texto, tipo, obligatoria, opciones)`, en orden.
 #
 # El `código` es lo que reconoce el motor de alertas (`clinical/rules.py`): las
 # preguntas con código levantan alerta si se contestan que sí; las de código
-# `None` son solo informativas. Por eso la diabetes y los anticoagulantes van
-# como preguntas propias en vez de dentro del cajón de sastre de las crónicas.
+# `None` son solo informativas. Por eso las cuatro condiciones que mandan en
+# podología —diabetes, arteriopatía, neuropatía y riesgo de sangrado— van como
+# preguntas propias en vez de dentro del cajón de sastre de las crónicas: son
+# justo las que deciden si se puede desbridar, cortar o infiltrar.
+#
+# **Los textos se pueden cambiar; los códigos no.** Reescribir un enunciado es
+# libre (el snapshot guarda el literal que se mostró); tocar o quitar un `code`
+# rompe la derivación de alertas.
 V1_QUESTIONS = [
-    ('has_diabetes', '¿Es usted diabético?',
+    ('has_diabetes', '¿Le han diagnosticado diabetes?',
      Question.AnswerType.BOOLEAN, True, []),
-    ('takes_anticoagulants', '¿Toma anticoagulantes (Sintrom, aspirina…)?',
+    (None, 'Si es diabético, ¿cómo la tiene controlada? '
+           '(última hemoglobina glicosilada o cifras habituales)',
+     Question.AnswerType.TEXT, False, []),
+    ('has_peripheral_vascular_disease',
+     '¿Tiene problemas de circulación en las piernas (dolor al caminar que cede '
+     'al pararse, pies fríos o amoratados)?',
      Question.AnswerType.BOOLEAN, True, []),
-    (None, '¿Padece alguna otra enfermedad crónica (hipertensión, cardiopatía)?',
+    ('has_neuropathy',
+     '¿Nota hormigueo, quemazón o falta de sensibilidad en los pies?',
+     Question.AnswerType.BOOLEAN, True, []),
+    ('takes_anticoagulants',
+     '¿Toma anticoagulantes (Sintrom, acenocumarol, rivaroxabán…)?',
+     Question.AnswerType.BOOLEAN, True, []),
+    ('takes_antiplatelets',
+     '¿Toma antiagregantes (aspirina, clopidogrel)?',
+     Question.AnswerType.BOOLEAN, True, []),
+    (None, '¿Padece alguna otra enfermedad crónica (hipertensión, cardiopatía, '
+           'artritis reumatoide)?',
      Question.AnswerType.BOOLEAN, True, []),
     (None, '¿Qué medicación toma actualmente?',
      Question.AnswerType.TEXT, False, []),
-    ('allergy_local_anesthetics', '¿Es alérgico a los anestésicos locales?',
+    ('allergy_local_anesthetics',
+     '¿Es alérgico a los anestésicos locales (mepivacaína, lidocaína)?',
      Question.AnswerType.BOOLEAN, True, []),
-    (None, '¿Es alérgico a algún otro medicamento? ¿A cuáles?',
+    (None, '¿Es alérgico a algún otro medicamento o antiséptico '
+           '(yodo, clorhexidina)? ¿A cuáles?',
      Question.AnswerType.TEXT, False, []),
-    (None, '¿Con qué frecuencia se cepilla los dientes?',
+    (None, '¿Ha tenido antes úlceras o heridas en los pies que tardaran en curar?',
+     Question.AnswerType.BOOLEAN, True, []),
+    (None, '¿Le han operado alguna vez de los pies? ¿De qué?',
+     Question.AnswerType.TEXT, False, []),
+    (None, '¿Qué calzado usa habitualmente?',
      Question.AnswerType.SINGLE_CHOICE, True,
-     ['Una vez al día', 'Dos veces al día', 'Tres o más veces al día']),
-    (None, '¿Le sangran las encías al cepillarse?',
+     ['Deportivo', 'De vestir, estrecho', 'Tacón alto',
+      'Sandalia o calzado abierto', 'Calzado de seguridad']),
+    (None, '¿Cuánto tiempo pasa de pie o caminando al día?',
      Question.AnswerType.SINGLE_CHOICE, False,
-     ['Nunca', 'A veces', 'A menudo']),
+     ['Menos de 2 horas', 'Entre 2 y 6 horas', 'Más de 6 horas']),
+    (None, '¿Quién le corta habitualmente las uñas?',
+     Question.AnswerType.SINGLE_CHOICE, False,
+     ['Yo mismo', 'Un familiar', 'En la consulta del podólogo']),
 ]
 
 # Lo que añade la v2. Es lo que hace visible el versionado: las respuestas de la
-# v1 siguen teniendo ocho preguntas, no diez.
+# v1 siguen teniendo quince preguntas, no dieciocho.
 V2_EXTRA_QUESTIONS = [
     ('allergy_latex', '¿Es alérgico al látex?',
      Question.AnswerType.BOOLEAN, False, []),
-    (None, '¿Cuántas piezas se ha extraído?',
-     Question.AnswerType.NUMBER, False, []),
+    # De elección y no sí/no: la regla del tabaco solo se dispara con «Sí,
+    # actualmente», y haberlo dejado no es lo mismo que no haber fumado nunca.
+    ('smokes', '¿Fuma?',
+     Question.AnswerType.SINGLE_CHOICE, False,
+     ['No, nunca', 'Lo dejé', 'Sí, actualmente']),
+    (None, '¿Practica algún deporte? ¿Cuál y con qué frecuencia?',
+     Question.AnswerType.TEXT, False, []),
 ]
 
 # Casos clínicos de ejemplo. Se reparten en rueda entre los pacientes, para que
 # no salgan todas las historias con el mismo texto.
+#
+# El orden importa y no es decorativo: el caso 0 va con `LESION_CASES[0]` y el 1
+# con `LESION_CASES[1]`, así que el episodio abierto de cada uno describe
+# exactamente la lesión que se le siembra en el mapa (la úlcera plantar del
+# diabético, la onicocriptosis del corredor). Cambiar uno sin el otro deja un
+# paciente que dice una cosa en la nota y otra en el mapa.
+#
+# El caso 0 se registra sobre la v1 y el 1 sobre la v2 (`_record_anamnesis`
+# alterna por índice), y por eso las condiciones están repartidas: entre los dos
+# se ejercitan todas las reglas de `clinical/rules.py`, incluidas las que solo
+# existen en la v2 (látex y tabaco).
 CASES = [
     {
         'closed': {
-            'reason': 'Revisión anual y limpieza',
-            'subjective': 'Refiere sensibilidad al frío en el lado derecho desde hace un mes.',
-            'objective': 'Sarro supragingival generalizado. Sensibilidad a la percusión en 1.6. '
-                         'No se observan caries en la exploración visual.',
-            'assessment': 'Gingivitis leve por acúmulo de cálculo. Hipersensibilidad dentinaria en 1.6.',
-            'plan': 'Tartrectomía completa. Pasta desensibilizante dos veces al día y revisión en seis meses.',
-            'addendum': 'Se entrega presupuesto de férula de descarga; queda pendiente de confirmación.',
+            'reason': 'Revisión de pie diabético',
+            'subjective': 'Diabético tipo 2 de doce años de evolución. Refiere que no nota bien '
+                          'los pies y que se ha quemado con el agua caliente sin darse cuenta. '
+                          'No inspecciona los pies a diario.',
+            'objective': 'Piel seca y descamativa en ambos pies. Hiperqueratosis en la primera '
+                         'cabeza metatarsal izquierda. Monofilamento de 10 g: ausencia de '
+                         'sensibilidad en 3 de 10 puntos. Pulso pedio disminuido en el pie '
+                         'derecho; índice tobillo-brazo de 0,82.',
+            'assessment': 'Pie de riesgo alto: neuropatía sensitiva establecida y arteriopatía '
+                          'periférica leve, con hiperqueratosis de riesgo en zona de descarga.',
+            'plan': 'Deslaminado de la hiperqueratosis y pauta de hidratación con urea al 20 %. '
+                    'Educación en autocuidado: inspección diaria, no cortar durezas, no usar '
+                    'agua caliente. Revisión cada tres meses y derivación a angiología si '
+                    'empeora la clínica vascular.',
+            'addendum': 'Se corrige el lado del índice tobillo-brazo: el 0,82 corresponde al pie '
+                        'derecho, no al izquierdo.',
         },
         'open': {
-            'reason': 'Dolor en molar inferior izquierdo',
-            'subjective': 'Dolor pulsátil de tres días de evolución que aumenta con el calor y por la noche.',
-            'objective': 'Caries oclusal profunda en 3.6. Prueba de vitalidad positiva y prolongada.',
-            'assessment': 'Pulpitis irreversible en 3.6.',
-            'plan': 'Endodoncia en 3.6, pendiente de programar. Ibuprofeno 600 mg cada 8 horas si dolor.',
+            'reason': 'Úlcera plantar en la primera cabeza metatarsal izquierda',
+            'subjective': 'Acude por una herida en la planta del pie izquierdo que descubrió al '
+                          'quitarse el calcetín. No refiere dolor.',
+            'objective': 'Úlcera de 14 × 9,5 mm en la primera cabeza metatarsal izquierda, con '
+                         'bordes hiperqueratósicos y lecho granulomatoso. Exudado seroso '
+                         'moderado. Sin celulitis ni exposición ósea; pulso pedio presente.',
+            'assessment': 'Úlcera neuropática plantar de grado 1, sin signos de infección.',
+            'plan': 'Desbridamiento cortante de los bordes, cura en ambiente húmedo y descarga '
+                    'con fieltro adhesivo. Control semanal con medición y fotografía. Cultivo y '
+                    'derivación urgente si aparecen signos de infección.',
         },
-        # Respuestas indexadas por posición de la pregunta en la versión. Sin
-        # enfermedades crónicas, pero alérgico a los anestésicos locales: una
-        # sola alerta crítica, que en una clínica dental es de las que más pesan.
+        # Respuestas indexadas por posición de la pregunta en la versión. El
+        # cuadro clásico de riesgo podológico: diabetes, arteriopatía,
+        # neuropatía y anticoagulación. Las cuatro tienen código, así que el
+        # motor levanta cuatro alertas críticas derivadas.
         'answers': {
-            0: False,               # diabetes
-            1: False,               # anticoagulantes
-            2: False,               # otra crónica
-            3: 'Ninguna',           # medicación
-            4: True,                # alergia a anestésicos locales
-            6: 'Dos veces al día',  # cepillado
-            7: 'A veces',           # sangrado de encías
+            0: True,                        # diabetes
+            1: 'HbA1c del 7,8 % en la última analítica',
+            2: True,                        # enfermedad vascular periférica
+            3: True,                        # neuropatía
+            4: True,                        # anticoagulantes
+            5: False,                       # antiagregantes
+            6: True,                        # otra crónica
+            7: 'Metformina 850 mg, Sintrom y enalapril',
+            8: False,                       # alergia a anestésicos locales
+            9: 'Penicilina',                # otras alergias
+            10: True,                       # úlceras previas
+            11: 'No',                       # cirugías previas
+            12: 'Deportivo',                # calzado
+            13: 'Menos de 2 horas',         # tiempo de pie
+            14: 'Un familiar',              # quién corta las uñas
         },
     },
     {
         'closed': {
-            'reason': 'Primera visita: revisión general',
-            'subjective': 'Acude por revisión. No refiere dolor. Última visita al dentista hace más de tres años.',
-            'objective': 'Higiene deficiente con tinción extrínseca. Caries incipiente en 2.5. '
-                         'Ausencia de 4.6 sin rehabilitar.',
-            'assessment': 'Caries incipiente en 2.5. Edentulismo parcial en sector inferior derecho.',
-            'plan': 'Obturación de 2.5. Se explican opciones de rehabilitación del 4.6 y se cita para presupuesto.',
-            'addendum': 'Se corrige la nomenclatura de la pieza ausente: es el 4.6, no el 4.7.',
+            'reason': 'Quiropodia y dolor en el antepié',
+            'subjective': 'Refiere dolor punzante bajo el antepié derecho al caminar y al correr, '
+                          'de dos meses de evolución, que cede con el reposo. Trabaja de pie.',
+            'objective': 'Hiperqueratosis plantar difusa bajo la segunda y tercera cabezas '
+                         'metatarsales derechas, con heloma central bajo la tercera. Talones '
+                         'con queratosis seca y fisuras incipientes. Pulsos conservados y '
+                         'sensibilidad normal.',
+            'assessment': 'Metatarsalgia mecánica por sobrecarga del antepié, con hiperqueratosis '
+                          'reactiva. Xerosis plantar.',
+            'plan': 'Deslaminado y enucleación del heloma. Hidratación con urea al 10 % a diario '
+                    'y recomendación de calzado más ancho para el trabajo. Se propone estudio '
+                    'biomecánico para valorar soportes plantares. Revisión en ocho semanas.',
+            'addendum': 'Se entrega presupuesto de soportes plantares personalizados; queda '
+                        'pendiente de confirmación.',
         },
         'open': {
-            'reason': 'Sangrado de encías',
-            'subjective': 'Refiere sangrado al cepillarse desde hace varias semanas y mal sabor de boca.',
-            'objective': 'Índice de placa alto. Sangrado al sondaje generalizado, bolsas de 4 mm en sector posterior.',
-            'assessment': 'Periodontitis inicial.',
-            'plan': 'Raspado y alisado radicular por cuadrantes. Instrucciones de higiene y revisión a las cuatro semanas.',
+            'reason': 'Uña encarnada en el primer dedo del pie izquierdo',
+            'subjective': 'Dolor en el borde interno de la uña del primer dedo izquierdo desde '
+                          'hace una semana, que aumenta con la presión del calzado deportivo.',
+            'objective': 'Onicocriptosis en el canal medial del hallux izquierdo, con eritema '
+                         'perilesional y exudado escaso. Sin fiebre ni linfangitis.',
+            'assessment': 'Onicocriptosis de grado II en el canal medial del hallux izquierdo.',
+            'plan': 'Espiculectomía y cura con antiséptico, con recomendación de calzado ancho '
+                    'mientras cicatriza. Si recidiva, cirugía ungueal con matricectomía química: '
+                    'pendiente de valorar la anestesia por la alergia declarada a los '
+                    'anestésicos locales.',
         },
-        # Este sí: diabetes, anticoagulantes y alergia al látex. Las tres tienen
-        # código, así que el motor levanta tres alertas críticas derivadas.
+        # El otro perfil: sin comorbilidad vascular ni metabólica, pero con dos
+        # alergias, antiagregación y tabaquismo activo. Cubre las reglas que la
+        # v1 no lleva (látex y tabaco) y la de los antiagregantes, que comparte
+        # tipo de alerta con los anticoagulantes.
         'answers': {
-            0: True,                        # diabetes
-            1: True,                        # anticoagulantes
-            2: True,                        # otra crónica
-            3: 'Metformina 850 mg y Sintrom',
-            4: False,                       # alergia a anestésicos
-            5: 'Penicilina',                # otras alergias
-            6: 'Una vez al día',            # cepillado
-            7: 'A menudo',                  # sangrado de encías
-            8: True,                        # alergia al látex (solo en la v2)
+            0: False,                       # diabetes
+            2: False,                       # enfermedad vascular periférica
+            3: False,                       # neuropatía
+            4: False,                       # anticoagulantes
+            5: True,                        # antiagregantes
+            6: False,                       # otra crónica
+            7: 'Aspirina 100 mg',
+            8: True,                        # alergia a anestésicos locales
+            9: 'Ibuprofeno',                # otras alergias
+            10: False,                      # úlceras previas
+            11: 'No',                       # cirugías previas
+            12: 'De vestir, estrecho',      # calzado
+            13: 'Más de 6 horas',           # tiempo de pie
+            14: 'Yo mismo',                 # quién corta las uñas
+            15: True,                       # alergia al látex (solo en la v2)
+            16: 'Sí, actualmente',          # tabaquismo (solo en la v2)
+            17: 'Correr, tres veces por semana',
         },
     },
 ]
@@ -168,6 +271,10 @@ CASES = [
 # sino cómo iba midiendo esa úlcera visita a visita. Por eso cada caso trae sus
 # observaciones con medidas que van cambiando — es lo único que hace visible para
 # qué sirve el modelo.
+#
+# Cada bloque va con el caso clínico de su misma posición en `CASES`: la úlcera
+# neuropática es la del paciente diabético y la herida del hallux es la
+# onicocriptosis del otro. Si se toca uno hay que tocar el otro.
 #
 # `x`/`y` son fracciones del SVG (0–1), NUNCA píxeles, y no se derivan de la zona
 # anatómica ni al revés: son dos datos distintos que envejecen distinto.
@@ -287,13 +394,15 @@ LESION_CASES = [
             'observations': [],
         },
         {
-            'laterality': Lesion.Laterality.RIGHT,
+            # La onicocriptosis del episodio abierto, marcada en el mapa: canal
+            # medial del hallux izquierdo, sin medidas todavía.
+            'laterality': Lesion.Laterality.LEFT,
             'view': Lesion.View.MEDIAL,
             'anatomical_zone': Lesion.AnatomicalZone.HALLUX,
             'x': 0.16, 'y': 0.75,
-            'lesion_type': Lesion.LesionType.ULCER,
+            'lesion_type': Lesion.LesionType.WOUND,
             'resolve': False,
-            'detected_days_ago': 18,
+            'detected_days_ago': 7,
             'observations': [],
         },
     ],
@@ -307,16 +416,35 @@ LESION_CASES = [
 # catálogo REAL de la clínica, que es lo que hace visible el congelado: si luego
 # se sube el precio del servicio, estos importes no se mueven.
 #
+# Van por paciente, igual que las lesiones y por el mismo motivo: las zonas
+# tratadas son las que el paciente tiene marcadas en el mapa (se desbrida la
+# úlcera que hay, no una cualquiera). El servicio, en cambio, sale del catálogo
+# de la clínica y no de aquí — esta capa registra la zona, no inventa la tarifa.
+#
 # `price` a `None` significa «lo que diga el catálogo hoy». Con un importe
 # explícito se siembra el otro caso, el del servicio de precio variable que se
 # cobra por lo que se hizo y no por el mínimo de la ficha.
 PROCEDURE_CASES = [
-    {'zone': Lesion.AnatomicalZone.FIRST_METATARSAL,
-     'laterality': Lesion.Laterality.LEFT, 'price': None},
-    {'zone': Lesion.AnatomicalZone.FIFTH_TOE,
-     'laterality': Lesion.Laterality.RIGHT, 'price': Decimal('45.00')},
-    {'zone': Lesion.AnatomicalZone.HEEL,
-     'laterality': Lesion.Laterality.RIGHT, 'price': None},
+    [
+        # Pie diabético: deslaminado de la queratosis de descarga, desbridamiento
+        # de la úlcera y quiropodia del heloma del quinto dedo.
+        {'zone': Lesion.AnatomicalZone.FIRST_METATARSAL,
+         'laterality': Lesion.Laterality.LEFT, 'price': None},
+        {'zone': Lesion.AnatomicalZone.FIRST_METATARSAL,
+         'laterality': Lesion.Laterality.LEFT, 'price': Decimal('45.00')},
+        {'zone': Lesion.AnatomicalZone.FIFTH_TOE,
+         'laterality': Lesion.Laterality.RIGHT, 'price': None},
+    ],
+    [
+        # Quiropodia del antepié, tratamiento de las fisuras del talón y
+        # espiculectomía del hallux.
+        {'zone': Lesion.AnatomicalZone.THIRD_METATARSAL,
+         'laterality': Lesion.Laterality.RIGHT, 'price': None},
+        {'zone': Lesion.AnatomicalZone.HEEL,
+         'laterality': Lesion.Laterality.RIGHT, 'price': Decimal('45.00')},
+        {'zone': Lesion.AnatomicalZone.HALLUX,
+         'laterality': Lesion.Laterality.LEFT, 'price': None},
+    ],
 ]
 
 # ---------------------------------------------------------------------------
@@ -607,7 +735,7 @@ class Command(BaseCommand):
 
         with transaction.atomic():
             template = existing or QuestionnaireTemplate.objects.create(
-                clinic=clinic, name=TEMPLATE_NAME, specialty='odontología general',
+                clinic=clinic, name=TEMPLATE_NAME, specialty='podología general',
             )
 
             v1 = template.new_draft_version(copy_questions_from=False)
@@ -885,7 +1013,7 @@ class Command(BaseCommand):
             1 for lesion in case for observation in lesion.get('observations', [])
             if observation.get('photo') and self.files_enabled
         )
-        procedures = len(PROCEDURE_CASES) if procedures_pending else 0
+        procedures = len(PROCEDURE_CASES[index % len(PROCEDURE_CASES)]) if procedures_pending else 0
         # `consent_version` viene a `None` en seco porque la plantilla aún no
         # existe; lo que hay que informar es lo que se crearía, no eso.
         consents = 1 if consent_pending else 0
@@ -930,7 +1058,7 @@ class Command(BaseCommand):
 
         created = []
         created += self._seed_lesions(patient, episode, professional, index, totals)
-        created += self._seed_procedures(episode, professional, catalog, totals)
+        created += self._seed_procedures(episode, professional, catalog, index, totals)
         created += self._seed_consent(patient, episode, consent_version, totals)
 
         if created:
@@ -1061,7 +1189,7 @@ class Command(BaseCommand):
 
         return summary
 
-    def _seed_procedures(self, episode, professional, catalog, totals):
+    def _seed_procedures(self, episode, professional, catalog, index, totals):
         """Procedimientos sobre las visitas del episodio, con el precio congelado."""
         if not catalog:
             return []
@@ -1073,7 +1201,7 @@ class Command(BaseCommand):
             return []
 
         created = 0
-        for position, case in enumerate(PROCEDURE_CASES):
+        for position, case in enumerate(PROCEDURE_CASES[index % len(PROCEDURE_CASES)]):
             # El catálogo se recorre en rueda: con una sola entrada activa salen
             # igualmente los tres procedimientos, que es el caso real de repetir
             # el mismo servicio en visitas distintas.

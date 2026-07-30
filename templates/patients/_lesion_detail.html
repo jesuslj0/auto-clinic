@@ -1,0 +1,275 @@
+{% comment %}
+Detalle de la lesión abierta, al lado del mapa donde está marcada.
+
+Va aquí y no en un modal por la misma razón que el alta: **el marcador tiene que
+seguir a la vista** mientras se lee el seguimiento —el halo de marca dice de qué
+punto se está hablando—, y un modal lo taparía justo cuando importa. En pantalla
+estrecha la rejilla colapsa y el panel queda debajo del mapa, que es el mismo
+gesto de una hoja inferior sin necesitar una.
+
+Qué contiene y de dónde sale:
+
+- Los datos de la lesión, que son los del modelo: tipo y zona (el dato clínico),
+  vista y pie, estado, fecha de detección y de alta.
+- Su **serie de observaciones**, lo más reciente primero, que es como se lee una
+  ficha. La serie en orden cronológico es otra cosa y llega con la evolución.
+- Las dos acciones del seguimiento: anotar una observación y dar la lesión por
+  resuelta. Las dos abren su formulario **en el panel** (`hx-get`) y las dos
+  envían a su propia URL, que es una URL de verdad y no un fragmento de adorno.
+- Las **fotos de cada observación**, en miniatura. Ninguna URL de bucket se
+  escribe aquí: cada `src` apunta a `clinical:lesion-attachment`, que comprueba
+  el permiso, firma en ese instante y redirige. Lo que va en el HTML es un enlace
+  de sesión, nunca una URL firmada (que además caducaría en minutos).
+
+La lectura completa de la serie —fotos grandes y comparación entre dos visitas—
+es la página de evolución, que se abre desde aquí.
+{% endcomment %}
+<div
+    id="lesion-detalle-panel"
+    class="rounded-2xl bg-muted p-5 ring-1 ring-line focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+    tabindex="-1"
+    {# El foco entra en el panel al abrirlo: el marcador que lo abrió sigue
+       existiendo, pero lo que acaba de aparecer es esto. #}
+    x-init="$nextTick(() => $el.focus())"
+>
+    {# --- Cabecera ------------------------------------------------------- #}
+    <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+            <h4 class="text-base font-semibold text-content">
+                {{ selected_lesion.get_lesion_type_display }} en {{ selected_lesion.get_anatomical_zone_display|lower }}
+            </h4>
+            <p class="mt-1 text-sm text-content-subtle">
+                Vista {{ selected_lesion.get_view_display|lower }} · {{ selected_lesion.get_laterality_display|lower }}
+            </p>
+        </div>
+        <a
+            href="{% url 'patients:tab-lesions' patient.id %}"
+            class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl text-content-subtle transition hover:bg-muted-strong hover:text-content focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            aria-label="Cerrar el detalle y volver al resumen del mapa"
+            hx-get="{{ lesion_map_url }}"
+            hx-target="#lesiones-region"
+            hx-swap="innerHTML"
+        >
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </a>
+    </div>
+
+    {# Estado y fechas. El color por sí solo no es un dato: va escrito. #}
+    <div class="mt-3 flex flex-wrap items-center gap-2">
+        {% if selected_lesion.status == 'active' %}
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-danger-soft px-3 py-1 text-xs font-semibold text-danger ring-1 ring-danger-line">
+            <span aria-hidden="true" class="h-2 w-2 rounded-full bg-danger"></span>
+            Activa
+        </span>
+        {% else %}
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-3 py-1 text-xs font-semibold text-success ring-1 ring-success-line">
+            <span aria-hidden="true" class="h-2 w-2 rounded-full bg-success"></span>
+            Resuelta el {{ selected_lesion.resolved_at|date:"j/m/Y" }}
+        </span>
+        {% endif %}
+        <span class="text-xs text-content-faint">Detectada el {{ selected_lesion.detected_at|date:"j \d\e F \d\e Y" }}</span>
+    </div>
+
+    {% if selected_lesion.episode.reason %}
+    <p class="mt-2 text-xs text-content-faint">
+        Episodio: {{ selected_lesion.episode.reason }}
+        {% if selected_lesion.episode.status == 'closed' %}<span class="font-medium">(cerrado)</span>{% endif %}
+    </p>
+    {% endif %}
+
+    {# --- Confirmaciones de lo que se acaba de registrar ------------------ #}
+    {% if observation_created or lesion_resolved %}
+    <div class="mt-4 flex items-start gap-3 rounded-2xl bg-success-soft px-4 py-3 ring-1 ring-success-line" role="status">
+        <span aria-hidden="true" class="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+        </span>
+        <p class="text-sm text-success">
+            {% if observation_created %}
+            Observación del {{ observation_created.observed_at|date:"j/m/Y" }} registrada. Ya está en el seguimiento.
+            {% else %}
+            Lesión dada de alta el {{ lesion_resolved.resolved_at|date:"j/m/Y" }}. Su marcador ya aparece en verde.
+            {% endif %}
+        </p>
+    </div>
+    {% endif %}
+
+    {# --- Acciones -------------------------------------------------------- #}
+    {% if not observation_form and not resolve_form %}
+    <div class="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
+        {% if can_add_observation %}
+        <a
+            href="{{ observation_create_url }}"
+            class="btn-primary"
+            hx-get="{{ observation_create_url }}"
+            hx-target="#lesiones-region"
+            hx-swap="innerHTML"
+        >Nueva observación</a>
+        {% endif %}
+        {% if selected_lesion.status == 'active' %}
+        <a
+            href="{{ lesion_resolve_url }}"
+            class="btn-secondary"
+            hx-get="{{ lesion_resolve_url }}"
+            hx-target="#lesiones-region"
+            hx-swap="innerHTML"
+        >Marcar como resuelta</a>
+        {% endif %}
+        {% comment %}Enlace normal, sin htmx: la evolución es una página propia y
+        se abre entera.{% endcomment %}
+        {% if lesion_observations %}
+        <a href="{{ lesion_evolution_url }}" class="btn-secondary">Ver evolución</a>
+        {% endif %}
+    </div>
+    {% if not can_add_observation %}
+    {% comment %}Una observación necesita una visita del MISMO episodio, y un
+    episodio cerrado no admite visitas nuevas. Se dice por qué en vez de dejar
+    un botón que fallaría.{% endcomment %}
+    <p class="mt-3 rounded-xl bg-muted-strong px-4 py-3 text-xs text-content-subtle">
+        El episodio de esta lesión está cerrado y no tiene visitas registradas: no se
+        pueden anotar observaciones nuevas sin reabrirlo.
+    </p>
+    {% endif %}
+    {% endif %}
+
+    {# --- Dar de alta la lesión ------------------------------------------- #}
+    {% if resolve_form %}
+    <form
+        method="post"
+        action="{{ lesion_resolve_url }}"
+        novalidate
+        class="mt-4 space-y-4 border-t border-line pt-4"
+        hx-post="{{ lesion_resolve_url }}"
+        hx-target="#lesiones-region"
+        hx-swap="innerHTML"
+        x-init="$nextTick(() => $el.querySelector('input')?.focus())"
+    >
+        {% csrf_token %}
+        <p class="text-sm font-semibold text-content">Dar de alta la lesión</p>
+        <div>
+            <label for="{{ resolve_form.resolved_at.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+                {{ resolve_form.resolved_at.label }}<span class="ml-0.5 text-danger" title="Campo obligatorio" aria-label="obligatorio">*</span>
+            </label>
+            {{ resolve_form.resolved_at }}
+            <p id="{{ resolve_form.resolved_at.auto_id }}_helptext" class="mt-1.5 text-xs text-content-faint">{{ resolve_form.resolved_at.help_text }}</p>
+            {% if resolve_form.resolved_at.errors %}
+            <p id="error-resolved_at" class="mt-1.5 text-xs text-danger">{{ resolve_form.resolved_at.errors|join:", " }}</p>
+            {% endif %}
+        </div>
+        <div class="flex items-center justify-between gap-3">
+            <a
+                href="{{ lesion_detail_url }}"
+                class="btn-secondary"
+                hx-get="{{ lesion_detail_url }}"
+                hx-target="#lesiones-region"
+                hx-swap="innerHTML"
+            >Cancelar</a>
+            <button type="submit" class="btn-primary">Marcar como resuelta</button>
+        </div>
+    </form>
+    {% endif %}
+
+    {# --- Nueva observación ------------------------------------------------ #}
+    {% if observation_form %}
+    {% include 'patients/_lesion_observation_form.html' %}
+    {% endif %}
+
+    {# --- Seguimiento ------------------------------------------------------ #}
+    <div class="mt-6 border-t border-line pt-4">
+        <div class="flex items-baseline justify-between gap-3">
+            <h5 class="text-sm font-semibold text-content">Seguimiento</h5>
+            {% if lesion_observations %}
+            <span class="text-xs text-content-faint">
+                {{ lesion_observations|length }} observación{{ lesion_observations|length|pluralize:"es" }}, la más reciente primero
+            </span>
+            {% endif %}
+        </div>
+
+        {% if lesion_observations %}
+        <ol class="mt-3 space-y-3">
+            {% for observation in lesion_observations %}
+            <li class="rounded-2xl bg-surface p-4 ring-1 ring-line">
+                <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                    <p class="text-sm font-semibold text-content">{{ observation.observed_at|date:"j \d\e F \d\e Y" }}</p>
+                    {% if observation.created_by %}
+                    <p class="text-xs text-content-faint">{{ observation.created_by }}</p>
+                    {% endif %}
+                </div>
+
+                {% comment %}Las medidas van juntas y en milímetros: comparar la de
+                hoy con la de hace tres semanas es el sentido entero del
+                modelo.{% endcomment %}
+                {% if observation.length_mm or observation.width_mm or observation.depth_mm %}
+                <dl class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-content-subtle">
+                    {% if observation.length_mm %}
+                    <div class="flex items-baseline gap-1">
+                        <dt class="text-content-faint">Largo</dt>
+                        <dd class="font-semibold text-content">{{ observation.length_mm }} mm</dd>
+                    </div>
+                    {% endif %}
+                    {% if observation.width_mm %}
+                    <div class="flex items-baseline gap-1">
+                        <dt class="text-content-faint">Ancho</dt>
+                        <dd class="font-semibold text-content">{{ observation.width_mm }} mm</dd>
+                    </div>
+                    {% endif %}
+                    {% if observation.depth_mm %}
+                    <div class="flex items-baseline gap-1">
+                        <dt class="text-content-faint">Profundidad</dt>
+                        <dd class="font-semibold text-content">{{ observation.depth_mm }} mm</dd>
+                    </div>
+                    {% endif %}
+                </dl>
+                {% else %}
+                <p class="mt-2 text-xs text-content-faint">Sin medidas registradas.</p>
+                {% endif %}
+
+                {% if observation.description %}
+                <p class="mt-2 whitespace-pre-line text-sm text-content-muted">{{ observation.description }}</p>
+                {% endif %}
+
+                {% comment %}Miniaturas. El `src` es la vista protegida, no una URL
+                firmada: así el HTML no lleva credenciales del bucket, la firma se
+                genera en cada petición de imagen —y no caduca mientras la pestaña
+                sigue abierta— y cada visualización deja su `AccessLog`.{% endcomment %}
+                {% if observation.attachments.all %}
+                <ul class="mt-3 flex flex-wrap gap-2">
+                    {% for attachment in observation.attachments.all %}
+                    <li>
+                        <a
+                            href="{% url 'clinical:lesion-attachment' attachment.public_id %}"
+                            target="_blank" rel="noopener"
+                            class="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                        >
+                            <img
+                                src="{% url 'clinical:lesion-attachment' attachment.public_id %}"
+                                alt="Fotografía de la lesión tomada el {{ observation.observed_at|date:'j/m/Y' }}"
+                                loading="lazy" decoding="async"
+                                class="h-16 w-16 rounded-xl bg-muted-strong object-cover ring-1 ring-line transition hover:opacity-90"
+                            >
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ol>
+        {% else %}
+        <div class="mt-3 flex items-start gap-3 rounded-2xl bg-surface px-4 py-4 ring-1 ring-line">
+            <span aria-hidden="true" class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-2xl bg-muted-strong text-content-subtle">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.5l4.5-4.5 3.75 3.75L16.5 7.5m0 0H12m4.5 0V12" />
+                </svg>
+            </span>
+            <div class="min-w-0">
+                <p class="text-sm font-semibold text-content">Sin observaciones todavía</p>
+                <p class="mt-1 text-sm text-content-subtle">La lesión está marcada en el mapa, pero aún no se ha anotado cómo evoluciona. Cada observación guarda las medidas de ese día, y comparar unas con otras es de lo que va el seguimiento.</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>

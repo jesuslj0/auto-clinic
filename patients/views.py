@@ -5,23 +5,31 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Prefetch, Q, Sum, When
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from rest_framework import viewsets
 from django.urls import reverse, reverse_lazy
 
 from appointments.models import Appointment
 from audit.mixins import AccessLogMixin, AuditedViewSetMixin
-from clinical.forms import AnamnesisForm, LesionForm
+from clinical.forms import (
+    AnamnesisForm,
+    LesionForm,
+    LesionObservationForm,
+    LesionResolveForm,
+)
 from clinical.models import (
     ClinicalAlert,
     Episode,
     Lesion,
+    LesionAttachment,
+    LesionObservation,
     MedicalHistory,
     QuestionnaireResponse,
     QuestionnaireTemplate,
     PerformedProcedure,
     SignedConsent,
+    Visit,
 )
 from core.authentication import ClinicAgent
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
@@ -106,7 +114,25 @@ _SEVERITY_RANK = Case(
 )
 
 
-class PatientTabView(AccessLogMixin, LoginRequiredMixin, DetailView):
+class PatientScopedMixin:
+    """El paciente de la URL, siempre acotado a la clínica del usuario.
+
+    Es el aislamiento multi-tenant de todo el panel: un paciente de otra clínica
+    es un **404, no un 403** —y sin `AccessLog`, porque no se ha llegado a leer
+    nada—. Vive en un mixin y no copiado en cada vista porque es la comprobación
+    que no puede quedarse fuera de ninguna: basta olvidarla una vez.
+    """
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = Patient.objects.select_related('clinic')
+        if not user.clinic_id:
+            # Superusuario o usuario sin clínica del panel administrativo.
+            return queryset
+        return queryset.filter(clinic=user.clinic)
+
+
+class PatientTabView(PatientScopedMixin, AccessLogMixin, LoginRequiredMixin, DetailView):
     """Base de las seis pestañas de la ficha del paciente.
 
     Cada pestaña es una URL real y una vista propia, no un parámetro: pegar la
@@ -145,16 +171,6 @@ class PatientTabView(AccessLogMixin, LoginRequiredMixin, DetailView):
     panel_template = None
     #: Clave de `PATIENT_TABS` que queda marcada como activa.
     tab = None
-
-    def get_queryset(self):
-        # Mismo aislamiento multi-tenant que el resto de vistas del panel: un
-        # paciente de otra clínica es un 404, no un 403 (y sin AccessLog: no se
-        # ha llegado a leer nada).
-        user = self.request.user
-        queryset = Patient.objects.select_related('clinic')
-        if not user.clinic_id:
-            return queryset
-        return queryset.filter(clinic=user.clinic)
 
     def is_htmx_swap(self):
         """¿Hay que devolver solo el fragmento?
@@ -430,6 +446,16 @@ class PatientLesionsTabView(PatientTabView):
         context.setdefault('lesion_form', None)
         context.setdefault('lesion_point', None)
         context.setdefault('lesion_created', None)
+        # …y lo mismo con el detalle de una lesión: sin lesión abierta, al lado
+        # del mapa va el resumen de la vista. Declarados aquí, y no solo en la
+        # vista de detalle, para que la plantilla tenga siempre las mismas
+        # variables mire quien la mire.
+        context.setdefault('selected_lesion', None)
+        context.setdefault('lesion_observations', None)
+        context.setdefault('observation_form', None)
+        context.setdefault('observation_created', None)
+        context.setdefault('resolve_form', None)
+        context.setdefault('lesion_resolved', None)
         return context
 
 
@@ -500,13 +526,12 @@ class PatientProceduresTabView(PatientTabView):
 # ---------------------------------------------------------------------------
 
 
-class EpisodeAuthoringMixin:
-    """Quién registra y de qué episodio cuelga lo registrado.
+class ProfessionalAuthorMixin:
+    """Quién está registrando lo que se registra.
 
-    Lo comparten el alta de anamnesis y el alta de lesión, que resuelven el
-    episodio igual: el que se ha elegido en el formulario (siempre uno abierto
-    del paciente, validado por `EpisodeSelectionMixin`) o uno nuevo con el motivo
-    de consulta indicado. `self.object` es el paciente.
+    Vive suelto —y no dentro de `EpisodeAuthoringMixin`— porque el seguimiento de
+    una lesión necesita el autor pero no abre episodios: la lesión ya trae el
+    suyo. Dos definiciones de «quién firma esto» acabarían divergiendo.
     """
 
     def get_professional(self):
@@ -517,6 +542,16 @@ class EpisodeAuthoringMixin:
         entrada tiene profesional detrás.
         """
         return getattr(self.request.user, 'professional_profile', None)
+
+
+class EpisodeAuthoringMixin(ProfessionalAuthorMixin):
+    """Quién registra y de qué episodio cuelga lo registrado.
+
+    Lo comparten el alta de anamnesis y el alta de lesión, que resuelven el
+    episodio igual: el que se ha elegido en el formulario (siempre uno abierto
+    del paciente, validado por `EpisodeSelectionMixin`) o uno nuevo con el motivo
+    de consulta indicado. `self.object` es el paciente.
+    """
 
     def create_episode(self, reason, professional):
         history = MedicalHistory.objects.filter(patient=self.object).first()
@@ -540,7 +575,7 @@ class EpisodeAuthoringMixin:
 
 
 class PatientAnamnesisCreateView(
-    EpisodeAuthoringMixin, AccessLogMixin, LoginRequiredMixin, DetailView
+    EpisodeAuthoringMixin, PatientScopedMixin, AccessLogMixin, LoginRequiredMixin, DetailView
 ):
     """Rellenar una anamnesis para un paciente, desde el panel.
 
@@ -569,15 +604,6 @@ class PatientAnamnesisCreateView(
     template_name = 'patients/anamnesis_form.html'
     #: Nombre del parámetro con el que se elige cuestionario cuando hay varios.
     template_param = 'cuestionario'
-
-    def get_queryset(self):
-        # Mismo aislamiento multi-tenant que `PatientTabView`: un paciente de
-        # otra clínica es un 404.
-        user = self.request.user
-        queryset = Patient.objects.select_related('clinic')
-        if not user.clinic_id:
-            return queryset
-        return queryset.filter(clinic=user.clinic)
 
     # -- resolución del cuestionario y la versión ---------------------------
 
@@ -822,6 +848,403 @@ class PatientLesionCreateView(EpisodeAuthoringMixin, PatientLesionMapView):
 
         messages.success(request, 'Lesión registrada correctamente.')
         return redirect('patients:tab-lesions', id=self.object.pk)
+
+
+class LesionAccessMixin:
+    """La lesión de la URL, **buscada dentro del paciente ya resuelto**.
+
+    El paciente lo acota `PatientScopedMixin` (clínica del usuario); esta es la
+    segunda mitad del aislamiento y es igual de imprescindible: sin ella, el id
+    de la lesión de otra persona de la misma clínica abriría su seguimiento sin
+    más que escribirlo en la URL. Todas estas rutas son invocables directamente.
+    """
+
+    #: Nombre del argumento de URL con el id de la lesión.
+    lesion_url_kwarg = 'lesion_id'
+
+    def get_lesion(self):
+        """La lesión pedida, del paciente de la URL. Ajena o inexistente, 404."""
+        if getattr(self, '_lesion', None) is None:
+            self._lesion = get_object_or_404(
+                Lesion.objects.select_related('episode', 'created_by__user'),
+                pk=self.kwargs[self.lesion_url_kwarg],
+                episode__history__patient=self.object,
+            )
+        return self._lesion
+
+    def get_observations(self, lesion, *, chronological=False):
+        """El seguimiento de la lesión, con sus fotos precargadas.
+
+        Por defecto, lo más reciente primero: es como se lee una ficha. En orden
+        **cronológico** es como se lee una evolución, y se pide explícitamente
+        —igual que hace `Lesion.evolution()`— porque leer una serie al revés se
+        presta a concluir «va a peor» cuando iba a mejor.
+
+        Las fotos se precargan aquí y no se piden foto a foto en la plantilla:
+        una observación con seis adjuntos serían seis consultas por fila.
+        """
+        queryset = (
+            LesionObservation.objects
+            .for_lesion(lesion)
+            .select_related('visit', 'created_by__user')
+            .prefetch_related('attachments')
+        )
+        if chronological:
+            return list(queryset.chronological())
+        return list(queryset.order_by('-observed_at', '-id'))
+
+
+class PatientLesionDetailView(ProfessionalAuthorMixin, LesionAccessMixin, PatientLesionMapView):
+    """Detalle de una lesión del mapa: sus datos y su serie de observaciones.
+
+    **El detalle se pide, no se precarga.** El mapa pinta la posición y el estado
+    de todas las lesiones del paciente —eso es lo que hace falta para dibujarlo—,
+    pero las observaciones son texto clínico y medidas, y solo viajan las de la
+    lesión que se abre. Meter el seguimiento de todas en la página sería mandar
+    al navegador un historial entero para enseñar uno.
+
+    Se sirve en la MISMA región intercambiable que el mapa (`#lesiones-region`),
+    por lo mismo que el alta: al cerrar una lesión cambian a la vez el panel y el
+    color de su marcador, y separarlos en dos objetivos de htmx abriría la puerta
+    a que el mapa dijera una cosa y el panel otra.
+
+    **El permiso se comprueba aquí, no en quien enlaza.** El paciente se resuelve
+    con el `get_queryset()` heredado (clínica del usuario → 404 si es ajeno) y la
+    lesión se busca *dentro de ese paciente*: el id de la lesión de otra persona
+    no abre nada aunque se escriba a mano en la URL, que es lo que hay que
+    defender en un parcial invocable directamente.
+    """
+
+    def get_observation_form(self, data=None, files=None):
+        return LesionObservationForm(
+            data, files, lesion=self.get_lesion(), professional=self.get_professional(),
+        )
+
+    def get_resolve_form(self, data=None):
+        return LesionResolveForm(data, lesion=self.get_lesion())
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        lesion = self.get_lesion()
+        patient_id = self.object.pk
+
+        context.update({
+            'selected_lesion': lesion,
+            'lesion_observations': self.get_observations(lesion),
+            # Una observación necesita una visita del mismo episodio: o hay
+            # alguna, o el episodio sigue abierto y se puede registrar.
+            'can_add_observation': (
+                lesion.episode.status == Episode.Status.OPEN
+                or Visit.objects.filter(episode=lesion.episode).exists()
+            ),
+            'lesion_detail_url': reverse(
+                'patients:lesion-detail',
+                kwargs={'id': patient_id, 'lesion_id': lesion.pk},
+            ),
+            'observation_create_url': reverse(
+                'patients:observation-create',
+                kwargs={'id': patient_id, 'lesion_id': lesion.pk},
+            ),
+            'lesion_resolve_url': reverse(
+                'patients:lesion-resolve',
+                kwargs={'id': patient_id, 'lesion_id': lesion.pk},
+            ),
+            'lesion_evolution_url': reverse(
+                'patients:lesion-evolution',
+                kwargs={'id': patient_id, 'lesion_id': lesion.pk},
+            ),
+            # Sin htmx se pinta la página entera: el mapa tiene que abrirse por
+            # donde está la lesión que se está leyendo.
+            'default_view': lesion.view,
+            'default_laterality': lesion.laterality,
+        })
+        return context
+
+
+class PatientLesionObservationCreateView(PatientLesionDetailView):
+    """Anotar cómo está la lesión en una visita.
+
+    Es la pieza que convierte una lesión en una **serie**: la lesión no se mueve
+    ni cambia de identidad, lo que cambia es lo que se ve de ella cada día.
+
+    Con `GET` abre el formulario dentro del panel; con `POST` registra la
+    observación y devuelve el panel con la serie ya al día. Sin htmx las dos
+    cosas siguen siendo páginas normales, así que el seguimiento también se puede
+    registrar sin JavaScript.
+
+    **La visita se crea aquí si hace falta**, dentro de la misma transacción que
+    la observación: observar una lesión es un encuentro clínico, y dejar la
+    visita creada sin la observación que la motivó sería peor que no crear nada.
+
+    **Las fotos entran por aquí y van al bucket privado.** Se crean una a una
+    (`LesionAttachment.objects.create`) y nunca con `bulk_create`: los adjuntos
+    están registrados en la auditoría, y un bulk se salta las señales. Cada uno
+    pasa por la validación por contenido de su propio `save()`, así que lo que se
+    guarda es lo que el fichero ES, no lo que dijera su nombre.
+    """
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Registrada la observación, el formulario se cierra: lo que se devuelve
+        # es la serie con la anotación nueva, no otro formulario en blanco.
+        if context.get('observation_created') is None and context.get('observation_form') is None:
+            context['observation_form'] = self.get_observation_form()
+        return context
+
+    def post(self, request, *args, **kwargs):
+        # Resolver paciente y lesión es lo que aplica el aislamiento: de otra
+        # clínica o de otra persona, 404, y no se ha tocado nada.
+        self.object = self.get_object()
+        lesion = self.get_lesion()
+        form = self.get_observation_form(data=request.POST, files=request.FILES)
+
+        if not form.is_valid():
+            return self.render_to_response(self.get_context_data(observation_form=form))
+
+        professional = self.get_professional()
+        with transaction.atomic():
+            visit = form.cleaned_data.get('visit') or Visit.objects.create(
+                episode=lesion.episode,
+                professional=form.new_visit_professional(),
+                occurred_at=form.visit_moment(),
+            )
+            observation = form.save(commit=False)
+            observation.lesion = lesion
+            observation.visit = visit
+            observation.created_by = professional
+            observation.save()
+
+            # Dentro de la transacción: una foto que no llega al bucket no puede
+            # dejar una observación diciendo que existe. (Al revés no hay vuelta
+            # atrás: si la transacción cae después de subir, el objeto se queda
+            # huérfano en el bucket. Es el precio de no borrar nada físicamente,
+            # y es el lado seguro del fallo.)
+            for photo in form.cleaned_data.get('photos') or []:
+                LesionAttachment.objects.create(
+                    observation=observation,
+                    file=photo,
+                    source=LesionAttachment.Source.PROFESSIONAL,
+                )
+
+        if self.is_htmx_swap():
+            # Nada de `messages` aquí: no hay recarga que los vacíe y el aviso
+            # saldría luego, en otra pantalla.
+            return self.render_to_response(
+                self.get_context_data(observation_created=observation)
+            )
+
+        messages.success(request, 'Observación registrada correctamente.')
+        return redirect(
+            'patients:lesion-detail', id=self.object.pk, lesion_id=lesion.pk
+        )
+
+
+class PatientLesionResolveView(PatientLesionDetailView):
+    """Dar de alta una lesión, con su fecha de resolución.
+
+    El cierre va por `Lesion.resolve(on=…)` y nunca por un `update`: es lo que
+    mantiene coherentes el estado y la fecha —el `CheckConstraint` exige que una
+    lesión resuelta traiga la suya— y lo que deja el cambio en el `ChangeLog`,
+    que un `queryset.update()` se saltaría.
+
+    Una lesión ya resuelta no se vuelve a cerrar: se responde con el panel tal y
+    como está. Reabrirla (`Lesion.reopen()`) es otra decisión y no se toma aquí.
+    """
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        lesion = self.get_lesion()
+        if (
+            context.get('lesion_resolved') is None
+            and context.get('resolve_form') is None
+            and lesion.status == Lesion.Status.ACTIVE
+        ):
+            context['resolve_form'] = self.get_resolve_form()
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        lesion = self.get_lesion()
+
+        if lesion.status == Lesion.Status.RESOLVED:
+            return self.render_to_response(self.get_context_data())
+
+        form = self.get_resolve_form(data=request.POST)
+        if not form.is_valid():
+            return self.render_to_response(self.get_context_data(resolve_form=form))
+
+        lesion.resolve(on=form.cleaned_data['resolved_at'])
+
+        if self.is_htmx_swap():
+            return self.render_to_response(self.get_context_data(lesion_resolved=lesion))
+
+        messages.success(request, 'Lesión marcada como resuelta.')
+        return redirect(
+            'patients:lesion-detail', id=self.object.pk, lesion_id=lesion.pk
+        )
+
+
+#: Las tres medidas de una observación, en el orden en que se leen. Vive aquí y
+#: no en la plantilla para que el resumen de la evolución y el detalle no puedan
+#: acabar contando dimensiones distintas.
+LESION_MEASUREMENTS = (
+    ('length_mm', 'Largo'),
+    ('width_mm', 'Ancho'),
+    ('depth_mm', 'Profundidad'),
+)
+
+
+class PatientLesionEvolutionView(
+    LesionAccessMixin, PatientScopedMixin, AccessLogMixin, LoginRequiredMixin, DetailView
+):
+    """La evolución de una lesión: su serie completa, en orden y con sus fotos.
+
+    Es una **página propia**, no un panel: comparar dos fotos de una úlcera
+    necesita el ancho entero, y el mapa no aporta nada aquí (la lesión ya está
+    elegida). Por eso tampoco es un fragmento de htmx — se llega con un enlace
+    normal y se puede compartir, marcar o recargar.
+
+    **El orden es cronológico y explícito.** El `ordering` del modelo es el
+    contrario porque una ficha se lee de lo más reciente hacia atrás; una
+    evolución, no. Leer una serie al revés se presta a concluir «va a peor»
+    cuando iba a mejor, así que aquí se pide en el orden de la serie.
+
+    **Ninguna URL de imagen se escribe en esta página.** Cada miniatura apunta a
+    `clinical:lesion-attachment`, la vista que comprueba el permiso, firma contra
+    el bucket en ese instante y redirige — ver la nota sobre caducidad en
+    `templates/patients/lesion_evolution.html`.
+    """
+
+    model = Patient
+    pk_url_kwarg = 'id'
+    context_object_name = 'patient'
+    template_name = 'patients/lesion_evolution.html'
+
+    def measurement_trend(self, observations):
+        """Primera y última medida de cada dimensión, y su variación.
+
+        Solo entra la dimensión medida **al menos dos veces**: con un único dato
+        no hay evolución que resumir, y enseñar «14 mm» sin nada con lo que
+        compararlo invita a leerlo como una tendencia. La primera y la última se
+        buscan entre las observaciones que TIENEN esa medida, no entre todas: no
+        toda observación mide lo mismo, y saltarse ese detalle compararía una
+        medida con un hueco.
+        """
+        trend = []
+        for field, label in LESION_MEASUREMENTS:
+            medidas = [
+                observation for observation in observations
+                if getattr(observation, field) is not None
+            ]
+            if len(medidas) < 2:
+                continue
+            first, last = medidas[0], medidas[-1]
+            trend.append({
+                'label': label,
+                'first': getattr(first, field),
+                'first_at': first.observed_at,
+                'last': getattr(last, field),
+                'last_at': last.observed_at,
+                'delta': getattr(last, field) - getattr(first, field),
+            })
+        return trend
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        lesion = self.get_lesion()
+        observations = self.get_observations(lesion, chronological=True)
+
+        context.update({
+            'section': 'patients',
+            'lesion': lesion,
+            'observations': observations,
+            'measurement_trend': self.measurement_trend(observations),
+            'photo_count': sum(len(o.attachments.all()) for o in observations),
+            'compare_url': reverse(
+                'patients:lesion-compare',
+                kwargs={'id': self.object.pk, 'lesion_id': lesion.pk},
+            ),
+            'back_url': reverse(
+                'patients:lesion-detail',
+                kwargs={'id': self.object.pk, 'lesion_id': lesion.pk},
+            ),
+        })
+        return context
+
+
+class PatientLesionCompareView(
+    LesionAccessMixin, PatientScopedMixin, AccessLogMixin, LoginRequiredMixin, DetailView
+):
+    """Dos observaciones de la misma lesión, lado a lado.
+
+    Es el fragmento que pide la evolución cuando se eligen dos puntos de la
+    serie. **Los datos los sirve el servidor**, no el navegador: Alpine solo
+    recuerda cuáles están seleccionadas, y las fotos y las medidas se piden aquí.
+    Meterlas en un `x-data` obligaría a volcar el historial clínico entero en un
+    atributo HTML para enseñar dos columnas.
+
+    Las dos observaciones se buscan **dentro de la lesión**, que a su vez está
+    dentro del paciente: el id de la observación de otra persona no compara nada.
+    Si falta alguna, el fragmento lo dice en vez de reventar — es lo que se ve
+    mientras se elige la segunda.
+    """
+
+    model = Patient
+    pk_url_kwarg = 'id'
+    context_object_name = 'patient'
+    template_name = 'patients/_lesion_compare.html'
+    #: Nombres de los dos parámetros con los que llegan las observaciones.
+    compare_params = ('a', 'b')
+
+    def get_selection(self, lesion):
+        """Las dos observaciones pedidas, en el orden en que se pintan.
+
+        Se resuelven en una sola consulta y se ordenan **por fecha**, no por el
+        orden en que se marcaron: una comparación en la que la de la izquierda
+        sea la posterior se lee al revés sin que nada lo advierta.
+        """
+        ids = []
+        for param in self.compare_params:
+            raw = self.request.GET.get(param)
+            if raw and raw.isdigit():
+                ids.append(int(raw))
+
+        if len(set(ids)) < 2:
+            return []
+        found = {
+            observation.pk: observation
+            for observation in LesionObservation.objects
+            .for_lesion(lesion)
+            .filter(pk__in=ids)
+            .select_related('visit')
+            .prefetch_related('attachments')
+        }
+        selection = [found[pk] for pk in dict.fromkeys(ids) if pk in found]
+        if len(selection) < 2:
+            return []
+        return sorted(selection, key=lambda observation: (observation.observed_at, observation.pk))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        lesion = self.get_lesion()
+        selection = self.get_selection(lesion)
+
+        context['lesion'] = lesion
+        context['comparison'] = selection
+        if len(selection) == 2:
+            first, last = selection
+            context['comparison_days'] = (last.observed_at - first.observed_at).days
+            context['comparison_trend'] = [
+                {
+                    'label': label,
+                    'first': getattr(first, field),
+                    'last': getattr(last, field),
+                    'delta': getattr(last, field) - getattr(first, field),
+                }
+                for field, label in LESION_MEASUREMENTS
+                if getattr(first, field) is not None and getattr(last, field) is not None
+            ]
+        return context
 
 
 class PatientCreateView(LoginRequiredMixin, CreateView):

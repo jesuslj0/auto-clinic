@@ -1,0 +1,26 @@
+{% comment %}
+Lo que devuelve `AppointmentCreateView` a htmx: el formulario de cita para el
+**panel lateral** de la agenda. Se intercambia dentro de
+`#calendar-panel-content`, el mismo objetivo que usa el detalle rápido de una
+cita — hay un solo panel, y enseña una cosa o la otra.
+
+Aquí NO va cabecera: el título del panel («Nueva cita» / «Cita seleccionada») y su
+botón de cerrar los pone el marco, en `templates/appointments/calendar.html`, que
+es quien sabe en qué modo está. Este fragmento solo aporta el contexto de la
+casilla pulsada y el formulario.
+
+Que el marco no se intercambie es lo que permite que el formulario vuelva con
+errores de validación sin que el panel parpadee ni se cierre.
+{% endcomment %}
+{% if slot_label %}
+<p class="mb-5 flex items-center gap-2 rounded-xl bg-brand-soft px-4 py-3 text-sm text-brand-fg ring-1 ring-brand-line">
+    <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+    </svg>
+    <span>Hueco marcado: <strong class="font-semibold">{{ slot_label }}</strong></span>
+</p>
+{% else %}
+<p class="mb-5 text-sm text-content-subtle">La cita se crea en estado pendiente. La hora se interpreta en el horario de la clínica.</p>
+{% endif %}
+
+{% include 'appointments/partials/_appointment_form.html' %}

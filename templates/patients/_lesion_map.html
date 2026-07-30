@@ -15,10 +15,18 @@ dibujo; las coordenadas solo sirven para pintar. Ni se deriva una de la otra ni
 se rotula una lesión por dónde cayó su punto — tampoco al revés: elegir otra zona
 en el formulario **no** mueve el marcador.
 
-Sobre el clic: el `@click` del SVG solo hace algo con el modo de marcado activo
-(`captura`), y lo que hace es convertir el punto y abrir el alta. Los marcadores
-ya registrados siguen sin ser pulsables: el detalle de una lesión no existe
-todavía.
+Sobre el clic hay **dos gestos distintos y no se pisan**:
+
+- Sobre el dibujo, con el modo de marcado activo (`captura`), el clic se convierte
+  en fracciones y abre el alta.
+- Sobre un marcador ya registrado, el clic abre el **detalle** de esa lesión…
+  salvo que el modo de marcado esté activo, en cuyo caso el marcador se comporta
+  como una parte más del dibujo y lo que se marca es el punto. Quien está
+  situando una lesión nueva no quiere abrir la de al lado. Eso lo decide
+  `abrirDetalle()`, que solo detiene la propagación cuando de verdad va a abrir.
+
+Cada marcador es alcanzable con el tabulador y se activa con Intro o con la barra
+espaciadora: el detalle no puede depender de tener ratón.
 {% endcomment %}
 {# Unidades del `viewBox`. Cambiarlas aquí cambia el mapa entero, dibujo y marcadores. #}
 {% with mapa_ancho=400 mapa_alto=520 %}
@@ -115,18 +123,37 @@ todavía.
     {% comment %}--- Marcadores ---
     Uno por lesión, en unidades del `viewBox`: (x · ancho, y · alto). Van los del
     paciente entero y cada uno se enseña solo en su combinación de vista y pie;
-    el filtro lo escribe Django en el `x-show`, Alpine solo lo evalúa. Sin
-    `click` propio: el detalle de una lesión no existe todavía.{% endcomment %}
+    el filtro lo escribe Django en el `x-show`, Alpine solo lo evalúa.
+
+    Cada uno es un **botón** que abre el detalle de su lesión. Lo que viaja es la
+    URL, no los datos: las observaciones se piden al servidor al abrir, no se
+    precargan aquí (ver `PatientLesionDetailView`).{% endcomment %}
     {% for lesion in lesions %}
     {% widthratio lesion.x 1 mapa_ancho as marcador_x %}
     {% widthratio lesion.y 1 mapa_alto as marcador_y %}
     <g
         x-show="vista === '{{ lesion.view }}' && pie === '{{ lesion.laterality }}'"
         x-cloak
-        role="img"
+        role="button"
+        tabindex="0"
+        aria-label="Abrir el detalle: {{ lesion.get_lesion_type_display }} en {{ lesion.get_anatomical_zone_display }}, {{ lesion.get_status_display|lower }}"
+        {% if selected_lesion and lesion.pk == selected_lesion.pk %}aria-current="true"{% endif %}
+        class="focus:outline-none"
+        :class="captura ? '' : 'cursor-pointer'"
+        @click="abrirDetalle($event, '{% url 'patients:lesion-detail' patient.id lesion.pk %}')"
+        @keydown.enter.prevent="abrirDetalle($event, '{% url 'patients:lesion-detail' patient.id lesion.pk %}', true)"
+        @keydown.space.prevent="abrirDetalle($event, '{% url 'patients:lesion-detail' patient.id lesion.pk %}', true)"
         data-lesion="{{ lesion.pk }}"
     >
         <title>{{ lesion.get_lesion_type_display }} en {{ lesion.get_anatomical_zone_display }} · {{ lesion.get_status_display|lower }} · detectada el {{ lesion.detected_at|date:"j \d\e F \d\e Y" }}</title>
+        {% comment %}La lesión abierta lleva un halo de marca: el panel de al lado
+        habla de una lesión concreta y hay que poder ver de cuál.{% endcomment %}
+        {% if selected_lesion and lesion.pk == selected_lesion.pk %}
+        <circle
+            cx="{{ marcador_x }}" cy="{{ marcador_y }}" r="26"
+            class="fill-none stroke-brand-500" stroke-width="3" stroke-dasharray="6 4"
+            data-lesion-seleccionada="{{ lesion.pk }}" />
+        {% endif %}
         <circle
             cx="{{ marcador_x }}" cy="{{ marcador_y }}" r="18"
             class="{% if lesion.status == 'active' %}fill-danger-soft stroke-danger{% else %}fill-success-soft stroke-success{% endif %}"

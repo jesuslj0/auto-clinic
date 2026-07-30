@@ -19,6 +19,8 @@ class Reminder(TimeStampedModel):
     class Meta:
         ordering = ['scheduled_for']
         unique_together = ('appointment', 'reminder_type')
+        verbose_name = 'recordatorio'
+        verbose_name_plural = 'recordatorios'
 
     def __str__(self):
         return f'{self.appointment} - {self.reminder_type}'

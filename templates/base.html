@@ -9,6 +9,7 @@
     <link rel="icon" type="image/png" sizes="16x16" href="{% static 'img/favicon/favicon-16x16.png' %}">
     <title>{% block title %}{{ clinic.name|default:"Auto Clinic" }}{% endblock %}</title>
     {% include "partials/_head_theme.html" %}
+    {% include "partials/_head_sidebar.html" %}
     <script defer src="https://unpkg.com/htmx.org@1.9.12"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -64,7 +65,9 @@ emite en toda página del panel, aunque no contenga ningún formulario.
     >
         <div class="border-b border-line px-6 py-6">
             <div class="flex items-center justify-between">
-                <a href="/" class="flex items-center gap-3">
+                {# El sidebar móvil solo existe abierto: aquí el nombre va siempre. #}
+                <a href="/" class="flex items-center gap-3"
+                   aria-label="Inicio · {{ request.user.clinic.name|default:'Auto Clinic' }}">
                     {% if request.user.clinic.logo %}
                     {% comment %}Fondo blanco fijo, no bg-surface: los logos de clínica suelen
                     venir en PNG transparente con tinta oscura y desaparecerían en modo oscuro.{% endcomment %}
@@ -72,9 +75,9 @@ emite en toda página del panel, aunque no contenga ningún formulario.
                         <img src="{{ request.user.clinic.logo.url }}" alt="Logo de la clínica" class="h-full w-full object-contain">
                     </div>
                     {% else %}
-                    <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-gradient text-lg font-semibold text-white shadow-glow">{{ request.user.clinic.name|default:"Auto Clinic"|slice:":1"|upper }}</span>
+                    <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-gradient text-lg font-semibold text-white shadow-glow" aria-hidden="true">{{ request.user.clinic.name|default:"Auto Clinic"|slice:":1"|upper }}</span>
                     {% endif %}
-                    <div>
+                    <div class="min-w-0">
                         <h1 class="text-lg font-semibold leading-tight text-content break-words">{{ request.user.clinic.name|default:"Auto Clinic" }}</h1>
                         <p class="text-[10px] font-medium uppercase tracking-[0.22em] text-content-faint">Auto Clinic</p>
                     </div>
@@ -111,12 +114,28 @@ emite en toda página del panel, aunque no contenga ningún formulario.
     </aside>
     {% endif %}
 
-    <div class="min-h-full lg:flex">
-        <!-- Desktop sidebar (always visible for authenticated users) -->
+    <div class="min-h-full">
+        {% comment %}
+        Sidebar de escritorio. **Fijo al alto del viewport** (`lg:fixed
+        lg:inset-y-0`) y no una columna del flujo: así no se va con el scroll de la
+        página y el menú está siempre a mano. Su propio scroll vive en el `<nav>`,
+        que es lo único que puede desbordar.
+
+        El hueco que deja lo abre el `pl-*` del `.sidebar-shell`, no el flujo —un
+        elemento fijo no ocupa sitio—, y ese padding es también el que cambia al
+        colapsar. El ancho, el hueco y las etiquetas los gobierna la clase
+        `sidebar-collapsed` del `<html>` (ver `partials/_head_sidebar.html`).
+        {% endcomment %}
         {% if request.user.is_authenticated %}
-        <aside class="hidden w-72 flex-shrink-0 border-r border-line bg-surface lg:flex lg:flex-col">
-            <div class="border-b border-line px-6 py-6">
-                <a href="/" class="flex items-center gap-3">
+        <aside class="sidebar-desktop hidden border-r border-line bg-surface transition-[width] duration-200 ease-out lg:fixed lg:inset-y-0 lg:left-0 lg:z-30 lg:flex lg:w-72 lg:flex-col"
+               aria-label="Navegación principal">
+            {% comment %}Con el panel abierto, logo y nombre; colapsado, solo el
+            logo — el nombre lleva `sidebar-label`, así que se recoge con el resto
+            de las etiquetas y no se pierde para un lector de pantalla.{% endcomment %}
+            <div class="sidebar-pad border-b border-line px-6 py-6">
+                <a href="/" class="sidebar-brand flex items-center gap-3"
+                   title="{{ request.user.clinic.name|default:'Auto Clinic' }}"
+                   aria-label="Inicio · {{ request.user.clinic.name|default:'Auto Clinic' }}">
                     {% if request.user.clinic.logo %}
                     {% comment %}Fondo blanco fijo, no bg-surface: los logos de clínica suelen
                     venir en PNG transparente con tinta oscura y desaparecerían en modo oscuro.{% endcomment %}
@@ -124,37 +143,60 @@ emite en toda página del panel, aunque no contenga ningún formulario.
                         <img src="{{ request.user.clinic.logo.url }}" alt="Logo de la clínica" class="h-full w-full object-contain">
                     </div>
                     {% else %}
-                    <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-gradient text-lg font-semibold text-white shadow-glow">{{ request.user.clinic.name|default:"Auto Clinic"|slice:":1"|upper }}</span>
+                    <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-gradient text-lg font-semibold text-white shadow-glow" aria-hidden="true">{{ request.user.clinic.name|default:"Auto Clinic"|slice:":1"|upper }}</span>
                     {% endif %}
-                    <div>
+                    <div class="sidebar-label min-w-0">
                         <h1 class="text-lg font-semibold leading-tight text-content break-words">{{ request.user.clinic.name|default:"Auto Clinic" }}</h1>
                         <p class="text-[10px] font-medium uppercase tracking-[0.22em] text-content-faint">Auto Clinic</p>
                     </div>
                 </a>
             </div>
-            <nav class="flex-1 space-y-1 px-4 py-6 text-sm font-medium">
-            {% include "partials/_sidebar_nav.html" %}
-        </nav>
-            <div class="border-t border-line px-6 py-5">
-                <p class="text-sm font-medium text-content">{{ request.user.get_full_name|default:request.user.email }}</p>
-                <p class="mt-1 text-xs text-content-subtle">{{ request.user.get_role_display|default:"Personal" }}</p>
+
+            <nav class="sidebar-pad flex-1 space-y-1 overflow-y-auto px-4 py-6 text-sm font-medium">
+                {% include "partials/_sidebar_nav.html" %}
+            </nav>
+
+            <div class="sidebar-pad border-t border-line px-6 py-5">
+                {# Nombre y rol solo con el panel abierto: en 80 px no cabe nada. #}
+                <p class="sidebar-label text-sm font-medium text-content">{{ request.user.get_full_name|default:request.user.email }}</p>
+                <p class="sidebar-label mt-1 text-xs text-content-subtle">{{ request.user.get_role_display|default:"Personal" }}</p>
                 <div class="mt-3 -mx-3">
                     {% include "partials/_theme_toggle.html" %}
                 </div>
                 <form method="post" action="{% url 'core:logout' %}" class="mt-1 -mx-3">
                     {% csrf_token %}
-                    <button type="submit" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-content-subtle hover:bg-muted-strong hover:text-content-muted transition">
-                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <button type="submit" class="sidebar-action flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-content-subtle hover:bg-muted-strong hover:text-content-muted transition"
+                            title="Cerrar sesión">
+                        <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
                         </svg>
-                        Cerrar sesión
+                        <span class="sidebar-label">Cerrar sesión</span>
                     </button>
                 </form>
             </div>
+
+            {% comment %}El tirador, a media altura del panel y montado sobre su
+            borde: es el gesto de «estrechar/ensanchar» y se ve igual con el panel
+            en cualquiera de los dos estados. El estado lo lleva
+            `window.acSidebar`, que también le pone su `aria-label`.{% endcomment %}
+            <button
+                type="button"
+                data-sidebar-toggle
+                aria-expanded="true"
+                aria-label="Colapsar el menú"
+                class="absolute -right-3 top-1/2 z-40 hidden h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-surface text-content-subtle shadow-sm transition hover:border-brand-line hover:text-brand-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 lg:flex"
+            >
+                <svg class="sidebar-toggle-icon h-4 w-4 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                </svg>
+            </button>
         </aside>
         {% endif %}
 
-        <div class="flex min-h-screen flex-1 flex-col">
+        {% comment %}El hueco del sidebar —y su gancho de colapso— solo existen si
+        hay sidebar: sin sesión no hay menú, y un `padding-left` heredado del estado
+        guardado dejaría el contenido desplazado contra nada.{% endcomment %}
+        <div class="flex min-h-screen flex-col transition-[padding] duration-200 ease-out {% if request.user.is_authenticated %}sidebar-shell lg:pl-72{% endif %}">
             {% block topbar %}{% if request.user.is_authenticated %}{% include 'partials/_topbar.html' %}{% endif %}{% endblock %}
             <header class="sticky top-0 z-30 border-b border-line bg-surface/90 backdrop-blur">
                 <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4 lg:px-8">

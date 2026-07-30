@@ -1,8 +1,11 @@
 """Formularios de la capa clínica.
 
-Hay dos: el que rellena una anamnesis y el que registra una lesión sobre el mapa
-del pie. Los dos cuelgan lo que registran de un episodio y comparten para eso
-`EpisodeSelectionMixin`.
+Son cuatro: el que rellena una anamnesis, el que registra una lesión sobre el
+mapa del pie, el que anota cómo está esa lesión en una visita
+(`LesionObservationForm`) y el que la da por resuelta (`LesionResolveForm`). Los
+dos primeros cuelgan lo que registran de un episodio y comparten para eso
+`EpisodeSelectionMixin`; los dos últimos ya lo tienen resuelto, porque la lesión
+sobre la que trabajan trae el suyo.
 
 El de la anamnesis es un formulario **dinámico**, construido en tiempo de
 ejecución a partir de las preguntas de una `TemplateVersion` concreta —siempre la
@@ -36,7 +39,8 @@ from django import forms
 from django.core.exceptions import NON_FIELD_ERRORS
 from django.utils import timezone
 
-from clinical.models import Episode, Lesion, Question
+from clinical.files import ALLOWED_IMAGE_TYPES, validate_clinical_image
+from clinical.models import Episode, Lesion, LesionObservation, Question, Visit
 
 #: Prefijo del nombre de cada campo de pregunta: `q_<id de la pregunta>`.
 QUESTION_FIELD_PREFIX = 'q_'
@@ -54,6 +58,15 @@ ERROR_FIELD_CLASS = (
 )
 RADIO_CLASS = 'h-4 w-4 border-line-strong text-brand-600 focus:ring-brand-500'
 CHECKBOX_CLASS = 'h-4 w-4 rounded border-line-strong text-brand-600 focus:ring-brand-500'
+#: Selector de ficheros. El botón interno se estiliza aparte (`file:`) porque el
+#: navegador lo pinta con su propio control y no hereda del contenedor.
+FILE_CLASS = (
+    'block w-full cursor-pointer rounded-xl border border-line-strong bg-surface '
+    'text-sm text-content-subtle shadow-sm transition file:mr-3 file:cursor-pointer '
+    'file:rounded-l-xl file:border-0 file:bg-muted-strong file:px-4 file:py-2.5 '
+    'file:text-sm file:font-semibold file:text-content-muted '
+    'focus:outline-none focus:ring-2 focus:ring-brand-500'
+)
 
 
 def question_field_name(question_id) -> str:
@@ -455,3 +468,321 @@ class LesionForm(ErrorHighlightMixin, EpisodeSelectionMixin, forms.ModelForm):
         cleaned = super().clean()
         self.validate_episode_choice(cleaned)
         return cleaned
+
+
+# ---------------------------------------------------------------------------
+# Seguimiento de la lesión: observaciones y cierre
+# ---------------------------------------------------------------------------
+
+
+class VisitChoiceField(forms.ModelChoiceField):
+    """Selector de visita, etiquetado como se lee en la ficha."""
+
+    def label_from_instance(self, obj):
+        momento = timezone.localtime(obj.occurred_at).strftime('%d/%m/%Y %H:%M')
+        return f'{momento} · {obj.professional}'
+
+
+class MultipleFileInput(forms.ClearableFileInput):
+    """`<input type="file" multiple>`. Django exige declararlo así."""
+
+    allow_multiple_selected = True
+
+
+class MultipleFileField(forms.FileField):
+    """Varios ficheros en un solo campo; `clean()` devuelve siempre una lista.
+
+    Es el patrón que documenta Django: un `FileField` normal se queda con el
+    último fichero del `multiple` y descartaría el resto en silencio, que es el
+    peor modo posible de fallar — la foto se selecciona, no da error y no está.
+    """
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('widget', MultipleFileInput())
+        super().__init__(*args, **kwargs)
+
+    def clean(self, data, initial=None):
+        clean_one = super().clean
+        if isinstance(data, (list, tuple)):
+            return [clean_one(item, initial) for item in data if item]
+        return [clean_one(data, initial)] if data else []
+
+
+class LesionObservationForm(ErrorHighlightMixin, forms.ModelForm):
+    """Cómo está la lesión hoy: las medidas de esta visita y su descripción.
+
+    Cuatro decisiones:
+
+    1. **La visita es del episodio de la lesión, y no se elige libremente.** El
+       modelo lo exige (`LesionObservation._validate_visit`), pero eso sería una
+       excepción; aquí el `queryset` del campo ya está acotado a las visitas de
+       ese episodio, así que colar por POST la visita de otro proceso —o de otro
+       paciente— es un error de validación y no llega al modelo.
+
+    2. **Sin visita elegida, se registra una.** Observar una lesión ES un
+       encuentro clínico, y el caso normal en la consulta es «la estoy viendo
+       ahora»: obligar a crear antes la visita por otro camino dejaría el
+       seguimiento a medias. Es el mismo patrón que el episodio en
+       `EpisodeSelectionMixin`: se elige uno o se abre. Quien la crea es la
+       vista; aquí solo se valida que se puede y con quién.
+
+    3. **Un episodio cerrado no admite visitas nuevas** (`Visit.save` lanza
+       `EpisodeClosed`). Si la lesión cuelga de uno cerrado, la visita pasa a ser
+       obligatoria: se anota sobre una de las que ya hubo, o no se anota. Reabrir
+       el episodio es otra decisión, y se toma en otro sitio.
+
+    4. **Las medidas son opcionales pero nunca negativas.** No toda lesión se
+       mide —una hiperqueratosis se describe—, y por eso ninguna es obligatoria;
+       lo que no puede entrar es un número imposible, que además rompería el
+       `CheckConstraint` de la tabla.
+
+    5. **Las fotos se validan aquí *además* de en el modelo.** `LesionAttachment`
+       las examina por contenido en su `save()` y eso es lo que de verdad protege
+       la entrada (vale igual para el adjunto que llegue por la vía del agente);
+       repetir la comprobación en el formulario no la sustituye, sirve para que
+       un PDF renombrado a `.jpg` sea un error de campo legible y no una
+       excepción a media transacción. Lo que se sube va al **bucket privado** con
+       clave UUID; aquí nunca se toca una URL.
+    """
+
+    #: Con qué precisión se piden las medidas. Décimas de milímetro: es lo que
+    #: resuelve una regla milimetrada, y el modelo guarda un decimal.
+    MEASUREMENT_STEP = '0.1'
+
+    #: Cuántas fotos caben en una observación. No es una regla clínica: es un
+    #: tope de sentido común para que un dedazo en el selector de archivos no
+    #: mande cien imágenes al bucket en una sola petición.
+    MAX_PHOTOS = 8
+
+    photos = MultipleFileField(
+        label='Fotografías',
+        required=False,
+        help_text='JPEG, PNG o WebP. Se guardan en el almacén clínico privado y '
+                  'solo se sirven con enlaces firmados que caducan.',
+    )
+
+    visit = VisitChoiceField(
+        label='Visita',
+        queryset=Visit.objects.none(),   # lo acota `__init__` al episodio
+        required=False,
+        empty_label='Registrar la visita de hoy…',
+        widget=forms.Select(attrs={'class': FIELD_CLASS, 'x-model': 'visita'}),
+        help_text='El encuentro en el que se observó la lesión.',
+    )
+
+    class Meta:
+        model = LesionObservation
+        fields = ('observed_at', 'length_mm', 'width_mm', 'depth_mm', 'description')
+        labels = {
+            'observed_at': 'Fecha de la observación',
+            'length_mm': 'Largo (mm)',
+            'width_mm': 'Ancho (mm)',
+            'depth_mm': 'Profundidad (mm)',
+            'description': 'Descripción clínica',
+        }
+        widgets = {
+            # `format` explícito por lo mismo que en `LesionForm`: en español el
+            # formato de entrada por defecto es dd/mm/aaaa y un `<input
+            # type="date">` solo entiende aaaa-mm-dd.
+            'observed_at': forms.DateInput(
+                attrs={'type': 'date', 'class': FIELD_CLASS}, format='%Y-%m-%d',
+            ),
+            'description': forms.Textarea(attrs={
+                'rows': 4,
+                'class': f'{FIELD_CLASS} resize-none',
+                'placeholder': 'Aspecto del lecho y de los bordes, exudado, signos de '
+                               'infección, tratamiento aplicado…',
+            }),
+        }
+
+    def __init__(self, *args, lesion, professional=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.lesion = lesion
+        self.episode = lesion.episode
+        #: Un episodio cerrado no admite visitas nuevas: ver el punto 3.
+        self.can_open_visit = self.episode.status == Episode.Status.OPEN
+        #: Quién firma la visita que se cree. `None` si quien registra no es
+        #: profesional (un administrativo anotando lo que le dictan).
+        self.professional = professional
+
+        visits = Visit.objects.filter(episode=self.episode).order_by('-occurred_at', '-id')
+        self.visits = list(visits)
+        self.fields['visit'].queryset = visits
+        if not self.can_open_visit:
+            self.fields['visit'].required = True
+            self.fields['visit'].empty_label = 'Selecciona la visita…'
+            self.fields['visit'].help_text = (
+                'El episodio está cerrado y no admite visitas nuevas: la observación '
+                'se anota sobre una de las que ya hubo.'
+            )
+        if self.visits and not self.is_bound:
+            # La más reciente: es la que se está atendiendo.
+            self.fields['visit'].initial = self.visits[0].pk
+
+        for name in ('length_mm', 'width_mm', 'depth_mm'):
+            self.fields[name].widget.attrs.update({
+                'class': FIELD_CLASS, 'step': self.MEASUREMENT_STEP, 'min': '0',
+                'inputmode': 'decimal',
+            })
+
+        # `accept` es una comodidad del selector de archivos, NO un control: lo
+        # que decide es `validate_clinical_image`, que mira el contenido.
+        self.fields['photos'].widget.attrs.update({
+            'class': FILE_CLASS,
+            'accept': ','.join(ALLOWED_IMAGE_TYPES),
+        })
+
+        if not self.is_bound:
+            self.fields['observed_at'].initial = timezone.localdate()
+
+        if self.professional is None and self.can_open_visit:
+            # Solo hace falta cuando se va a crear la visita: si se elige una que
+            # ya existe, su profesional es el que la atendió y no se toca.
+            from appointments.models import Professional
+
+            self.fields['visit_professional'] = forms.ModelChoiceField(
+                label='Profesional que atiende',
+                queryset=Professional.objects.filter(
+                    clinic_id=self.episode.history.clinic_id, is_active=True
+                ).select_related('user'),
+                required=False,
+                empty_label='Selecciona el profesional…',
+                widget=forms.Select(attrs={'class': FIELD_CLASS}),
+                help_text='Tu usuario no tiene ficha de profesional: indica quién '
+                          'realiza la visita que se va a registrar.',
+            )
+
+    # -- validación ---------------------------------------------------------
+
+    def clean_observed_at(self):
+        observed_at = self.cleaned_data.get('observed_at')
+        if observed_at is None:
+            return observed_at
+        if observed_at > timezone.localdate():
+            raise forms.ValidationError('Una observación no se puede fechar en el futuro.')
+        if observed_at < self.lesion.detected_at:
+            # Antes de detectarla no había nada que observar: casi siempre es un
+            # dedazo en el año, y pasaría desapercibido en la serie.
+            raise forms.ValidationError(
+                'La observación es anterior a la fecha en la que se detectó la lesión '
+                f'({self.lesion.detected_at:%d/%m/%Y}).'
+            )
+        return observed_at
+
+    def clean_photos(self):
+        """Cada fichero se mira por dentro antes de aceptarlo.
+
+        El mensaje se da **por fichero y con su nombre**: al subir cinco fotos de
+        golpe, «una no es una imagen» no dice cuál. La comprobación es la misma
+        que hará el modelo al guardar (`validate_clinical_image`), aquí solo para
+        que el rechazo sea un error de campo y no una excepción.
+        """
+        photos = self.cleaned_data.get('photos') or []
+        if len(photos) > self.MAX_PHOTOS:
+            raise forms.ValidationError(
+                f'Se pueden adjuntar como mucho {self.MAX_PHOTOS} fotografías por '
+                f'observación; has seleccionado {len(photos)}.'
+            )
+
+        errors = []
+        for photo in photos:
+            try:
+                # `forms.ValidationError` es la misma clase que la de
+                # `django.core.exceptions`, que es la que lanza el validador.
+                validate_clinical_image(photo)
+            except forms.ValidationError as exc:
+                errors.extend(f'«{photo.name}»: {message}' for message in exc.messages)
+        if errors:
+            raise forms.ValidationError(errors)
+        return photos
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get('visit') is not None:
+            return cleaned
+        if not self.can_open_visit:
+            # `required=True` ya lo habrá señalado; este es el caso de un POST
+            # que llega con el campo vacío contra un episodio recién cerrado.
+            self.add_error('visit', 'El episodio está cerrado: elige una visita ya registrada.')
+        elif self.professional is None and cleaned.get('visit_professional') is None:
+            self.add_error(
+                'visit_professional',
+                'Indica qué profesional realiza la visita, o elige una visita ya registrada.',
+            )
+        return cleaned
+
+    # -- presentación -------------------------------------------------------
+
+    @property
+    def measurement_fields(self):
+        """Las tres medidas en su orden, para pintarlas juntas.
+
+        Van en una sola rejilla porque se leen juntas: «14 × 9,5 × 3 mm» es un
+        dato, no tres. Que el orden lo diga el formulario y no la plantilla evita
+        que una y otra acaben discrepando.
+        """
+        return [self['length_mm'], self['width_mm'], self['depth_mm']]
+
+    # -- salida -------------------------------------------------------------
+
+    def new_visit_professional(self):
+        """Quién firma la visita que hay que crear: el usuario, o el elegido.
+
+        No se llama `visit_professional` a propósito: ese nombre es el del campo,
+        y un método homónimo lo taparía en cuanto alguien lo pintara con
+        `{{ form.visit_professional }}`.
+        """
+        return self.professional or self.cleaned_data.get('visit_professional')
+
+    def visit_moment(self):
+        """Cuándo ocurrió la visita que hay que crear.
+
+        `Visit.occurred_at` es un instante y la observación solo trae el día. Se
+        combinan: la fecha es la que dice el profesional y la hora, la de ahora.
+        Fechar la visita de una observación retrospectiva a las 00:00 la
+        colocaría antes que todo lo demás de ese día en la ficha.
+        """
+        from datetime import datetime
+
+        observed_at = self.cleaned_data['observed_at']
+        now = timezone.localtime()
+        if observed_at == now.date():
+            return now
+        return timezone.make_aware(
+            datetime.combine(observed_at, now.time()), now.tzinfo
+        )
+
+
+class LesionResolveForm(ErrorHighlightMixin, forms.Form):
+    """Dar de alta la lesión, con su fecha.
+
+    No es un `ModelForm`: el cierre va por `Lesion.resolve(on=…)`, que es lo que
+    mantiene coherentes el estado y la fecha (el `CheckConstraint` de la tabla
+    exige que «resuelta» venga siempre con la suya). Aquí solo se valida la
+    fecha, que es lo único que pone quien cierra.
+    """
+
+    resolved_at = forms.DateField(
+        label='Fecha de resolución',
+        widget=forms.DateInput(
+            attrs={'type': 'date', 'class': FIELD_CLASS}, format='%Y-%m-%d',
+        ),
+        help_text='El día en que la lesión quedó cerrada.',
+    )
+
+    def __init__(self, *args, lesion, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.lesion = lesion
+        if not self.is_bound:
+            self.fields['resolved_at'].initial = timezone.localdate()
+
+    def clean_resolved_at(self):
+        resolved_at = self.cleaned_data['resolved_at']
+        if resolved_at > timezone.localdate():
+            raise forms.ValidationError('Una lesión no se puede resolver en el futuro.')
+        if resolved_at < self.lesion.detected_at:
+            raise forms.ValidationError(
+                'La lesión no puede resolverse antes de detectarse '
+                f'({self.lesion.detected_at:%d/%m/%Y}).'
+            )
+        return resolved_at

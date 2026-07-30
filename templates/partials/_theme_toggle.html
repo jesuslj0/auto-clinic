@@ -6,12 +6,17 @@ sidebar móvil) sin duplicar lógica ni desincronizarse.
 
 Los iconos y las etiquetas se alternan con las variantes `dark:`, no con JS:
 así ya salen bien en el primer pintado.
+
+`sidebar-action` y `sidebar-label` son los ganchos del sidebar colapsado (ver
+`partials/_head_sidebar.html`): con el panel estrecho queda solo el icono,
+centrado, y el texto sigue ahí para los lectores de pantalla.
 {% endcomment %}
 <button
     type="button"
     data-theme-toggle
     aria-pressed="false"
-    class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-content-subtle transition hover:bg-muted-strong hover:text-content-muted"
+    title="Cambiar el tema"
+    class="sidebar-action flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-content-subtle transition hover:bg-muted-strong hover:text-content-muted"
 >
     <!-- Luna: se ofrece pasar a oscuro -->
     <svg class="h-4 w-4 flex-shrink-0 dark:hidden" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
@@ -21,6 +26,6 @@ así ya salen bien en el primer pintado.
     <svg class="hidden h-4 w-4 flex-shrink-0 dark:block" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
     </svg>
-    <span class="dark:hidden">Modo oscuro</span>
-    <span class="hidden dark:inline">Modo claro</span>
+    <span class="sidebar-label dark:hidden">Modo oscuro</span>
+    <span class="sidebar-label hidden dark:inline">Modo claro</span>
 </button>

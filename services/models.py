@@ -87,6 +87,8 @@ class Service(TimeStampedModel):
     class Meta:
         ordering = ['name']
         unique_together = ('clinic', 'name')
+        verbose_name = 'servicio'
+        verbose_name_plural = 'servicios'
 
     def __str__(self):
         return self.name

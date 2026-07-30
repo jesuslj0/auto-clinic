@@ -1,11 +1,99 @@
 {% extends 'base.html' %}
 {% load appointment_extras %}
+{% load static %}
 
 {% block title %}Calendario · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
 {% block page_heading %}Calendario semanal{% endblock %}
 
 {% block content %}
-<section class="space-y-6" x-data="{ panelOpen: false, panelLoading: false }" @keydown.escape.window="panelOpen = false">
+{% comment %}
+Agenda semanal. Dos gestos sobre la rejilla y **un solo panel lateral**, que
+enseña una cosa o la otra según con qué se haya abierto:
+
+- **Sobre una cita** → su detalle rápido (`modo === 'detalle'`).
+- **Sobre una casilla libre de una hora laborable** → el formulario de nueva cita
+  ya fechado en esa casilla (`modo === 'formulario'`).
+
+Un panel y no dos: los dos fragmentos van al mismo objetivo
+(`#calendar-panel-content`), así que no hay dos marcos que puedan abrirse a la vez
+ni dos juegos de velo y transiciones que mantener. Lo único que cambia con el modo
+son el título, el ancho y el velo.
+
+**El calendario tiene que seguir viéndose** mientras se rellena la cita: para eso
+es un panel lateral y no un diálogo centrado, y por eso en modo formulario el velo
+va sin difuminado (ver `veloClase()`) — la casilla marcada tiene que quedar
+legible, porque es la que dice dónde se está creando.
+
+Las casillas de descanso y las de fuera de jornada NO son pulsables: una cita ahí
+la rechazaría la validación de horario, así que ofrecerlo sería prometer algo que
+no se puede cumplir.
+
+La capa pulsable de la casilla es un `<button absolute inset-0>` por debajo de las
+citas (que van en `z-10`), y no el contenedor de la celda: así el clic sobre una
+cita no tiene que detener su propagación y no hay un botón dentro de otro, que
+sería marcado inválido.
+{% endcomment %}
+<script>
+    /**
+     * Estado de interfaz de la agenda. **Solo interfaz**: qué hay abierto, en qué
+     * modo y sobre qué casilla. Ni una cita ni un formulario viven aquí; el
+     * contenido lo trae htmx.
+     */
+    window.agendaSemanal = function () {
+        return {
+            panelOpen: false,
+            panelLoading: false,
+            //: 'detalle' | 'formulario'. Decide título, ancho y velo del panel.
+            modo: 'detalle',
+            //: Clave («AAAA-MM-DDTHH:MM») de la casilla sobre la que se está
+            //: creando. Es lo que marca el hueco en la rejilla mientras el
+            //: formulario está abierto.
+            slotActivo: null,
+
+            abrirDetalle() {
+                this.modo = 'detalle';
+                this.slotActivo = null;
+                this.panelOpen = true;
+                this.panelLoading = true;
+            },
+
+            abrirFormulario(slot) {
+                this.modo = 'formulario';
+                this.slotActivo = slot;
+                this.panelOpen = true;
+                this.panelLoading = true;
+            },
+
+            cerrarPanel() {
+                this.panelOpen = false;
+                this.panelLoading = false;
+                // La marca de la casilla se va con el panel: si no, quedaría un
+                // hueco señalado como «creando» sin nada abierto.
+                this.slotActivo = null;
+            },
+
+            esSlotActivo(slot) {
+                return this.slotActivo === slot;
+            },
+
+            get tituloPanel() {
+                return this.modo === 'formulario' ? 'Nueva cita' : 'Cita seleccionada';
+            },
+
+            /** Sin difuminado en modo formulario: el calendario debe seguir legible. */
+            veloClase() {
+                return this.modo === 'formulario'
+                    ? 'bg-slate-900/20'
+                    : 'bg-slate-900/40 backdrop-blur-sm';
+            },
+        };
+    };
+</script>
+<section
+    class="space-y-6"
+    x-data="agendaSemanal()"
+    @keydown.escape.window="cerrarPanel()"
+>
     <div class="flex flex-col gap-4 rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:flex-row sm:items-center sm:justify-between">
         <div class="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
             <h3 class="flex items-center gap-2.5 text-lg font-semibold text-content">
@@ -81,7 +169,54 @@
 
                     {% for day_info in week_days_info %}
                         {% if slot.hour in day_info.working_hours %}
-                            <div class="relative h-28 border-r border-t border-line bg-surface align-top">
+                            {% comment %}La clave de la casilla, en dos piezas: es lo
+                            que compara `esSlotActivo` para saber cuál está
+                            marcada.{% endcomment %}
+                            {% with slot_fecha=day_info.date|date:'Y-m-d' slot_hora=slot|time:'H:i' %}
+                            <div class="group relative h-28 border-r border-t border-line bg-surface align-top"
+                                 :class="esSlotActivo('{{ slot_fecha }}T{{ slot_hora }}') ? 'ring-2 ring-inset ring-brand-500 bg-brand-soft/40' : ''">
+                                {% comment %}Casilla libre: abre el formulario en el
+                                panel con esta fecha y esta hora en punto. `week`
+                                viaja para que al guardar se vuelva a la semana que
+                                se está mirando, y `professional` solo en la vista
+                                personal.{% endcomment %}
+                                <button
+                                    type="button"
+                                    class="absolute inset-0 z-0 flex items-start justify-center pt-2 text-content-faint transition hover:bg-brand-soft/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
+                                    :class="esSlotActivo('{{ slot_fecha }}T{{ slot_hora }}') ? 'opacity-100' : 'opacity-0 focus:opacity-100 group-hover:opacity-100'"
+                                    hx-get="{% url 'appointments:create' %}?{% if professional %}professional={{ professional.pk }}&amp;{% endif %}date={{ day_info.date|date:'Y-m-d' }}&amp;time={{ slot|time:'H:i' }}&amp;week={{ week_start|date:'Y-m-d' }}"
+                                    hx-target="#calendar-panel-content"
+                                    hx-swap="innerHTML"
+                                    hx-indicator="#panel-spinner"
+                                    @click="abrirFormulario('{{ slot_fecha }}T{{ slot_hora }}')"
+                                    @htmx:after-request="panelLoading = false"
+                                    aria-label="Nueva cita el {{ day_info.date|date:'j \d\e F' }} a las {{ slot|time:'H:i' }}"
+                                >
+                                    {% comment %}Tres estados en el mismo sitio: la
+                                    invitación al pasar por encima, el icono de carga
+                                    mientras llega el formulario y la marca de «se
+                                    está creando aquí» mientras el panel siga
+                                    abierto.{% endcomment %}
+                                    <span
+                                        aria-hidden="true"
+                                        class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1"
+                                        :class="esSlotActivo('{{ slot_fecha }}T{{ slot_hora }}') ? 'bg-brand-600 text-white ring-brand-600 shadow-sm' : 'bg-surface/90 ring-brand-line'"
+                                    >
+                                        <template x-if="esSlotActivo('{{ slot_fecha }}T{{ slot_hora }}') && panelLoading">
+                                            <svg class="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                <circle class="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"></path>
+                                            </svg>
+                                        </template>
+                                        <template x-if="!(esSlotActivo('{{ slot_fecha }}T{{ slot_hora }}') && panelLoading)">
+                                            <svg class="h-3 w-3" :class="esSlotActivo('{{ slot_fecha }}T{{ slot_hora }}') ? 'animate-pulse' : ''"
+                                                 fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                            </svg>
+                                        </template>
+                                        <span x-text="esSlotActivo('{{ slot_fecha }}T{{ slot_hora }}') ? (panelLoading ? 'Abriendo' : 'Creando') : 'Cita'">Cita</span>
+                                    </span>
+                                </button>
                                 {% for appointment in appointments %}
                                     {% if appointment.scheduled_at|date:'Y-m-d' == day_info.date|date:'Y-m-d' and appointment.scheduled_at|time:'H' == slot|time:'H' %}
                                         <button
@@ -94,7 +229,7 @@
                                             hx-target="#calendar-panel-content"
                                             hx-swap="innerHTML"
                                             hx-indicator="#panel-spinner"
-                                            @click="panelOpen = true; panelLoading = true"
+                                            @click="abrirDetalle()"
                                             @htmx:after-request="panelLoading = false"
                                             aria-label="Ver cita de {{ appointment.scheduled_at|time:'H:i' }}"
                                         >
@@ -109,6 +244,7 @@
                                     {% endif %}
                                 {% endfor %}
                             </div>
+                            {% endwith %}
                         {% elif slot.hour in day_info.break_hours %}
                             {# Parón entre turnos (jornada partida) #}
                             <div class="flex h-28 items-center justify-center border-r border-t border-line bg-muted-strong/60 align-top">
@@ -135,10 +271,21 @@
         </div>
     </section>
 
+    {% comment %}
+    El único panel lateral. Enseña el detalle de una cita o el formulario de una
+    nueva según `modo`; el contenido lo trae htmx a `#calendar-panel-content` y el
+    marco no se intercambia nunca, así que un formulario que vuelve con errores no
+    cierra el panel ni lo hace parpadear.
+
+    En modo formulario el velo va **sin difuminar** y más tenue: el calendario
+    tiene que seguir legible, y sobre todo la casilla marcada, que es la que dice
+    dónde se está creando la cita. `bg-slate-900/*` es literal a propósito: es la
+    excepción que CLAUDE.md reserva para los velos.
+    {% endcomment %}
     <!-- x-teleport requiere un único elemento raíz -->
     <template x-teleport="body">
         <div>
-            <!-- Backdrop -->
+            <!-- Velo -->
             <div
                 x-show="panelOpen"
                 x-transition:enter="transition ease-out duration-200"
@@ -147,8 +294,9 @@
                 x-transition:leave="transition ease-in duration-150"
                 x-transition:leave-start="opacity-100"
                 x-transition:leave-end="opacity-0"
-                @click="panelOpen = false"
-                class="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm"
+                @click="cerrarPanel()"
+                class="fixed inset-0 z-40 transition-colors"
+                :class="veloClase()"
                 style="display:none"
                 aria-hidden="true"
             ></div>
@@ -162,15 +310,18 @@
                 x-transition:leave="transition ease-in duration-200"
                 x-transition:leave-start="translate-x-0"
                 x-transition:leave-end="translate-x-full"
-                class="fixed inset-0 left-auto z-50 flex w-full max-w-sm flex-col bg-surface shadow-[-4px_0_32px_rgba(15,23,42,0.12)]"
+                {# El formulario necesita más ancho que el resumen de una cita. #}
+                class="fixed inset-0 left-auto z-50 flex w-full flex-col bg-surface shadow-[-4px_0_32px_rgba(15,23,42,0.12)]"
+                :class="modo === 'formulario' ? 'max-w-lg' : 'max-w-sm'"
                 style="display:none"
                 aria-label="Detalle de la cita"
+                :aria-label="tituloPanel"
             >
                 <div class="flex items-center justify-between border-b border-line px-6 py-5">
-                    <p class="text-sm font-semibold text-content-muted">Cita seleccionada</p>
+                    <p class="text-sm font-semibold text-content-muted" x-text="tituloPanel">Cita seleccionada</p>
                     <button
                         type="button"
-                        @click="panelOpen = false"
+                        @click="cerrarPanel()"
                         class="rounded-lg p-1.5 text-content-faint transition hover:bg-muted-strong hover:text-content-muted"
                         aria-label="Cerrar panel"
                     >
@@ -192,10 +343,17 @@
             </aside>
         </div>
     </template>
+
 </section>
 {% endblock %}
 
 {% block extra_head %}
+{% comment %}El JS de los desplegables del formulario de cita se carga **con la
+página**, no con el fragmento que htmx trae al panel: si se definiera allí, Alpine
+podría inicializar esos nodos antes de que el script se hubiera evaluado y el
+`x-data` fallaría con «abierto no está definido» en la primera apertura. Ver la
+cabecera de `static/js/appointment_picker.js`.{% endcomment %}
+<script src="{% static 'js/appointment_picker.js' %}"></script>
 <style>
     .htmx-indicator { display: none; }
     .htmx-request .htmx-indicator { display: flex; }

@@ -29,6 +29,8 @@ class AgentMemory(models.Model):
 
     class Meta:
         db_table = "agent_memory"
+        verbose_name = 'memoria del agente'
+        verbose_name_plural = 'memorias del agente'
         indexes = [
             models.Index(fields=["session_id"], name="idx_agent_memory_session"),
         ]
@@ -53,6 +55,8 @@ class WorkflowError(models.Model):
 
     class Meta:
         db_table = "workflow_errors"
+        verbose_name = 'error de workflow'
+        verbose_name_plural = 'errores de workflow'
         indexes = [
             models.Index(fields=["workflow", "created_at"], name="idx_workflow_errors"),
         ]
@@ -118,6 +122,8 @@ class ConversationSession(models.Model):
 
     class Meta:
         db_table = "conversation_sessions"
+        verbose_name = 'sesión de conversación'
+        verbose_name_plural = 'sesiones de conversación'
         # Antes `phone` era unique global, lo que impedía que dos clínicas
         # hablasen con el mismo número.
         constraints = [
@@ -256,6 +262,8 @@ class ChatMessage(models.Model):
 
     class Meta:
         db_table = "chat_messages"
+        verbose_name = 'mensaje de chat'
+        verbose_name_plural = 'mensajes de chat'
         ordering = ['created_at']
         indexes = [
             models.Index(fields=["session", "created_at"], name="idx_chat_msg_session"),

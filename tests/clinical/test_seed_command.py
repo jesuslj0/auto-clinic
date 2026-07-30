@@ -117,10 +117,12 @@ class TestSeedClinical:
 
         derived = ClinicalAlert.objects.filter(source=ClinicalAlert.Source.DERIVED)
         assert set(derived.values_list('alert_type', flat=True)) == {
-            # Del primer caso sembrado: alergia a anestésicos locales.
-            'allergy_local_anesthetics',
-            # Del segundo: diabetes, anticoagulantes y alergia al látex.
-            'diabetes', 'anticoagulants', 'allergy_latex',
+            # Del primer caso sembrado (el pie diabético): diabetes,
+            # arteriopatía, neuropatía y anticoagulación.
+            'diabetes', 'peripheral_vascular_disease', 'neuropathy', 'anticoagulants',
+            # Del segundo: alergia a anestésicos locales y al látex, más el
+            # tabaquismo activo, que va como advertencia sobre el tipo `other`.
+            'allergy_local_anesthetics', 'allergy_latex', 'other',
         }
         assert all(alert.source_response_id is not None for alert in derived)
         assert all(alert.created_by is None for alert in derived)
@@ -146,7 +148,7 @@ class TestSeedClinical:
         from clinical.models import Question, QuestionnaireTemplate, TemplateVersion
 
         template = QuestionnaireTemplate.objects.create(
-            clinic=clinic_a, name='Anamnesis dental',
+            clinic=clinic_a, name='Anamnesis podológica',
         )
         legacy = TemplateVersion.objects.create(template=template)
         Question.objects.create(

@@ -1,0 +1,277 @@
+{% extends 'base.html' %}
+
+{% comment %}
+Evolución de una lesión: la serie completa, en orden y con sus fotografías.
+
+Es una **página propia** y no un panel del mapa: comparar dos fotos de una úlcera
+necesita el ancho entero, y aquí la lesión ya está elegida. Se llega con un
+enlace normal desde su detalle, así que se puede compartir, marcar y recargar.
+
+Tres cosas que la sostienen:
+
+1. **El orden es cronológico**, de la primera observación a la última, y se pide
+   explícitamente (`get_observations(chronological=True)`). El orden natural del
+   modelo es el contrario porque una ficha se lee hacia atrás; una evolución, no:
+   leerla al revés se presta a concluir «va a peor» cuando iba a mejor.
+
+2. **Ninguna URL firmada se escribe en el HTML.** Cada imagen apunta a
+   `clinical:lesion-attachment`, que comprueba el permiso, firma contra el bucket
+   privado en ese instante, deja su `AccessLog` y redirige. Eso resuelve de raíz
+   la caducidad de la firma (~10 min): lo que caduca es la URL del bucket, que se
+   genera de nuevo en cada petición de imagen, mientras que el `src` de esta
+   página es un enlace de sesión que no caduca. Una página abierta media hora
+   sigue enseñando las fotos, y ninguna credencial del almacén queda escrita en
+   el documento ni en la base de datos.
+
+3. **El comparador lo sirve el servidor.** Alpine solo recuerda qué dos
+   observaciones están marcadas (estado de interfaz); las fotos y las medidas de
+   esas dos las trae htmx de `patients:lesion-compare`. Volcar el historial en un
+   `x-data` sería meter dato clínico en un atributo HTML para no hacer una
+   petición.
+{% endcomment %}
+
+{% block title %}Evolución de la lesión · {{ patient }} · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Evolución de la lesión{% endblock %}
+{% block page_subheading %}<p class="truncate text-xs text-content-subtle sm:text-sm">{{ patient }} · {{ lesion.get_lesion_type_display|lower }} en {{ lesion.get_anatomical_zone_display|lower }}</p>{% endblock %}
+
+{% block page_actions %}
+<a href="{{ back_url }}" class="btn-secondary max-sm:px-3" aria-label="Volver al mapa de lesiones">
+    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+    </svg>
+    <span class="hidden sm:inline">Volver a la lesión</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<script>
+    /**
+     * Estado de interfaz de la comparación. **Solo interfaz**: qué dos
+     * observaciones están marcadas. Ni una medida ni una foto viven aquí.
+     */
+    window.evolucionLesion = function (config) {
+        return {
+            comparando: false,
+            //: Ids de las observaciones marcadas, como mucho dos.
+            marcadas: [],
+
+            alternarComparacion() {
+                this.comparando = !this.comparando;
+                if (!this.comparando) this.marcadas = [];
+            },
+
+            estaMarcada(id) {
+                return this.marcadas.includes(id);
+            },
+
+            /**
+             * Marca o desmarca. Al llegar a dos, se pide el comparador; una
+             * tercera desplaza a la más antigua, que es lo que se espera al
+             * seguir pulsando por la serie.
+             */
+            alternar(id) {
+                if (this.estaMarcada(id)) {
+                    this.marcadas = this.marcadas.filter((valor) => valor !== id);
+                } else {
+                    this.marcadas = [...this.marcadas, id].slice(-2);
+                }
+                this.pedirComparacion();
+            },
+
+            pedirComparacion() {
+                if (this.marcadas.length < 2) return;
+                const parametros = new URLSearchParams({
+                    a: this.marcadas[0],
+                    b: this.marcadas[1],
+                });
+                htmx.ajax('GET', config.urlComparar + '?' + parametros.toString(), {
+                    source: this.$el,
+                    target: '#comparador',
+                    swap: 'innerHTML',
+                });
+            },
+        };
+    };
+</script>
+
+<div
+    class="space-y-6"
+    x-data="evolucionLesion({ urlComparar: '{{ compare_url }}' })"
+    hx-indicator="#comparador-spinner"
+>
+    {# --- Ficha de la lesión ---------------------------------------------- #}
+    <section class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+        <div class="flex flex-col gap-4 border-b border-line px-6 py-5 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0">
+                <h3 class="text-lg font-semibold text-content">
+                    {{ lesion.get_lesion_type_display }} en {{ lesion.get_anatomical_zone_display|lower }}
+                </h3>
+                <p class="mt-1 text-sm text-content-subtle">
+                    Vista {{ lesion.get_view_display|lower }} · {{ lesion.get_laterality_display|lower }} ·
+                    detectada el {{ lesion.detected_at|date:"j \d\e F \d\e Y" }}
+                </p>
+            </div>
+            <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                {% if lesion.status == 'active' %}
+                <span class="inline-flex items-center gap-1.5 rounded-full bg-danger-soft px-3 py-1 text-xs font-semibold text-danger ring-1 ring-danger-line">
+                    <span aria-hidden="true" class="h-2 w-2 rounded-full bg-danger"></span>Activa
+                </span>
+                {% else %}
+                <span class="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-3 py-1 text-xs font-semibold text-success ring-1 ring-success-line">
+                    <span aria-hidden="true" class="h-2 w-2 rounded-full bg-success"></span>
+                    Resuelta el {{ lesion.resolved_at|date:"j/m/Y" }}
+                </span>
+                {% endif %}
+                {% if observations|length > 1 %}
+                <button
+                    type="button"
+                    class="btn-secondary"
+                    :class="comparando ? 'ring-2 ring-brand-500' : ''"
+                    @click="alternarComparacion()"
+                    aria-pressed="false"
+                    :aria-pressed="comparando ? 'true' : 'false'"
+                    x-text="comparando ? 'Salir de la comparación' : 'Comparar dos visitas'"
+                >Comparar dos visitas</button>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Resumen de la serie: de la primera medida a la última. #}
+        {% if measurement_trend %}
+        <dl class="grid gap-4 px-6 py-5 sm:grid-cols-3">
+            {% for row in measurement_trend %}
+            <div class="rounded-2xl bg-muted px-4 py-3 ring-1 ring-line">
+                <dt class="text-xs font-semibold uppercase tracking-wide text-content-faint">{{ row.label }}</dt>
+                <dd class="mt-1 text-sm text-content">
+                    <span class="font-semibold">{{ row.first }}</span> → <span class="font-semibold">{{ row.last }}</span> mm
+                </dd>
+                <dd class="mt-1 text-xs {% if row.delta < 0 %}text-success{% elif row.delta > 0 %}text-danger{% else %}text-content-subtle{% endif %}">
+                    {% if row.delta < 0 %}▼ {{ row.delta|stringformat:"+.1f" }} mm{% elif row.delta > 0 %}▲ {{ row.delta|stringformat:"+.1f" }} mm{% else %}Sin cambio{% endif %}
+                    <span class="text-content-faint">· {{ row.first_at|date:"j/m/Y" }} → {{ row.last_at|date:"j/m/Y" }}</span>
+                </dd>
+            </div>
+            {% endfor %}
+        </dl>
+        {% comment %}Un menos es una mejoría en una úlcera, pero el color no basta
+        y por eso va también escrito con su flecha y su signo.{% endcomment %}
+        {% endif %}
+
+        <p class="border-t border-line px-6 py-4 text-xs text-content-faint" aria-live="polite"
+           x-text="comparando ? 'Marca dos observaciones de la serie para verlas una al lado de la otra.' : ''"></p>
+    </section>
+
+    {# --- Comparador ------------------------------------------------------- #}
+    <section x-show="comparando" x-cloak x-collapse>
+        <div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+            <div class="flex items-center justify-between gap-3 border-b border-line px-6 py-4">
+                <h3 class="text-base font-semibold text-content">Comparación</h3>
+                <span id="comparador-spinner" class="htmx-indicator text-brand-fg" aria-hidden="true">
+                    <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
+                        <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"></path>
+                    </svg>
+                </span>
+            </div>
+            <div id="comparador" class="px-6 py-5">
+                <p class="text-sm text-content-subtle">Marca dos observaciones de la serie para compararlas.</p>
+            </div>
+        </div>
+    </section>
+
+    {# --- La serie --------------------------------------------------------- #}
+    <section class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+        <div class="flex flex-col gap-1 border-b border-line px-6 py-5">
+            <h3 class="text-lg font-semibold text-content">Serie de observaciones</h3>
+            <p class="text-sm text-content-subtle">
+                {% if observations %}
+                De la primera a la última: {{ observations|length }} observación{{ observations|length|pluralize:"es" }}
+                y {{ photo_count }} fotografía{{ photo_count|pluralize:"s" }}.
+                {% else %}
+                Todavía no hay ninguna observación registrada.
+                {% endif %}
+            </p>
+        </div>
+
+        {% if observations %}
+        <ol class="divide-y divide-line">
+            {% for observation in observations %}
+            <li class="px-6 py-5">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="text-sm font-semibold text-content">
+                            <span class="text-content-faint">{{ forloop.counter }}.</span>
+                            {{ observation.observed_at|date:"j \d\e F \d\e Y" }}
+                        </p>
+                        {% if observation.length_mm or observation.width_mm or observation.depth_mm %}
+                        <p class="mt-1 text-sm text-content-subtle">
+                            {% if observation.length_mm %}Largo <span class="font-semibold text-content">{{ observation.length_mm }} mm</span>{% endif %}
+                            {% if observation.width_mm %} · Ancho <span class="font-semibold text-content">{{ observation.width_mm }} mm</span>{% endif %}
+                            {% if observation.depth_mm %} · Profundidad <span class="font-semibold text-content">{{ observation.depth_mm }} mm</span>{% endif %}
+                        </p>
+                        {% else %}
+                        <p class="mt-1 text-sm text-content-faint">Sin medidas registradas.</p>
+                        {% endif %}
+                    </div>
+
+                    {% comment %}La casilla de comparación solo existe con el modo
+                    activo: fuera de él no hay nada que marcar.{% endcomment %}
+                    <label x-show="comparando" x-cloak class="flex flex-shrink-0 cursor-pointer items-center gap-2 rounded-xl bg-muted px-3 py-2 text-xs font-semibold text-content-muted ring-1 ring-line">
+                        <input
+                            type="checkbox"
+                            class="h-4 w-4 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                            :checked="estaMarcada({{ observation.pk }})"
+                            @change="alternar({{ observation.pk }})"
+                        >
+                        Comparar
+                    </label>
+                </div>
+
+                {% if observation.description %}
+                <p class="mt-2 whitespace-pre-line text-sm text-content-muted">{{ observation.description }}</p>
+                {% endif %}
+
+                {% if observation.attachments.all %}
+                <ul class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+                    {% for attachment in observation.attachments.all %}
+                    <li>
+                        <a
+                            href="{% url 'clinical:lesion-attachment' attachment.public_id %}"
+                            target="_blank" rel="noopener"
+                            class="block overflow-hidden rounded-2xl ring-1 ring-line focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                        >
+                            <img
+                                src="{% url 'clinical:lesion-attachment' attachment.public_id %}"
+                                alt="Fotografía de la lesión tomada el {{ observation.observed_at|date:'j/m/Y' }}"
+                                loading="lazy" decoding="async"
+                                class="aspect-square w-full bg-muted-strong object-cover transition hover:opacity-90"
+                            >
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="mt-3 text-xs text-content-faint">Sin fotografías en esta visita.</p>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ol>
+        {% else %}
+        <div class="flex items-start gap-3 px-6 py-8">
+            <span aria-hidden="true" class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-muted text-content-subtle">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.5l4.5-4.5 3.75 3.75L16.5 7.5m0 0H12m4.5 0V12" />
+                </svg>
+            </span>
+            <div class="min-w-0">
+                <p class="text-sm font-semibold text-content">Todavía no hay evolución que enseñar</p>
+                <p class="mt-1 text-sm text-content-subtle">
+                    La lesión está marcada en el mapa, pero aún no se ha anotado ninguna observación.
+                    <a href="{{ back_url }}" class="font-semibold text-brand-fg underline underline-offset-2">Vuelve a la lesión</a>
+                    para registrar la primera con sus medidas y su fotografía.
+                </p>
+            </div>
+        </div>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

@@ -1,10 +1,12 @@
-from datetime import datetime, time, timedelta
+import unicodedata
+from datetime import date as date_type, datetime, time, timedelta
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 import django_filters
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -33,6 +35,8 @@ from appointments.services import (
     register_patient_confirmation,
 )
 from appointments.serializers import AppointmentSerializer, ProfessionalScheduleSerializer, ProfessionalSerializer
+from audit.mixins import log_access
+from audit.models import AccessLog
 from core.authentication import ClinicAgent
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
 from core.models import Clinic
@@ -572,22 +576,115 @@ class AppointmentListView(LoginRequiredMixin, TemplateView):
         return context
 
 
+def _searchable(*values) -> str:
+    """Texto de búsqueda de una opción: minúsculas y sin acentos.
+
+    Se calcula aquí, en el servidor, y viaja ya normalizado dentro de la opción:
+    el filtro del navegador se queda en un `includes` sobre esta cadena, sin
+    repetir en JavaScript una normalización que tiene que coincidir exactamente
+    con la de aquí. Así «Núñez» aparece escribiendo «nunez» y al revés.
+
+    Los valores repetidos se descartan (el teléfono suele venir a la vez como
+    pista visible y como campo buscable): no aportan nada al filtro y engordan el
+    HTML de cada opción.
+    """
+    unique = list(dict.fromkeys(str(value) for value in values if value))
+    joined = ' '.join(unique)
+    decomposed = unicodedata.normalize('NFKD', joined)
+    return ''.join(char for char in decomposed if not unicodedata.combining(char)).lower()
+
+
+def build_option_payload(*, pk, label, hint='', extra=()):
+    """Una opción de los desplegables de la cita.
+
+    Cuatro campos y ninguno de más: `label` es lo que se lee, `hint` lo que
+    desambigua (teléfono del paciente, duración y precio del servicio) y
+    `haystack` lo que se filtra. Se construye a mano en vez de con el serializer
+    de DRF porque aquel devuelve el modelo entero, y esta lista viaja dentro del
+    HTML: cuantos menos datos personales lleve, mejor.
+    """
+    return {
+        'id': pk,
+        'label': label,
+        'hint': hint or '',
+        'haystack': _searchable(label, hint, *extra),
+    }
+
+
 class AppointmentCreateView(LoginRequiredMixin, FormView):
     """Alta manual de citas desde el panel (staff/admin).
 
     Acepta valores iniciales por query string (scheduled_at o date+time,
     patient, service) para que el calendario pueda enlazar aquí con la
     fecha/hora prerrellenadas.
+
+    **Una vista, dos presentaciones.** Con la cabecera de htmx devuelve el
+    fragmento que la agenda carga en su **panel lateral** al pulsar una casilla
+    vacía; sin ella, la página completa de siempre. La diferencia es la plantilla
+    y nada más: el formulario, la validación y el alta por `create_appointment()`
+    son los mismos, así que la vía sin JavaScript sigue funcionando igual y no hay
+    dos caminos que puedan divergir.
+
+    El panel lateral, y no un diálogo centrado, porque **el calendario tiene que
+    seguir a la vista** mientras se rellena la cita: es lo que permite ver qué
+    hay alrededor del hueco que se está ocupando.
+
+    Los desplegables de paciente y servicio llegan **con su lista ya dentro**
+    (ver `build_option_payload`): un autocompletado que no enseña nada hasta la
+    segunda letra no deja *ver* qué hay, y en una clínica con decenas de pacientes
+    eso es peor que un desplegable. El filtrado al escribir ocurre en el
+    navegador; el servidor solo entra como respaldo si la lista se ha truncado.
     """
 
     template_name = 'appointments/appointment_form.html'
+    #: Lo que se devuelve a htmx: el formulario para el panel lateral de la agenda.
+    panel_template_name = 'appointments/partials/_appointment_form_panel.html'
     form_class = AppointmentForm
+
+    #: Cuántas opciones se precargan como máximo en el HTML. Por encima de esto,
+    #: el desplegable sigue filtrando en cliente lo que trae y además consulta al
+    #: endpoint de búsqueda: así una clínica con miles de pacientes no infla la
+    #: página, y ninguna se queda sin poder encontrar a alguien.
+    preload_limit = 500
 
     def dispatch(self, request, *args, **kwargs):
         if request.user.is_authenticated and not request.user.clinic_id:
             messages.error(request, 'Tu usuario no tiene una clínica asignada.')
             return redirect('appointments:calendar')
         return super().dispatch(request, *args, **kwargs)
+
+    def get_preload_limit(self):
+        """Tope de opciones precargadas. Override: `APPOINTMENT_PICKER_PRELOAD_LIMIT`."""
+        from django.conf import settings
+
+        return getattr(settings, 'APPOINTMENT_PICKER_PRELOAD_LIMIT', self.preload_limit)
+
+    def is_htmx_request(self):
+        """¿Hay que responder con el fragmento del panel?
+
+        `HX-History-Restore-Request` se excluye por lo mismo que en la ficha del
+        paciente (`PatientTabView.is_htmx_swap`): al volver atrás sin caché, htmx
+        vuelve a pedir la página con `HX-Request` para restaurar el `body`, y
+        devolverle el fragmento dejaría la pantalla reducida al formulario.
+        """
+        headers = self.request.headers
+        return bool(headers.get('HX-Request')) and not headers.get('HX-History-Restore-Request')
+
+    def get_template_names(self):
+        if self.is_htmx_request():
+            return [self.panel_template_name]
+        return [self.template_name]
+
+    def render_to_response(self, context, **response_kwargs):
+        """El formulario no se cachea: lleva dentro la lista de pacientes.
+
+        Son datos personales, así que no pueden quedarse en el caché del navegador
+        ni en un proxy intermedio. Y de paso evita el efecto de ver una versión
+        anterior del formulario al volver a abrir el mismo hueco.
+        """
+        response = super().render_to_response(context, **response_kwargs)
+        response['Cache-Control'] = 'private, no-store, max-age=0'
+        return response
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -636,9 +733,30 @@ class AppointmentCreateView(LoginRequiredMixin, FormView):
         new_patient_next = self.request.get_full_path()
         context['new_patient_url'] = f"{reverse_lazy('patients:create')}?{urlencode({'next': new_patient_next})}"
 
-        # URLs de búsqueda para los combobox dinámicos de paciente/servicio.
+        # URLs de búsqueda: son el RESPALDO de los desplegables, no su fuente
+        # normal. Solo se consultan cuando la lista precargada se ha truncado.
         context['patients_search_url'] = reverse('patient-list')
         context['services_search_url'] = reverse('service-list')
+
+        # La cita se envía a esta misma URL con su query string intacta: así el
+        # POST del panel conserva la semana que se estaba mirando (y la
+        # fecha/hora, si hubiera que repintar el formulario).
+        context['form_action'] = self.request.get_full_path()
+        context['is_panel'] = self.is_htmx_request()
+        context['slot_label'] = self.describe_slot(context['form'])
+
+        patients, patients_truncated = self.get_patient_options()
+        services, services_truncated = self.get_service_options()
+        context.update({
+            'patient_options': patients,
+            'service_options': services,
+            # Si alguna de las dos listas se ha truncado, el desplegable
+            # correspondiente activa la búsqueda en servidor como respaldo.
+            'patients_truncated': patients_truncated,
+            'services_truncated': services_truncated,
+            'options_truncated': patients_truncated or services_truncated,
+        })
+        self.log_patient_options_access(patients)
 
         # Texto a mostrar en el combobox al cargar: si venimos de un POST
         # inválido usamos lo que el usuario había tecleado; si no, resolvemos
@@ -654,6 +772,93 @@ class AppointmentCreateView(LoginRequiredMixin, FormView):
                 Service.objects.filter(clinic=self.request.user.clinic), self.request.GET.get('service')
             )
         return context
+
+    def describe_slot(self, form):
+        """El hueco elegido, en legible: «viernes 31 de julio a las 10:00».
+
+        Se arma aquí y no en la plantilla porque el valor del campo puede ser una
+        cadena ISO (viene del calendario por query string, o de un POST) o ya un
+        `date` (`scheduled_at` parseado en `get_initial`), y el filtro `date` de
+        las plantillas deja pasar la cadena sin formatear — quedaría un
+        «2026-07-31» a la vista.
+        """
+        from django.utils.dateparse import parse_date
+        from django.utils.formats import date_format
+
+        raw_date = form['date'].value()
+        raw_time = form['time'].value()
+        if not raw_date or not raw_time:
+            return ''
+
+        day = raw_date if isinstance(raw_date, date_type) else parse_date(str(raw_date))
+        if day is None:
+            return ''
+        # `str(raw_time)[:5]`: un `time` se imprime como «10:00:00» y lo que se
+        # lee es la hora y los minutos.
+        return f'{date_format(day, r"l j \d\e F")} a las {str(raw_time)[:5]}'
+
+    # -- opciones de los desplegables ---------------------------------------
+
+    def get_patient_options(self):
+        """`(opciones, truncada)` de los pacientes de la clínica del usuario.
+
+        Se pide **una opción más que el tope** para saber si la lista está
+        completa sin lanzar un `COUNT` aparte.
+        """
+        limit = self.get_preload_limit()
+        patients = list(
+            Patient.objects
+            .filter(clinic=self.request.user.clinic)
+            .order_by('last_name', 'first_name')[:limit + 1]
+        )
+        truncated = len(patients) > limit
+        return [
+            build_option_payload(
+                pk=patient.pk,
+                label=f'{patient.first_name} {patient.last_name}'.strip(),
+                hint=patient.phone or patient.email,
+                extra=(patient.phone, patient.email),
+            )
+            for patient in patients[:limit]
+        ], truncated
+
+    def get_service_options(self):
+        """`(opciones, truncada)` de los servicios ACTIVOS de la clínica.
+
+        El mismo filtro que el `queryset` del formulario
+        (`AppointmentForm.__init__`): un desplegable que ofreciera un servicio
+        retirado acabaría en un error de validación sin explicación.
+        """
+        limit = self.get_preload_limit()
+        services = list(
+            Service.objects
+            .filter(clinic=self.request.user.clinic, is_active=True)
+            .order_by('name')[:limit + 1]
+        )
+        truncated = len(services) > limit
+        return [
+            build_option_payload(
+                pk=service.pk,
+                label=service.name,
+                hint=f'{service.duration_display} · {service.price_display}',
+            )
+            for service in services[:limit]
+        ], truncated
+
+    def log_patient_options_access(self, options):
+        """Deja el listado de pacientes en `AccessLog`.
+
+        Cuando el desplegable buscaba contra la API, ese acceso lo registraba
+        `AuditedViewSetMixin` en cada consulta. Al precargar la lista aquí, sin
+        esta llamada el acceso desaparecería del registro — y el criterio del
+        proyecto es que las lecturas se declaran, porque no emiten señales (ver
+        `audit/README.md`).
+        """
+        log_access(
+            action=AccessLog.Action.LIST,
+            result_count=len(options),
+            request=self.request,
+        )
 
     @staticmethod
     def _initial_label(queryset, pk):
@@ -685,15 +890,35 @@ class AppointmentCreateView(LoginRequiredMixin, FormView):
             )
         except AppointmentDomainError as error:
             # El profesional elegido no puede atender la cita (horario, ausencia,
-            # solapamiento…). El motivo viene del service; se muestra en el form.
+            # solapamiento…). El motivo viene del service; se muestra en el form,
+            # que en el panel se repinta dentro de él.
             form.add_error('professional', error.detail['message'])
             return self.form_invalid(form)
 
         messages.success(self.request, 'Cita creada correctamente.')
+
+        if self.is_htmx_request():
+            # `HX-Redirect` y no un fragmento: la cita nueva cambia el reparto en
+            # columnas de las que solapan con ella, así que el grid se vuelve a
+            # calcular entero en el servidor. Recargar es también lo que hace
+            # salir el aviso de éxito, que se pinta al cargar la página.
+            response = HttpResponse(status=204)
+            response['HX-Redirect'] = self.get_success_url()
+            return response
+
         return redirect(self.get_success_url())
 
     def get_success_url(self):
-        return reverse_lazy('appointments:calendar')
+        """La agenda, **en la semana que se estaba mirando**.
+
+        Sin conservar `week`, guardar una cita de la semana que viene devolvería
+        a la semana actual y parecería que no se ha creado nada.
+        """
+        url = str(reverse_lazy('appointments:calendar'))
+        week = self.request.GET.get('week') or self.request.POST.get('week')
+        if week:
+            return f'{url}?{urlencode({"week": week})}'
+        return url
 
 
 class AppointmentActionByTokenAPIView(APIView):

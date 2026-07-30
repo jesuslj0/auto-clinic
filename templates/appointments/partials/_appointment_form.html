@@ -1,0 +1,158 @@
+{% comment %}
+Campos del formulario de cita. Lo comparten la **página** de nueva cita y el
+**panel lateral** de la agenda, así que aquí no hay nada que dependa de estar en
+una o en otro: quien lo incluye decide el marco, y el contexto trae `form_action`,
+que es la URL a la que se envía (la misma que sirvió el formulario, con su query
+string intacta, para no perder la semana que se estaba mirando).
+
+Paciente y servicio son **desplegables con su lista dentro**, no autocompletados:
+
+- Al abrirlos se ven TODAS las opciones. Un autocompletado que no enseña nada
+  hasta la segunda letra obliga a adivinar qué hay.
+- Al escribir, el filtrado ocurre **en el navegador** sobre el `haystack` que ya
+  viene normalizado del servidor (minúsculas y sin acentos, ver `_searchable` en
+  `appointments/views.py`): «Núñez» aparece escribiendo «nunez». Ninguna
+  petición, ninguna recarga.
+- Solo si la lista venía **truncada** (`*_truncated`, cuando la clínica supera el
+  tope de precarga) el desplegable consulta además el endpoint de búsqueda y
+  añade lo que falte. Es el híbrido: lo normal no viaja, lo excepcional sí.
+
+Lo que se envía sigue siendo el **id** en un `<input type="hidden">`, igual que
+antes, porque el formulario espera `patient`/`service` como `ModelChoiceField`.
+El texto visible es solo eso, texto.
+
+El JavaScript de los desplegables **no está aquí**: vive en
+`static/js/appointment_picker.js` y lo carga la página anfitriona (la agenda y la
+página de nueva cita) en su `extra_head`. Esto no es una preferencia de orden de
+ficheros, son dos problemas evitados: definido dentro de este fragmento, Alpine
+puede inicializar los nodos que htmx acaba de insertar antes de que ese script se
+haya evaluado —y entonces el `x-data` falla y la consola se llena de «abierto no
+está definido»—, y además un bloque de script largo dentro de una plantilla es
+carne de formateador (basta un paréntesis de más para que deje de evaluarse
+entero). Quien incluya este parcial tiene que cargar ese fichero.
+
+Lo que sí sale de aquí son **los datos**: las dos listas precargadas, en sendos
+`json_script`, que es la forma segura de pasar JSON al navegador.
+{% endcomment %}
+{{ patient_options|json_script:"appointment-patient-options" }}
+{{ service_options|json_script:"appointment-service-options" }}
+
+<form
+    method="post"
+    action="{{ form_action }}"
+    novalidate
+    class="space-y-6"
+    {% if is_panel %}
+    {# Se repinta en el propio panel: los errores de validación no lo cierran. #}
+    hx-post="{{ form_action }}"
+    hx-target="#calendar-panel-content"
+    hx-swap="innerHTML"
+    hx-indicator="#panel-spinner"
+    {% endif %}
+>
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line" role="alert">
+        {% for error in form.non_field_errors %}
+        <p class="text-sm text-danger">{{ error }}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {# --- Paciente ------------------------------------------------------- #}
+    <div
+        x-data="appointmentPatientPicker({
+            truncada: {{ patients_truncated|yesno:'true,false' }},
+            busquedaUrl: '{{ patients_search_url }}',
+            idInicial: '{{ form.patient.value|default:''|escapejs }}',
+            etiquetaInicial: '{{ initial_patient_label|default:''|escapejs }}'
+        })"
+        @click.outside="cerrar()"
+        class="relative"
+    >
+        <div class="mb-1.5 flex items-center justify-between">
+            <label for="{{ form.patient.id_for_label }}" class="block text-sm font-medium text-content-muted">{{ form.patient.label }}</label>
+            <a href="{{ new_patient_url }}" class="text-xs font-medium text-brand-fg hover:text-brand-fg">+ Nuevo paciente</a>
+        </div>
+        {% include 'appointments/partials/_appointment_picker_field.html' with field=form.patient placeholder="Selecciona o escribe para filtrar…" %}
+        {% if form.patient.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.patient.errors|join:", " }}</p>{% endif %}
+    </div>
+
+    {# --- Servicio ------------------------------------------------------- #}
+    <div
+        x-data="appointmentServicePicker({
+            truncada: {{ services_truncated|yesno:'true,false' }},
+            busquedaUrl: '{{ services_search_url }}',
+            idInicial: '{{ form.service.value|default:''|escapejs }}',
+            etiquetaInicial: '{{ initial_service_label|default:''|escapejs }}'
+        })"
+        @click.outside="cerrar()"
+        class="relative"
+    >
+        <label for="{{ form.service.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.service.label }}</label>
+        {% include 'appointments/partials/_appointment_picker_field.html' with field=form.service placeholder="Selecciona o escribe para filtrar…" %}
+        {% if form.service.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.service.errors|join:", " }}</p>{% endif %}
+    </div>
+
+    {# --- Profesional ---------------------------------------------------- #}
+    <div>
+        <label for="{{ form.professional.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.professional.label }}</label>
+        <select name="{{ form.professional.html_name }}" id="{{ form.professional.id_for_label }}"
+            class="block w-full rounded-xl border {% if form.professional.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+            <option value="">{{ form.professional.field.empty_label }}</option>
+            {% for value, label in form.professional.field.choices %}
+            {% if value %}<option value="{{ value }}" {% if form.professional.value|stringformat:"s" == value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>{% endif %}
+            {% endfor %}
+        </select>
+        {% if form.professional.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.professional.errors|join:", " }}</p>{% endif %}
+    </div>
+
+    {# --- Fecha y hora --------------------------------------------------- #}
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+            <label for="{{ form.date.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.date.label }}</label>
+            <input type="date" name="{{ form.date.html_name }}" id="{{ form.date.id_for_label }}" value="{{ form.date.value|default:'' }}"
+                class="block w-full rounded-xl border {% if form.date.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+            {% if form.date.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.date.errors|join:", " }}</p>{% endif %}
+        </div>
+        <div>
+            <label for="{{ form.time.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.time.label }}</label>
+            <input type="time" name="{{ form.time.html_name }}" id="{{ form.time.id_for_label }}" value="{{ form.time.value|default:'' }}"
+                class="block w-full rounded-xl border {% if form.time.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+            {% if form.time.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.time.errors|join:", " }}</p>{% endif %}
+        </div>
+    </div>
+
+    {# --- Notas ---------------------------------------------------------- #}
+    <div>
+        <label for="{{ form.notes.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.notes.label }}</label>
+        <textarea name="{{ form.notes.html_name }}" id="{{ form.notes.id_for_label }}" rows="3" placeholder="Notas internas de la cita..."
+            class="block w-full rounded-xl border {% if form.notes.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition resize-none">{{ form.notes.value|default:'' }}</textarea>
+        {% if form.notes.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.notes.errors|join:", " }}</p>{% endif %}
+    </div>
+
+    <div class="flex items-center justify-between pt-2">
+        {% if is_panel %}
+        <button type="button" @click="cerrarPanel()" class="btn-secondary inline-flex items-center gap-2">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+            Cancelar
+        </button>
+        {% else %}
+        <a href="{% url 'appointments:calendar' %}" class="btn-secondary inline-flex items-center gap-2">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+            Cancelar
+        </a>
+        {% endif %}
+        <button type="submit" class="btn-primary inline-flex items-center gap-2">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+            </svg>
+            Guardar cita
+        </button>
+    </div>
+</form>
