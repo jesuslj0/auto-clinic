@@ -40,6 +40,8 @@ class Professional(models.Model):
     class Meta:
         db_table = 'professionals'
         ordering = ['user__first_name', 'user__last_name', 'user__email']
+        verbose_name = 'profesional'
+        verbose_name_plural = 'profesionales'
 
     def __str__(self):
         return self.user.get_full_name() or self.user.email
@@ -75,6 +77,8 @@ class ProfessionalSchedule(models.Model):
     class Meta:
         db_table = 'professional_schedules'
         ordering = ['day_of_week', 'start_time']
+        verbose_name = 'horario de profesional'
+        verbose_name_plural = 'horarios de profesionales'
         constraints = [
             models.UniqueConstraint(
                 fields=['professional', 'day_of_week', 'start_time'],
@@ -137,6 +141,8 @@ class ProfessionalTimeOff(models.Model):
     class Meta:
         db_table = 'professional_time_off'
         ordering = ['starts_at']
+        verbose_name = 'ausencia de profesional'
+        verbose_name_plural = 'ausencias de profesionales'
         indexes = [models.Index(fields=['professional', 'starts_at', 'ends_at'])]
 
     def __str__(self):
@@ -252,6 +258,8 @@ class Appointment(models.Model):
     class Meta:
         db_table = 'appointments'
         ordering = ['scheduled_at']
+        verbose_name = 'cita'
+        verbose_name_plural = 'citas'
         indexes = [
             models.Index(fields=['clinic', 'scheduled_at', 'status'], name='idx_appointments_clinic_status'),
             models.Index(
@@ -384,6 +392,8 @@ class AppointmentStatusHistory(models.Model):
     class Meta:
         db_table = 'appointment_status_history'
         ordering = ['changed_at']
+        verbose_name = 'cambio de estado de cita'
+        verbose_name_plural = 'cambios de estado de citas'
 
     def __str__(self):
         return f'{self.appointment} | {self.from_status} → {self.to_status} ({self.actor})'

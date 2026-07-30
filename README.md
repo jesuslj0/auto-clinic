@@ -1,72 +1,102 @@
 # Auto Clinic
 
-Production-ready Django SaaS starter for a clinic appointment system.
+Base de Django lista para producción: un SaaS de gestión de citas para clínicas.
 
 ## Stack
-- Django 5 with split settings (`base`, `dev`, `prod`)
-- PostgreSQL-ready persistence
-- Django REST Framework APIs for all domain apps
-- Django Channels + Redis channel layer for real-time appointment updates
-- Celery + Redis broker/backend for reminders
-- Docker Compose for local orchestration
+- Django 5 con settings separados (`base`, `dev`, `prod`)
+- Persistencia sobre PostgreSQL
+- APIs con Django REST Framework para todas las apps de dominio
+- Django Channels + Redis como channel layer, para las citas en tiempo real
+- Celery + Redis (broker y backend) para los recordatorios
+- Docker Compose para levantarlo en local
 
 ## Apps
-- `core`: clinics and custom users
-- `patients`: patient records
-- `services`: catalog of clinic services
-- `appointments`: booking workflows, professionals, and public token actions
-- `notifications`: reminders and Celery tasks
-- `billing`: optional clinic subscription management
-- `booking`: public booking flow (templates only)
-- `portal`: patient portal for confirm/cancel via token (templates only)
-- `agent`: WhatsApp bot state (AgentMemory, ConversationSession, WorkflowError)
-- `knowledge`: clinic knowledge base (entries, queries, cache)
+- `core`: clínicas y usuarios personalizados
+- `patients`: fichas de pacientes
+- `services`: catálogo de servicios de la clínica
+- `appointments`: reservas, profesionales y acciones públicas por token
+- `notifications`: recordatorios y tareas de Celery
+- `billing`: suscripción de la clínica (opcional)
+- `booking`: reserva pública (solo plantillas)
+- `portal`: portal del paciente para confirmar o cancelar por token (solo plantillas)
+- `agent`: estado del bot de WhatsApp (AgentMemory, ConversationSession, WorkflowError)
+- `knowledge`: base de conocimiento de la clínica (entradas, consultas, caché)
 
-## Key API endpoints
+## Convenciones de código
 
-| Resource | Base URL |
-|----------|----------|
-| Services | `/api/services/` |
-| Professionals | `/api/professionals/` |
-| Appointments | `/api/appointments/` |
-| Patients | `/api/patients/` |
+### Comentarios: los justos
 
-### Professional booking flow (agent)
-1. `GET /api/services/` — list available services
-2. `GET /api/professionals/?service={id}` — professionals offering that service
-3. `GET /api/professionals/{id}/available-slots/?date=YYYY-MM-DD` — free slots
-4. `POST /api/appointments/` — create the appointment
+Un comentario solo cuando el código no se explique solo, y para decir **qué** hace
+—lo que se ve de un vistazo—, nunca **por qué** se implementó así. Fuera las
+justificaciones, las alternativas descartadas, las advertencias a futuros
+lectores y la historia del cambio: eso va al mensaje del commit, al PR o al
+README de la app, no al código.
 
-See `ENDPOINTS.md` for the full reference.
+- **Python**: docstrings de una o dos líneas en clases y funciones cuyo nombre no
+  baste. Comentarios sueltos solo para marcar una sección o aclarar una línea
+  genuinamente opaca.
+- **Plantillas Django**: prácticamente ninguno. La única excepción es un rótulo
+  corto de sección o de componente cuando ayuda a orientarse en un fichero largo:
 
-## Appointment lifecycle
+  ```django
+  {# Filtros #}
+  {# Tabla de resultados #}
+  ```
 
-States: `pending` → `confirmed` → `completed` (or `no_show`); `cancelled` can
-happen from any live state.
+  Nada de bloques `{% comment %}` explicando decisiones de diseño, mecánicas de
+  htmx o Alpine, ni por qué un atributo está donde está.
+- **JavaScript y CSS**: igual que Python. Una línea sobre qué hace una función si
+  el nombre no lo dice; el resto, fuera.
 
-- A `pending` appointment already blocks the slot (it holds it). Agent and public
-  bookings are born `pending`; staff bookings are born `confirmed`.
-- Confirming an appointment ("putting it in firm") is the clinic's job: staff
-  only, via the management panel or `POST /api/appointments/{id}/confirm/`. A
-  patient answering "YES" to a reminder only records attendance
-  (`patient_confirmed_at`) — it does **not** change the status.
-- An appointment can only be marked **completed** once it is `confirmed`. The
-  management panel hides the "Marcar completada" button until then, so the
-  confirmation step cannot be skipped.
-- Unconfirmed holds expire after `Clinic.hold_ttl_minutes` and are cancelled by
-  the `expire_appointment_holds` task (Celery beat), which frees the slot again.
+Si una decisión necesita explicación para no deshacerse por error, documéntala en
+el README de su app (`clinical/README.md`, `audit/README.md`…), que es donde se
+busca ese tipo de cosas.
 
-## Quickstart
-1. Copy `.env.example` to `.env`.
-2. Run `docker compose up --build`.
-3. Visit `http://localhost:8000/admin/` or `http://localhost:8000/api/`.
-4. Connect a WebSocket client to `ws://localhost:8000/ws/appointments/<clinic_id>/`.
+## Endpoints principales de la API
 
-## Reminder Tasks
+| Recurso | URL base |
+|---------|----------|
+| Servicios | `/api/services/` |
+| Profesionales | `/api/professionals/` |
+| Citas | `/api/appointments/` |
+| Pacientes | `/api/patients/` |
+
+### Flujo de reserva por profesional (agente)
+1. `GET /api/services/` — servicios disponibles
+2. `GET /api/professionals/?service={id}` — profesionales que prestan ese servicio
+3. `GET /api/professionals/{id}/available-slots/?date=YYYY-MM-DD` — huecos libres
+4. `POST /api/appointments/` — crear la cita
+
+La referencia completa está en `ENDPOINTS.md`.
+
+## Ciclo de vida de una cita
+
+Estados: `pending` → `confirmed` → `completed` (o `no_show`); `cancelled` puede
+ocurrir desde cualquier estado vivo.
+
+- Una cita `pending` ya bloquea el hueco (lo retiene). Las reservas del agente y
+  las públicas nacen `pending`; las que crea el personal nacen `confirmed`.
+- Confirmar una cita («ponerla en firme») es cosa de la clínica: solo el personal,
+  desde el panel de gestión o con `POST /api/appointments/{id}/confirm/`. Que el
+  paciente responda «SÍ» a un recordatorio solo registra su confirmación
+  (`patient_confirmed_at`); **no** cambia el estado.
+- Una cita solo se puede marcar **completada** cuando está `confirmed`. El panel
+  oculta el botón «Marcar completada» hasta entonces, así que el paso de
+  confirmación no se puede saltar.
+- Las retenciones sin confirmar caducan a los `Clinic.hold_ttl_minutes` y las
+  cancela la tarea `expire_appointment_holds` (Celery beat), que libera el hueco.
+
+## Puesta en marcha
+1. Copia `.env.example` a `.env`.
+2. Ejecuta `docker compose up --build`.
+3. Abre `http://localhost:8000/admin/` o `http://localhost:8000/api/`.
+4. Conecta un cliente WebSocket a `ws://localhost:8000/ws/appointments/<clinic_id>/`.
+
+## Tareas de recordatorio
 - `dispatch_24h_reminders`
 - `dispatch_2h_reminders`
 - `send_appointment_reminder`
 
-## Public Appointment Action Endpoint
+## Endpoint público de acciones sobre citas
 - `POST /api/public/appointments/<uuid:token>/confirm/`
 - `POST /api/public/appointments/<uuid:token>/cancel/`

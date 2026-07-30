@@ -193,6 +193,8 @@ class Clinic(models.Model):
 
     class Meta:
         db_table = "clinics"
+        verbose_name = 'clínica'
+        verbose_name_plural = 'clínicas'
 
     def clean(self):
         super().clean()
@@ -246,6 +248,8 @@ class User(AbstractUser, TimeStampedModel):
 
     class Meta:
         ordering = ['email']
+        verbose_name = 'usuario'
+        verbose_name_plural = 'usuarios'
 
     def save(self, *args, **kwargs):
         self.username = self.email

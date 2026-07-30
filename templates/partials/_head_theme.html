@@ -307,6 +307,81 @@ opacidades sobre ellos (bg-surface/90, ring-line/70…).
     .icon-btn-tertiary{ @apply icon-btn bg-tertiary-600 text-white hover:bg-tertiary-700 focus:ring-tertiary-600; }
     .icon-btn-danger  { @apply icon-btn bg-rose-500 text-white hover:bg-rose-600 focus:ring-rose-500; }
 
+    /* Desplegables de paciente y servicio del formulario de cita.
+
+       Van como componentes y no como utilidades en la plantilla porque ese
+       formulario **llega por htmx**: el CDN de Tailwind compila las clases que ve
+       en el documento, así que una utilidad que solo exista dentro del fragmento
+       puede no llegar a generar su regla — y entonces `right-2` no aplica y los
+       botones aparecen sobre el texto, en su posición estática. Definidas aquí, se
+       compilan con la página y el fragmento solo las usa. */
+    .picker-field { @apply relative; }
+    /* Mientras está abierto se eleva: los dos desplegables son hermanos y el
+       segundo taparía la lista del primero. */
+    .picker-field-open { @apply z-30; }
+
+    .picker-input {
+        @apply block w-full rounded-xl border border-line-strong bg-surface py-2.5 pl-4 pr-16 text-sm text-content placeholder-content-faint shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500;
+    }
+    .picker-input-error { @apply border-danger focus:ring-danger; }
+
+    .picker-actions { @apply absolute inset-y-0 right-2 flex items-center gap-0.5; }
+    .picker-action { @apply px-1 text-content-faint transition hover:text-content-muted; }
+    .picker-icon { @apply h-4 w-4; }
+    .picker-arrow { @apply h-4 w-4 transition-transform; }
+    .picker-arrow-open { @apply rotate-180; }
+    .picker-spinner { @apply h-4 w-4 animate-spin; }
+
+    /* La lista nace CERRADA en CSS, y se abre añadiendo `picker-list-open`.
+       No con `x-show`: eso deja el estado cerrado a merced de que Alpine llegue a
+       evaluar la expresión, y si no lo hace —el fragmento se inserta dentro de un
+       árbol teleportado, en swaps sucesivos del panel— la lista aparece desplegada
+       sola. Un desplegable que se abre solo es peor que uno que no se abre, así que
+       el estado seguro es el de partida. */
+    .picker-list {
+        @apply absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl bg-surface py-1 shadow-soft ring-1 ring-line;
+        display: none;
+    }
+    .picker-list-open { display: block; }
+    .picker-option { @apply cursor-pointer px-4 py-2 text-sm text-content-muted; }
+    .picker-option-active { @apply bg-brand-soft text-brand-fg; }
+    .picker-option-label { @apply block truncate font-medium; }
+    .picker-option-hint { @apply block truncate text-xs text-content-faint; }
+    .picker-empty { @apply px-4 py-2 text-sm text-content-faint; }
+
+    /* Sidebar colapsado a solo iconos.
+
+       El estado (la clase `sidebar-collapsed` en el <html>, persistida en
+       localStorage) lo lleva `partials/_head_sidebar.html`; aquí está lo que ese
+       estado significa. Es CSS y no expresiones de Alpine a propósito: son once
+       enlaces más el pie, y con la clase en la raíz el panel ya sale estrecho en
+       el primer pintado, sin fogonazo al recargar.
+
+       El colapso es cosa del escritorio: en móvil el sidebar es un panel que entra
+       y sale, y ahí no hay espacio que ganar estrechándolo. */
+    @media (min-width: 1024px) {
+        .sidebar-collapsed .sidebar-desktop { @apply w-20; }
+        /* Un elemento fijo no ocupa sitio: el hueco es el padding del contenido. */
+        .sidebar-collapsed .sidebar-shell { @apply pl-20; }
+
+        /* Fuera de la vista, pero no del documento: un enlace que solo es un
+           icono se quedaría sin nombre accesible. */
+        .sidebar-collapsed .sidebar-label { @apply sr-only; }
+
+        /* Sin texto, el icono se centra y el hueco del `gap` desaparece. */
+        .sidebar-collapsed .sidebar-link,
+        .sidebar-collapsed .sidebar-action { @apply justify-center gap-0 px-0; }
+
+        /* El logo se centra y los bordes internos se estrechan con el panel.
+           `gap-0` importa: con el nombre en `sr-only`, el hueco del `gap` seguiría
+           empujando el logo fuera del centro. */
+        .sidebar-collapsed .sidebar-brand { @apply justify-center gap-0 px-0; }
+        .sidebar-collapsed .sidebar-pad { @apply px-2; }
+
+        /* La flecha apunta al lado hacia el que va a moverse el panel. */
+        .sidebar-collapsed .sidebar-toggle-icon { @apply rotate-180; }
+    }
+
     /* Formularios en oscuro. El plugin @tailwindcss/forms fuerza fondo blanco y
        borde gris en el reset, así que hay que revertirlo en la capa base: en
        utilities, cualquier bg-* de la plantilla sigue ganando. El :where()

@@ -1,0 +1,88 @@
+{% comment %}
+Desplegable de paciente o servicio. Se incluye con `field` y `placeholder`, dentro
+de un elemento que ya haya montado su `x-data`.
+
+El `<input type="text">` es lo que se lee y se teclea; el `<input type="hidden">`
+lleva el id, que es lo único que recibe el formulario.
+
+La lista se abre pulsando la flecha, escribiendo o con ↓: enfocar el campo no la
+despliega.
+
+Los estilos son las clases `picker-*` de `partials/_head_theme.html`, no utilidades
+de Tailwind: este fragmento llega por htmx y una utilidad que solo aparezca aquí
+puede quedarse sin compilar.
+{% endcomment %}
+<div class="picker-field" :class="abierto ? 'picker-field-open' : ''">
+    <input
+        type="text"
+        id="{{ field.id_for_label }}"
+        name="{{ field.name }}_search"
+        x-model="query"
+        @input="alEscribir()"
+        @keydown="alPulsarTecla($event)"
+        autocomplete="off"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded="false"
+        :aria-expanded="abierto ? 'true' : 'false'"
+        aria-controls="{{ field.auto_id }}_listbox"
+        placeholder="{{ placeholder }}"
+        class="picker-input{% if field.errors %} picker-input-error{% endif %}"
+    >
+    <input type="hidden" name="{{ field.html_name }}" :value="seleccionadoId">
+
+    <div class="picker-actions">
+        {# Solo con la búsqueda de respaldo en vuelo #}
+        <span x-show="cargando" x-cloak class="picker-action text-brand-fg" aria-hidden="true">
+            <svg class="picker-spinner" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
+                <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"></path>
+            </svg>
+        </span>
+        <button type="button" x-show="query" x-cloak @click="limpiar()"
+            class="picker-action" aria-label="Limpiar la selección">
+            <svg class="picker-icon" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+        {# Flecha: abre y cierra la lista #}
+        <button
+            type="button"
+            @click="abierto ? cerrar() : abrir()"
+            tabindex="-1"
+            class="picker-action"
+            aria-label="Desplegar la lista"
+            :aria-label="abierto ? 'Cerrar la lista' : 'Desplegar la lista'"
+        >
+            <svg class="picker-arrow" :class="abierto ? 'picker-arrow-open' : ''"
+                 fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+            </svg>
+        </button>
+    </div>
+
+    {# Cerrada por CSS; `picker-list-open` es lo único que la abre #}
+    <ul
+        id="{{ field.auto_id }}_listbox"
+        role="listbox"
+        class="picker-list"
+        :class="abierto ? 'picker-list-open' : ''"
+    >
+        <template x-for="(opcion, indice) in visibles" :key="opcion.id">
+            <li
+                role="option"
+                :aria-selected="String(opcion.id) === seleccionadoId ? 'true' : 'false'"
+                @click="elegir(opcion)"
+                @mouseenter="resaltado = indice"
+                class="picker-option"
+                :class="indice === resaltado ? 'picker-option-active' : ''"
+            >
+                <span class="picker-option-label" x-text="opcion.label"></span>
+                <span x-show="opcion.hint" class="picker-option-hint" x-text="opcion.hint"></span>
+            </li>
+        </template>
+        <li x-show="sinResultados" class="picker-empty">
+            Sin resultados para «<span x-text="query"></span>»
+        </li>
+    </ul>
+</div>

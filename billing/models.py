@@ -19,6 +19,8 @@ class Subscription(TimeStampedModel):
 
     class Meta:
         ordering = ['-created_at']
+        verbose_name = 'suscripción'
+        verbose_name_plural = 'suscripciones'
 
     def __str__(self):
         return f'{self.clinic} - {self.plan_name}'

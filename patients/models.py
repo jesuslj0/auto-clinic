@@ -15,6 +15,8 @@ class Patient(TimeStampedModel):
     class Meta:
         ordering = ['last_name', 'first_name']
         unique_together = ('clinic', 'email', 'phone')
+        verbose_name = 'paciente'
+        verbose_name_plural = 'pacientes'
 
     def __str__(self):
         return f'{self.first_name} {self.last_name}'

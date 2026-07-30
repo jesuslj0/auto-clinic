@@ -30,6 +30,8 @@ class ClinicKnowledgeBase(models.Model):
 
     class Meta:
         db_table = "clinic_knowledge_base"
+        verbose_name = 'entrada de la base de conocimiento'
+        verbose_name_plural = 'entradas de la base de conocimiento'
         indexes = [
             models.Index(fields=["clinic", "active", "kb_type"], name="idx_kb_clinic_active_type"),
         ]
@@ -55,6 +57,8 @@ class ClinicInfoQuery(models.Model):
 
     class Meta:
         db_table = "clinic_info_queries"
+        verbose_name = 'consulta de información'
+        verbose_name_plural = 'consultas de información'
 
     def __str__(self):
         return f"{self.clinic_id} – {self.intent_category} – {self.created_at:%Y-%m-%d %H:%M}"
@@ -72,6 +76,8 @@ class ClinicInfoCache(models.Model):
 
     class Meta:
         db_table = "clinic_info_cache"
+        verbose_name = 'respuesta en caché'
+        verbose_name_plural = 'respuestas en caché'
         constraints = [
             models.UniqueConstraint(
                 fields=["clinic", "normalized_question"], name="uq_cache_clinic_question"

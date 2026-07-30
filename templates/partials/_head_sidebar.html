@@ -1,0 +1,65 @@
+{% comment %}
+Estado del sidebar de escritorio: expandido o colapsado a solo iconos.
+
+Va **en el `<head>` y es síncrono**, por lo mismo que el tema
+(`partials/_head_theme.html`): el panel navega con recargas completas, así que si
+el estado se aplicara al hidratar Alpine se vería un fogonazo del sidebar ancho en
+cada página. Aquí la clase `sidebar-collapsed` está puesta en `<html>` antes de
+que se pinte nada.
+
+Y por eso **se recuerda en `localStorage`** (`ac-sidebar`): sin persistir, colapsar
+el menú duraría hasta el siguiente clic, que es como no tenerlo.
+
+El interruptor vive en `window.acSidebar` y los clics se escuchan **de forma
+delegada** sobre `[data-sidebar-toggle]`, igual que el tema: el botón todavía no
+existe cuando corre este script, y puede haber más de uno.
+
+Lo que cambia con la clase es solo CSS (ancho del panel, hueco que le deja el
+contenido y visibilidad de las etiquetas), sin una sola expresión de Alpine por
+enlace. Las etiquetas se ocultan con `sr-only` y **no** con `display:none`: un
+enlace que solo es un icono se queda sin nombre accesible, y eso no se negocia.
+
+**Las reglas están en `partials/_head_theme.html`**, con el resto del sistema de
+diseño (busca «sidebar-collapsed»), y no aquí: allí está el único bloque de
+estilos que compila el CDN de Tailwind, y CLAUDE.md pide no repartir el sistema de
+diseño por más sitios. Aquí queda solo el estado.
+{% endcomment %}
+<script>
+    (function () {
+        var KEY = 'ac-sidebar';
+        var root = document.documentElement;
+
+        function stored() {
+            try { return localStorage.getItem(KEY); } catch (e) { return null; }
+        }
+        function syncButtons(collapsed) {
+            document.querySelectorAll('[data-sidebar-toggle]').forEach(function (el) {
+                el.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+                el.setAttribute('aria-label', collapsed ? 'Expandir el menú' : 'Colapsar el menú');
+            });
+        }
+        function apply(collapsed) {
+            root.classList.toggle('sidebar-collapsed', collapsed);
+            syncButtons(collapsed);
+        }
+
+        // Por defecto, expandido: es el estado que enseña de qué va cada icono.
+        apply(stored() === 'collapsed');
+
+        window.acSidebar = {
+            isCollapsed: function () { return root.classList.contains('sidebar-collapsed'); },
+            toggle: function () {
+                var collapsed = !this.isCollapsed();
+                try { localStorage.setItem(KEY, collapsed ? 'collapsed' : 'expanded'); } catch (e) {}
+                apply(collapsed);
+            }
+        };
+
+        document.addEventListener('click', function (e) {
+            if (e.target.closest('[data-sidebar-toggle]')) window.acSidebar.toggle();
+        });
+        document.addEventListener('DOMContentLoaded', function () {
+            syncButtons(root.classList.contains('sidebar-collapsed'));
+        });
+    })();
+</script>
