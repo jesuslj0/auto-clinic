@@ -186,6 +186,7 @@ When writing new markup, use the tokens, never `slate-*` / `white` directly:
 | Borders | `line`, `line-strong` |
 | Text | `content`, `content-muted`, `content-subtle`, `content-faint` |
 | Brand | `brand-fg` (text/icons), `brand-soft`, `brand-soft-strong`, `brand-line` |
+| Accent | `accent-fg` (text/icons), `accent-soft`, `accent-line` |
 | States | `danger`, `success`, `warning`, `info` — each with `-soft` and `-line` |
 
 Exceptions that stay literal: `text-white` on brand-coloured buttons, the

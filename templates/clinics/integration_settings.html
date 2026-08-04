@@ -108,10 +108,13 @@
                         <div :class="{
                                  'bg-brand-gradient text-white chat-bubble-out rounded-tr-sm': m.role === 'user',
                                  'bg-surface text-content-muted ring-1 ring-line chat-bubble-in rounded-tl-sm': m.role === 'agent',
-                                 'bg-danger-soft text-danger ring-1 ring-danger-line chat-bubble-in rounded-tl-sm': m.role === 'error'
+                                 'bg-danger-soft text-danger ring-1 ring-danger-line chat-bubble-in chat-bubble-danger rounded-tl-sm': m.role === 'error'
                              }"
-                             {# El pico no puede heredar el degradado: toma el tono del gradiente a la altura de la esquina #}
-                             :style="m.role === 'user' ? '--bubble-tail: #b25aca' : (m.role === 'error' ? '--bubble-tail: #fff1f2' : '--bubble-tail: #ffffff')"
+                             {% comment %}Solo la enviada fija el pico aquí: el degradado no se hereda,
+                             así que toma el tono del gradiente a la altura de la esquina —y es el mismo
+                             en claro y en oscuro—. Las recibidas lo sacan de sus clases, que usan
+                             tokens; un hexadecimal aquí las dejaría blancas también en oscuro.{% endcomment %}
+                             :style="m.role === 'user' ? '--bubble-tail: #b25aca' : ''"
                              class="chat-bubble max-w-[80%] rounded-2xl px-3.5 py-2 text-sm shadow-sm">
                             <p class="whitespace-pre-line" x-text="m.text"></p>
                             <p class="mt-1 text-right text-[11px]"

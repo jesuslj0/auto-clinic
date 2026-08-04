@@ -94,6 +94,11 @@ opacidades sobre ellos (bg-surface/90, ring-line/70…).
         --c-brand-soft-strong: 237 233 254;
         --c-brand-line: 221 214 254;
 
+        /* Acento aplicado (el rosa de "modo humano": fondos suaves y su texto) */
+        --c-accent-fg: 59 21 119;
+        --c-accent-soft: 253 243 248;
+        --c-accent-line: 251 230 240;
+
         /* Estados */
         --c-danger: 225 29 72;
         --c-danger-soft: 255 241 242;
@@ -135,6 +140,12 @@ opacidades sobre ellos (bg-surface/90, ring-line/70…).
         --c-brand-soft: 36 29 61;
         --c-brand-soft-strong: 43 34 71;
         --c-brand-line: 69 58 107;
+
+        /* El violeta profundo del acento no se lee en oscuro: el texto sube al
+           rosa claro (accent-400) y el fondo baja a un ciruela apagado. */
+        --c-accent-fg: 240 166 200;
+        --c-accent-soft: 58 32 51;
+        --c-accent-line: 90 52 80;
 
         --c-danger: 253 164 175;
         --c-danger-soft: 59 31 43;
@@ -201,6 +212,10 @@ opacidades sobre ellos (bg-surface/90, ring-line/70…).
                         400: '#f0a6c8',
                         500: '#e879a6',
                         600: '#d4628f',
+                        // Variantes dependientes del tema
+                        fg: 'rgb(var(--c-accent-fg) / <alpha-value>)',
+                        soft: 'rgb(var(--c-accent-soft) / <alpha-value>)',
+                        line: 'rgb(var(--c-accent-line) / <alpha-value>)',
                     },
                     // Terciario: violeta profundo (#4C1D95)
                     tertiary: {
@@ -444,8 +459,12 @@ opacidades sobre ellos (bg-surface/90, ring-line/70…).
         right: -6px;
         clip-path: polygon(0 0, 100% 0, 0 100%);
     }
-    /* Las burbujas recibidas van sobre la superficie del tema, no sobre blanco */
+    /* Las burbujas recibidas van sobre la superficie del tema, no sobre blanco.
+       El color del pico se fija aquí, con tokens: cualquier `style` inline que
+       lo escriba en hexadecimal lo dejaría clavado en el tema claro. */
     .chat-bubble-in { --bubble-tail: rgb(var(--c-surface)); }
+    /* Recibida en estado de error: su fondo es danger-soft, no la superficie */
+    .chat-bubble-danger { --bubble-tail: rgb(var(--c-danger-soft)); }
 
     .sidebar-enter {
         transform: translateX(-100%);
