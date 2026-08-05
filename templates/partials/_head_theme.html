@@ -311,6 +311,12 @@ opacidades sobre ellos (bg-surface/90, ring-line/70…).
     .btn-outlined {
         @apply btn border border-brand-line bg-transparent text-brand-fg hover:bg-brand-soft focus:ring-brand-500;
     }
+    /* Para el botón que confirma una acción de la que no se vuelve. El rosa
+       fuerte es el mismo de `.icon-btn-danger`: no cambia con el tema, porque
+       una advertencia no debe apagarse en oscuro. */
+    .btn-danger {
+        @apply btn bg-rose-600 text-white shadow-sm hover:bg-rose-700 focus:ring-rose-500;
+    }
 
     /* Botones de icono (circulares) */
     .icon-btn {
@@ -393,8 +399,16 @@ opacidades sobre ellos (bg-surface/90, ring-line/70…).
         .sidebar-collapsed .sidebar-brand { @apply justify-center gap-0 px-0; }
         .sidebar-collapsed .sidebar-pad { @apply px-2; }
 
-        /* La flecha apunta al lado hacia el que va a moverse el panel. */
-        .sidebar-collapsed .sidebar-toggle-icon { @apply rotate-180; }
+        /* Con el panel abierto el botón de colapsar va a la derecha del nombre;
+           colapsado no hay «derecha» que valga en 80 px, así que la fila se
+           vuelve columna y el botón baja bajo el logo. */
+        .sidebar-collapsed .sidebar-head { @apply flex-col items-center gap-2; }
+
+        /* El icono es el panel visto de frente, así que no se gira: se cambia
+           por el otro, con la flecha en el sentido contrario. El de partida
+           nace visible y el otro con `hidden` en la plantilla. */
+        .sidebar-collapsed .sidebar-icon-collapse { @apply hidden; }
+        .sidebar-collapsed .sidebar-icon-expand { @apply block; }
     }
 
     /* Formularios en oscuro. El plugin @tailwindcss/forms fuerza fondo blanco y
