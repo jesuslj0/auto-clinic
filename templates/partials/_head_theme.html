@@ -322,6 +322,18 @@ opacidades sobre ellos (bg-surface/90, ring-line/70…).
     .icon-btn-tertiary{ @apply icon-btn bg-tertiary-600 text-white hover:bg-tertiary-700 focus:ring-tertiary-600; }
     .icon-btn-danger  { @apply icon-btn bg-rose-500 text-white hover:bg-rose-600 focus:ring-rose-500; }
 
+    /* Campo de formulario en estado de error, por el mismo motivo que los
+       desplegables de abajo: la tarjeta de contraseña llega por htmx y, en la
+       carga inicial, ningún campo falla. Escrito como utilidad en el widget,
+       `border-danger` no existiría en el documento y el CDN no generaría la
+       regla: el campo se repintaría por htmx con el borde normal y el error
+       solo se leería en el texto.
+
+       No lleva `border-line-strong`: las utilidades ganan a los componentes, así
+       que el color normal taparía a este. El ancho del borde y el `ring-2` sí
+       vienen de `FIELD_CLASS` (`core/forms.py`), que aquí no compiten. */
+    .field-error { @apply border-danger focus:ring-danger; }
+
     /* Desplegables de paciente y servicio del formulario de cita.
 
        Van como componentes y no como utilidades en la plantilla porque ese

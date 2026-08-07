@@ -38,6 +38,7 @@ from appointments.serializers import AppointmentSerializer, ProfessionalSchedule
 from audit.mixins import log_access
 from audit.models import AccessLog
 from core.authentication import ClinicAgent
+from core.forms import AccountPasswordChangeForm
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
 from core.models import Clinic
 from core.permissions import IsAgentClinicKey, IsStaffOrAdmin
@@ -1026,6 +1027,12 @@ class ProfessionalProfileView(LoginRequiredMixin, UpdateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['section'] = 'profile'
+        # La tarjeta de contraseña incluida en la plantilla es la misma de «Mi
+        # cuenta» y se envía a su propia URL (`core:password-change`); aquí solo
+        # hay que darle el formulario con el que nace.
+        context.setdefault(
+            'password_form', AccountPasswordChangeForm(user=self.request.user)
+        )
         return context
 
     def form_valid(self, form):

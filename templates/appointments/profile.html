@@ -4,7 +4,7 @@
 {% block page_heading %}Mi perfil{% endblock %}
 
 {% block content %}
-<div class="mx-auto max-w-2xl">
+<div class="mx-auto max-w-2xl space-y-6">
     <div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
 
         <div class="border-b border-line px-4 py-6 sm:px-8">
@@ -104,5 +104,11 @@
             </div>
         </form>
     </div>
+
+    {% comment %}La misma tarjeta que en «Mi cuenta», no una copia: quien vive en
+    esta página no debería tener que ir a buscar la otra para cambiar su
+    contraseña. Va fuera del formulario de arriba porque los formularios no se
+    anidan.{% endcomment %}
+    {% include 'core/_password_form.html' %}
 </div>
 {% endblock %}

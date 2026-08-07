@@ -59,6 +59,14 @@
     </svg>
     <span class="sidebar-label{% if section == 'integrations' %} bg-brand-gradient bg-clip-text font-semibold text-transparent{% endif %}">Agente WhatsApp</span>
 </a>
+{% comment %}Sin condicional, al contrario que «Mi perfil»: toda cuenta necesita
+poder cambiar su contraseña, tenga ficha de profesional o no.{% endcomment %}
+<a href="{% url 'core:account' %}" title="Mi cuenta" class="sidebar-link group flex items-center gap-3 rounded-xl border px-4 py-3 transition {% if section == 'account' %}border-brand-line bg-brand-soft{% else %}border-transparent text-content-muted hover:border-brand-line hover:bg-brand-soft hover:text-brand-fg{% endif %}">
+    <svg class="h-5 w-5 flex-shrink-0 {% if section == 'account' %}text-brand-fg{% else %}text-content-faint group-hover:text-brand-fg{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+    </svg>
+    <span class="sidebar-label{% if section == 'account' %} bg-brand-gradient bg-clip-text font-semibold text-transparent{% endif %}">Mi cuenta</span>
+</a>
 {% if request.user.professional_profile %}
 <a href="{% url 'appointments:profile' %}" title="Mi perfil" class="sidebar-link group flex items-center gap-3 rounded-xl border px-4 py-3 transition {% if section == 'profile' %}border-brand-line bg-brand-soft{% else %}border-transparent text-content-muted hover:border-brand-line hover:bg-brand-soft hover:text-brand-fg{% endif %}">
     <svg class="h-5 w-5 flex-shrink-0 {% if section == 'profile' %}text-brand-fg{% else %}text-content-faint group-hover:text-brand-fg{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">

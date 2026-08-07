@@ -21,10 +21,12 @@
         <!-- Separador -->
         <div class="h-8 w-px flex-shrink-0 bg-line" aria-hidden="true"></div>
 
-        <!-- Perfil del profesional -->
-        <a href="{% if professional %}{% url 'appointments:profile' %}{% else %}#{% endif %}"
-           class="flex flex-shrink-0 items-center gap-3 rounded-xl transition {% if professional %}hover:opacity-80{% else %}pointer-events-none{% endif %}"
-           {% if professional %}title="Ver mi perfil"{% endif %}>
+        {% comment %}Perfil del usuario. Quien tiene ficha de profesional va a la
+        suya; el resto —administración, recepción— iba antes a «#» con los clics
+        anulados, y ahora a «Mi cuenta», que existe para todos.{% endcomment %}
+        <a href="{% if professional %}{% url 'appointments:profile' %}{% else %}{% url 'core:account' %}{% endif %}"
+           class="flex flex-shrink-0 items-center gap-3 rounded-xl transition hover:opacity-80"
+           title="{% if professional %}Ver mi perfil{% else %}Ver mi cuenta{% endif %}">
             {% if professional.photo %}
                 <img src="{{ professional.photo.url }}" alt="Foto de perfil" class="h-9 w-9 flex-shrink-0 rounded-xl object-cover ring-2 ring-brand-line">
             {% else %}

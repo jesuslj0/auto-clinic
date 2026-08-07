@@ -1,7 +1,10 @@
+import math
+
 from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q, Sum
+from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, LogoutView
 from django.http import HttpResponseBadRequest
@@ -16,8 +19,15 @@ from rest_framework.views import APIView
 
 from appointments.models import Appointment, AppointmentStatusHistory
 from appointments.services import AppointmentDomainError, cancel_appointment, confirm_by_clinic
+from audit.mixins import log_access
+from audit.models import AccessLog
 from patients.models import Patient
-from core.forms import ClinicForm, EmailAuthenticationForm, WhatsAppIntegrationForm
+from core.forms import (
+    AccountPasswordChangeForm,
+    ClinicForm,
+    EmailAuthenticationForm,
+    WhatsAppIntegrationForm,
+)
 from core.mixins import ExportMixin
 from core.models import Clinic, User
 from core.permissions import IsAgentMasterKey, IsClinicAdminOrReadOnly, IsStaffOrAdmin
@@ -87,6 +97,156 @@ class ClinicEditView(LoginRequiredMixin, UpdateView):
     def form_valid(self, form):
         messages.success(self.request, 'Información de la clínica actualizada correctamente.')
         return super().form_valid(form)
+
+
+# --- Mi cuenta --------------------------------------------------------------
+#
+# Límite de intentos al teclear la contraseña actual. El contador vive en la
+# sesión y no en una caché compartida a propósito: para llegar a este formulario
+# hay que estar YA autenticado, así que la amenaza real es la sesión ajena (un
+# equipo desatendido, una cookie robada), y quien borre la cookie para reiniciar
+# el contador pierde con ella la sesión que le daba acceso.
+PASSWORD_CHANGE_MAX_ATTEMPTS = 5
+PASSWORD_CHANGE_LOCKOUT_SECONDS = 15 * 60
+_PASSWORD_FAILS_KEY = 'pwd_change_fails'
+_PASSWORD_LOCKED_UNTIL_KEY = 'pwd_change_locked_until'
+
+
+def _password_lockout_remaining(session) -> int:
+    """Minutos que quedan de bloqueo, o 0 si se puede intentar."""
+    locked_until = session.get(_PASSWORD_LOCKED_UNTIL_KEY)
+    if not locked_until:
+        return 0
+    remaining = locked_until - timezone.now().timestamp()
+    if remaining <= 0:
+        # Cumplido el castigo, se empieza de cero.
+        _password_attempts_reset(session)
+        return 0
+    return max(1, math.ceil(remaining / 60))
+
+
+def _password_attempt_failed(session) -> None:
+    fails = session.get(_PASSWORD_FAILS_KEY, 0) + 1
+    session[_PASSWORD_FAILS_KEY] = fails
+    if fails >= PASSWORD_CHANGE_MAX_ATTEMPTS:
+        session[_PASSWORD_LOCKED_UNTIL_KEY] = (
+            timezone.now().timestamp() + PASSWORD_CHANGE_LOCKOUT_SECONDS
+        )
+    session.modified = True
+
+
+def _password_attempts_reset(session) -> None:
+    session.pop(_PASSWORD_FAILS_KEY, None)
+    session.pop(_PASSWORD_LOCKED_UNTIL_KEY, None)
+    session.modified = True
+
+
+class AccountView(LoginRequiredMixin, TemplateView):
+    """Mi cuenta: los datos de acceso y el cambio de contraseña.
+
+    Existe aparte de «Mi perfil» (`appointments:profile`) porque aquel es el
+    perfil del *profesional* y redirige al panel a quien no tenga ficha: sin
+    esta página, administración y recepción no tendrían dónde cambiar su
+    contraseña. Se accede solo con estar autenticado, sin mirar el rol.
+    """
+
+    template_name = 'core/account.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['section'] = 'account'
+        context.setdefault('password_form', AccountPasswordChangeForm(user=self.request.user))
+        return context
+
+
+class PasswordChangeSectionView(LoginRequiredMixin, View):
+    """La tarjeta de contraseña de «Mi cuenta», intercambiable por htmx.
+
+    El mismo formulario se sirve entero (con recarga) o como fragmento, según
+    quien pregunte: el marcado es un `<form method="post">` de verdad y sigue
+    funcionando sin JavaScript.
+    """
+
+    partial_template_name = 'core/_password_form.html'
+
+    def is_htmx_request(self):
+        # Se descarta la restauración de historial: si no, volver atrás sin
+        # caché dejaría la página reducida al fragmento.
+        headers = self.request.headers
+        return bool(headers.get('HX-Request')) and not headers.get('HX-History-Restore-Request')
+
+    def get(self, request):
+        # Sin htmx no hay nada que pintar por separado: la página es la que
+        # contiene la tarjeta.
+        if not self.is_htmx_request():
+            return redirect('core:account')
+        return self.render_partial(AccountPasswordChangeForm(user=request.user))
+
+    def post(self, request):
+        locked_minutes = _password_lockout_remaining(request.session)
+        if locked_minutes:
+            # Bloqueado: ni se mira lo que ha enviado.
+            return self.respond(
+                request,
+                AccountPasswordChangeForm(user=request.user),
+                locked_minutes=locked_minutes,
+            )
+
+        form = AccountPasswordChangeForm(user=request.user, data=request.POST)
+        if not form.is_valid():
+            if form.failed_on_old_password():
+                _password_attempt_failed(request.session)
+                locked_minutes = _password_lockout_remaining(request.session)
+            return self.respond(request, form, locked_minutes=locked_minutes)
+
+        form.save()
+        # Sin esto, cambiar la contraseña invalida el hash de la sesión y el
+        # usuario se queda en la calle justo después de acertar.
+        update_session_auth_hash(request, form.user)
+        _password_attempts_reset(request.session)
+        # `password` está excluido de los diffs del registry, así que este
+        # cambio no deja ningún `ChangeLog`: si no se registra aquí, no queda
+        # rastro en ninguna parte. Va el hecho, nunca la contraseña.
+        log_access(
+            action=AccessLog.Action.PASSWORD_CHANGE,
+            obj=request.user,
+            request=request,
+        )
+
+        if self.is_htmx_request():
+            # Formulario nuevo y vacío: los campos enviados no vuelven al
+            # navegador.
+            return self.render_partial(
+                AccountPasswordChangeForm(user=request.user),
+                password_changed=True,
+            )
+        messages.success(request, 'Contraseña actualizada correctamente.')
+        return redirect('core:account')
+
+    def respond(self, request, form, *, locked_minutes=0):
+        """Repinta la tarjeta, como fragmento o dentro de la página completa."""
+        if self.is_htmx_request():
+            return self.render_partial(form, locked_minutes=locked_minutes)
+        return render(
+            request,
+            'core/account.html',
+            {'section': 'account', 'password_form': form, 'locked_minutes': locked_minutes},
+        )
+
+    def render_partial(self, form, *, password_changed=False, locked_minutes=0):
+        response = render(
+            self.request,
+            self.partial_template_name,
+            {
+                'password_form': form,
+                'password_changed': password_changed,
+                'locked_minutes': locked_minutes,
+            },
+        )
+        # Un fragmento con un formulario de credenciales no se guarda en ningún
+        # sitio, ni en el disco del navegador ni en un proxy por el camino.
+        response['Cache-Control'] = 'private, no-store, max-age=0'
+        return response
 
 
 class ClinicAdminRequiredMixin(LoginRequiredMixin):
