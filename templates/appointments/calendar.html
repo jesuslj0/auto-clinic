@@ -129,7 +129,11 @@ sería marcado inválido.
         </svg>
         <p class="text-sm text-warning">
             No hay horarios configurados. El calendario muestra el rango por defecto (08:00–18:00).
+            {% if can_manage %}
             <a href="{% url 'appointments:professionals-list' %}" class="font-semibold underline">Configura los horarios de tus profesionales.</a>
+            {% else %}
+            <a href="{% url 'core:account-schedule' %}" class="font-semibold underline">Configura tu horario.</a>
+            {% endif %}
         </p>
     </div>
     {% endif %}

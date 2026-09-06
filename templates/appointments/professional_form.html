@@ -71,13 +71,7 @@
                 {% if form.services.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.services.errors|join:", " }}</p>{% endif %}
             </div>
 
-            {% if schedule_formset %}
-            {% include 'appointments/partials/_formset_section.html' with formset=schedule_formset title='Horario semanal' subtitle='Tramos en los que el profesional atiende. Hora local de la clínica.' add_label='Añadir tramo' row_partial='appointments/partials/_schedule_row.html' empty_label='Sin horario configurado. El profesional no ofrecerá huecos hasta que añadas alguno.' %}
-            {% endif %}
-
-            {% if timeoff_formset %}
-            {% include 'appointments/partials/_formset_section.html' with formset=timeoff_formset title='Ausencias' subtitle='Vacaciones, bajas o reuniones que bloquean su agenda. Hora local de la clínica.' add_label='Añadir ausencia' row_partial='appointments/partials/_timeoff_row.html' empty_label='Sin ausencias registradas.' %}
-            {% endif %}
+            {% include 'appointments/partials/_schedule_fieldsets.html' %}
 
             <div class="flex items-center justify-between border-t border-line pt-6">
                 <a href="{% url 'appointments:professionals-list' %}" class="btn-secondary">
@@ -91,43 +85,4 @@
     </div>
 </div>
 
-<script>
-(function () {
-    // Añadir/quitar filas de los inline formsets sin recargar. No decrementamos
-    // TOTAL_FORMS al eliminar: marcamos el checkbox DELETE (Django ignora las
-    // filas nuevas marcadas y borra las existentes) y ocultamos la fila.
-    document.addEventListener('click', function (event) {
-        var addBtn = event.target.closest('[data-formset-add]');
-        if (addBtn) {
-            var section = addBtn.closest('[data-formset]');
-            var prefix = section.dataset.formset;
-            var total = section.querySelector('input[name="' + prefix + '-TOTAL_FORMS"]');
-            var index = parseInt(total.value, 10);
-            var tpl = section.querySelector('[data-formset-empty]');
-            var html = tpl.innerHTML.replace(/__prefix__/g, index);
-
-            var wrapper = document.createElement('div');
-            wrapper.innerHTML = html.trim();
-            section.querySelector('[data-formset-rows]').appendChild(wrapper.firstChild);
-
-            total.value = index + 1;
-            var hint = section.querySelector('[data-formset-empty-hint]');
-            if (hint) { hint.classList.add('hidden'); }
-            return;
-        }
-
-        var removeBtn = event.target.closest('[data-formset-remove]');
-        if (removeBtn) {
-            var row = removeBtn.closest('.formset-row');
-            var del = row.querySelector('input[name$="-DELETE"]');
-            if (del) {
-                del.checked = true;
-                row.classList.add('hidden');
-            } else {
-                row.remove();
-            }
-        }
-    });
-})();
-</script>
 {% endblock %}

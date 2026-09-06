@@ -40,9 +40,10 @@ def post_change(client, *, old=CURRENT, new1=NEW, new2=None, htmx=False):
 
 @pytest.mark.django_db
 def test_account_page_works_without_professional_profile(client, staff_user):
-    """El hueco que motiva la página: recepción no tiene ficha de profesional.
+    """Cambiar la contraseña no depende de tener ficha de profesional.
 
-    `appointments:profile` la habría mandado de vuelta al panel.
+    Es el motivo de que esta pantalla viva en `core` y no en `appointments`: un
+    superusuario de plataforma sin clínica no tiene ficha, y aun así entra.
     """
     client.force_login(staff_user)
     response = client.get(reverse('core:account'))
@@ -323,17 +324,18 @@ def test_history_restore_is_not_treated_as_htmx(client, admin_user):
 
 
 # ---------------------------------------------------------------------------
-# La tarjeta se sirve en los dos sitios
+# Dónde se sirve la tarjeta
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
-def test_card_is_rendered_on_both_pages(client, admin_user, professional_a):
-    """El mismo partial en «Mi cuenta» y en el perfil del profesional."""
-    professional_a.user = admin_user
-    professional_a.save()
-    client.force_login(admin_user)
+def test_card_is_rendered_on_the_account_tab(client, admin_user):
+    """Su sitio es la pestaña «Cuenta», junto a los datos de acceso.
 
-    for url in (reverse('core:account'), reverse('appointments:profile')):
-        html = client.get(url).content.decode()
-        assert 'id="password-card"' in html, url
-        assert f'action="{CHANGE_URL}"' in html, url
+    Estuvo repetida en «Mi perfil» mientras fueron dos páginas; ahora esa ficha
+    es otra pestaña de esta misma pantalla y la tarjeta no viaja con ella.
+    """
+    client.force_login(admin_user)
+    html = client.get(reverse('core:account')).content.decode()
+
+    assert 'id="password-card"' in html
+    assert f'action="{CHANGE_URL}"' in html

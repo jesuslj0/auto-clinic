@@ -20,9 +20,7 @@ from rest_framework.views import APIView
 from appointments.forms import (
     AppointmentForm,
     ProfessionalForm,
-    ProfessionalProfileForm,
-    ScheduleFormSet,
-    TimeOffFormSet,
+    build_schedule_formsets,
 )
 from appointments.models import Appointment, AppointmentStatusHistory, Professional, ProfessionalSchedule
 from appointments.services import (
@@ -38,8 +36,7 @@ from appointments.serializers import AppointmentSerializer, ProfessionalSchedule
 from audit.mixins import log_access
 from audit.models import AccessLog
 from core.authentication import ClinicAgent
-from core.forms import AccountPasswordChangeForm
-from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
+from core.mixins import BulkCreateMixin, BulkUpdateMixin, ClinicAdminRequiredMixin, ExportMixin, is_clinic_admin
 from core.models import Clinic
 from core.permissions import IsAgentClinicKey, IsStaffOrAdmin
 from patients.models import Patient
@@ -451,6 +448,11 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
             'week_days_info': week_days_info,
             'time_slots': time_slots,
             'has_schedules': has_schedules,
+            # Para el aviso de «no hay horarios»: a un admin se le manda a la
+            # lista de profesionales, y a quien solo puede tocar el suyo, a su
+            # pestaña de «Mi cuenta». Un enlace a una vista prohibida es peor
+            # que no ponerlo.
+            'can_manage': is_clinic_admin(user),
             'section': 'calendar',
         })
         return context
@@ -974,10 +976,13 @@ class ProfessionalListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['section'] = 'professionals'
+        # La lista la ve todo el mundo (recepción necesita saber quién atiende y
+        # qué ofrece); crear y editar fichas ajenas, solo administración.
+        context['can_manage'] = is_clinic_admin(self.request.user)
         return context
 
 
-class ProfessionalCreateView(LoginRequiredMixin, CreateView):
+class ProfessionalCreateView(ClinicAdminRequiredMixin, CreateView):
     model = Professional
     form_class = ProfessionalForm
     template_name = 'appointments/professional_form.html'
@@ -1003,44 +1008,7 @@ class ProfessionalCreateView(LoginRequiredMixin, CreateView):
         return super().form_valid(form)
 
 
-class ProfessionalProfileView(LoginRequiredMixin, UpdateView):
-    """Perfil del propio profesional autenticado (foto y datos)."""
-
-    form_class = ProfessionalProfileForm
-    template_name = 'appointments/profile.html'
-    success_url = reverse_lazy('appointments:profile')
-    context_object_name = 'professional'
-
-    def dispatch(self, request, *args, **kwargs):
-        self.profile = None
-        if request.user.is_authenticated:
-            try:
-                self.profile = request.user.professional_profile
-            except Professional.DoesNotExist:
-                messages.info(request, 'Tu usuario no tiene un perfil de profesional asociado.')
-                return redirect('core:dashboard')
-        return super().dispatch(request, *args, **kwargs)
-
-    def get_object(self, queryset=None):
-        return self.profile
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['section'] = 'profile'
-        # La tarjeta de contraseña incluida en la plantilla es la misma de «Mi
-        # cuenta» y se envía a su propia URL (`core:password-change`); aquí solo
-        # hay que darle el formulario con el que nace.
-        context.setdefault(
-            'password_form', AccountPasswordChangeForm(user=self.request.user)
-        )
-        return context
-
-    def form_valid(self, form):
-        messages.success(self.request, 'Perfil actualizado correctamente.')
-        return super().form_valid(form)
-
-
-class ProfessionalUpdateView(LoginRequiredMixin, UpdateView):
+class ProfessionalUpdateView(ClinicAdminRequiredMixin, UpdateView):
     model = Professional
     form_class = ProfessionalForm
     template_name = 'appointments/professional_form.html'
@@ -1058,24 +1026,8 @@ class ProfessionalUpdateView(LoginRequiredMixin, UpdateView):
         kwargs['request_user'] = self.request.user
         return kwargs
 
-    def _clinic_tz(self):
-        return ZoneInfo(self.object.clinic.timezone) if self.object.clinic_id else None
-
     def _build_formsets(self, data=None):
-        """Los dos inline formsets del edit, atados al profesional que se edita.
-
-        El de ausencias necesita la timezone de la clínica para convertir los
-        instantes que teclea el staff (hora local) a los UTC que guarda la BD.
-        """
-        return {
-            'schedule_formset': ScheduleFormSet(
-                data, instance=self.object, prefix='schedules',
-            ),
-            'timeoff_formset': TimeOffFormSet(
-                data, instance=self.object, prefix='timeoff',
-                form_kwargs={'clinic_tz': self._clinic_tz()},
-            ),
-        }
+        return build_schedule_formsets(self.object, data)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

@@ -21,12 +21,12 @@
         <!-- Separador -->
         <div class="h-8 w-px flex-shrink-0 bg-line" aria-hidden="true"></div>
 
-        {% comment %}Perfil del usuario. Quien tiene ficha de profesional va a la
-        suya; el resto —administración, recepción— iba antes a «#» con los clics
-        anulados, y ahora a «Mi cuenta», que existe para todos.{% endcomment %}
-        <a href="{% if professional %}{% url 'appointments:profile' %}{% else %}{% url 'core:account' %}{% endif %}"
+        {% comment %}Perfil del usuario. Un solo destino para todos: «Mi cuenta»
+        reúne los datos de acceso, la ficha profesional y el horario, así que ya
+        no hay que decidir a dónde mandar a quien no tiene ficha.{% endcomment %}
+        <a href="{% url 'core:account' %}"
            class="flex flex-shrink-0 items-center gap-3 rounded-xl transition hover:opacity-80"
-           title="{% if professional %}Ver mi perfil{% else %}Ver mi cuenta{% endif %}">
+           title="Ver mi cuenta">
             {% if professional.photo %}
                 <img src="{{ professional.photo.url }}" alt="Foto de perfil" class="h-9 w-9 flex-shrink-0 rounded-xl object-cover ring-2 ring-brand-line">
             {% else %}

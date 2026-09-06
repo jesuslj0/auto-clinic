@@ -13,10 +13,12 @@ from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views import View
 from django.views.generic import TemplateView, UpdateView
+from django.views.generic.base import ContextMixin, TemplateResponseMixin
 from rest_framework import status, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from appointments.forms import ProfessionalProfileForm, build_schedule_formsets
 from appointments.models import Appointment, AppointmentStatusHistory
 from appointments.services import AppointmentDomainError, cancel_appointment, confirm_by_clinic
 from audit.mixins import log_access
@@ -28,7 +30,7 @@ from core.forms import (
     EmailAuthenticationForm,
     WhatsAppIntegrationForm,
 )
-from core.mixins import ExportMixin
+from core.mixins import ClinicAdminRequiredMixin, ExportMixin
 from core.models import Clinic, User
 from core.permissions import IsAgentMasterKey, IsClinicAdminOrReadOnly, IsStaffOrAdmin
 from core.serializers import AgentConfigSerializer, ClinicSerializer, UserSerializer
@@ -141,22 +143,154 @@ def _password_attempts_reset(session) -> None:
     session.modified = True
 
 
-class AccountView(LoginRequiredMixin, TemplateView):
-    """Mi cuenta: los datos de acceso y el cambio de contraseña.
+# «Mi cuenta» es una sola pantalla con pestañas, no varias páginas sueltas: antes
+# había dos («Mi cuenta» y «Mi perfil») que compartían la tarjeta de contraseña y
+# se diferenciaban en poco más que el rol y la clínica en solo lectura. Cada
+# pestaña tiene su URL real —se comparte, se marca y se recarga— y htmx solo
+# intercambia la región; sin JavaScript son enlaces normales. Mismo patrón que la
+# ficha del paciente (`patients/_tab_region.html`).
+#
+# `needs_professional` deja fuera las dos pestañas de la ficha profesional para
+# quien no la tenga. En la práctica es un caso raro —`ensure_professional_for_user`
+# crea una ficha a todo usuario con clínica—, pero un superusuario de plataforma
+# sin clínica sigue necesitando entrar aquí a cambiar su contraseña.
+#
+# `icon` es la clave que resuelve `core/_account_icon.html`, y la comparten la
+# pestaña y el título de su tarjeta: mismo trazo en los dos sitios.
+ACCOUNT_TABS = [
+    {'key': 'cuenta', 'label': 'Cuenta', 'url_name': 'core:account', 'icon': 'cuenta', 'needs_professional': False},
+    {'key': 'perfil', 'label': 'Datos profesionales', 'url_name': 'core:account-profile', 'icon': 'perfil', 'needs_professional': True},
+    {'key': 'horario', 'label': 'Horario y ausencias', 'url_name': 'core:account-schedule', 'icon': 'horario', 'needs_professional': True},
+]
 
-    Existe aparte de «Mi perfil» (`appointments:profile`) porque aquel es el
-    perfil del *profesional* y redirige al panel a quien no tenga ficha: sin
-    esta página, administración y recepción no tendrían dónde cambiar su
-    contraseña. Se accede solo con estar autenticado, sin mirar el rol.
+
+def account_tabs_for(user):
+    """Las pestañas visibles para este usuario, en orden."""
+    professional = getattr(user, 'professional_profile', None)
+    return [tab for tab in ACCOUNT_TABS if professional or not tab['needs_professional']]
+
+
+def account_tab_context(user, *, active_tab, panel_template):
+    """El contexto que necesitan la página completa y el fragmento de pestañas."""
+    return {
+        'section': 'account',
+        'account_tabs': account_tabs_for(user),
+        'active_tab': active_tab,
+        'panel_template': panel_template,
+    }
+
+
+class AccountTabMixin(LoginRequiredMixin, TemplateResponseMixin, ContextMixin):
+    """Lo común a las tres pestañas de «Mi cuenta».
+
+    Sirve la página entera o solo la región de pestañas según quién pregunte,
+    igual que `PasswordChangeSectionView` hace con su tarjeta: el marcado es el
+    mismo se llegue por clic de htmx, por F5 o por un enlace pegado.
     """
 
     template_name = 'core/account.html'
+    partial_template_name = 'core/_tab_region.html'
+    active_tab = 'cuenta'
+    panel_template = None
+    #: Las pestañas de la ficha profesional no existen para quien no la tiene.
+    needs_professional = False
+
+    def dispatch(self, request, *args, **kwargs):
+        self.professional = None
+        if request.user.is_authenticated:
+            self.professional = getattr(request.user, 'professional_profile', None)
+            if self.needs_professional and self.professional is None:
+                messages.info(request, 'Tu usuario no tiene una ficha de profesional asociada.')
+                return redirect('core:account')
+        return super().dispatch(request, *args, **kwargs)
+
+    def is_htmx_request(self):
+        # Se descarta la restauración de historial: si no, volver atrás sin
+        # caché dejaría la página reducida al fragmento.
+        headers = self.request.headers
+        return bool(headers.get('HX-Request')) and not headers.get('HX-History-Restore-Request')
+
+    def get_template_names(self):
+        return [self.partial_template_name if self.is_htmx_request() else self.template_name]
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['section'] = 'account'
+        context.update(
+            account_tab_context(
+                self.request.user,
+                active_tab=self.active_tab,
+                panel_template=self.panel_template,
+            )
+        )
+        context.setdefault('professional', self.professional)
+        return context
+
+
+class AccountView(AccountTabMixin, TemplateView):
+    """Pestaña «Cuenta»: con qué te identifica la aplicación, y la contraseña.
+
+    Se accede solo con estar autenticado, sin mirar el rol: toda cuenta necesita
+    poder cambiar su contraseña, tenga ficha de profesional o no.
+    """
+
+    active_tab = 'cuenta'
+    panel_template = 'core/tabs/_cuenta.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
         context.setdefault('password_form', AccountPasswordChangeForm(user=self.request.user))
         return context
+
+
+class AccountProfileView(AccountTabMixin, UpdateView):
+    """Pestaña «Datos profesionales»: la propia ficha (foto, nombre, tipo, servicios).
+
+    Cada uno edita la suya. La ficha de OTRO se gestiona desde Profesionales, y
+    eso sí es cosa de administradores (`ProfessionalUpdateView`).
+    """
+
+    form_class = ProfessionalProfileForm
+    active_tab = 'perfil'
+    panel_template = 'core/tabs/_perfil.html'
+    needs_professional = True
+    context_object_name = 'professional'
+    success_url = reverse_lazy('core:account-profile')
+
+    def get_object(self, queryset=None):
+        return self.professional
+
+    def form_valid(self, form):
+        messages.success(self.request, 'Perfil actualizado correctamente.')
+        return super().form_valid(form)
+
+
+class AccountScheduleView(AccountTabMixin, View):
+    """Pestaña «Horario y ausencias»: los tramos y las ausencias propios.
+
+    Los mismos dos formsets que usa el edit del profesional, con el mismo
+    marcado (`appointments/partials/_schedule_fieldsets.html`): allí un admin
+    gestiona a cualquiera, aquí cada uno lo suyo.
+    """
+
+    active_tab = 'horario'
+    panel_template = 'core/tabs/_horario.html'
+    needs_professional = True
+
+    def get(self, request):
+        return self.render_to_response(
+            self.get_context_data(**build_schedule_formsets(self.professional))
+        )
+
+    def post(self, request):
+        formsets = build_schedule_formsets(self.professional, request.POST)
+        if not all(fs.is_valid() for fs in formsets.values()):
+            # Un formset inválido invalida todo el guardado: nada se escribe.
+            return self.render_to_response(self.get_context_data(**formsets))
+
+        for fs in formsets.values():
+            fs.save()
+        messages.success(request, 'Horario actualizado correctamente.')
+        return redirect('core:account-schedule')
 
 
 class PasswordChangeSectionView(LoginRequiredMixin, View):
@@ -230,7 +364,13 @@ class PasswordChangeSectionView(LoginRequiredMixin, View):
         return render(
             request,
             'core/account.html',
-            {'section': 'account', 'password_form': form, 'locked_minutes': locked_minutes},
+            {
+                **account_tab_context(
+                    request.user, active_tab='cuenta', panel_template='core/tabs/_cuenta.html'
+                ),
+                'password_form': form,
+                'locked_minutes': locked_minutes,
+            },
         )
 
     def render_partial(self, form, *, password_changed=False, locked_minutes=0):
@@ -247,16 +387,6 @@ class PasswordChangeSectionView(LoginRequiredMixin, View):
         # sitio, ni en el disco del navegador ni en un proxy por el camino.
         response['Cache-Control'] = 'private, no-store, max-age=0'
         return response
-
-
-class ClinicAdminRequiredMixin(LoginRequiredMixin):
-    """Restringe el acceso a administradores de la clínica (o superusuarios)."""
-
-    def dispatch(self, request, *args, **kwargs):
-        user = request.user
-        if user.is_authenticated and not (user.is_superuser or getattr(user, 'role', None) == 'admin'):
-            raise PermissionDenied('Solo los administradores pueden gestionar esta configuración.')
-        return super().dispatch(request, *args, **kwargs)
 
 
 class WhatsAppIntegrationView(ClinicAdminRequiredMixin, View):

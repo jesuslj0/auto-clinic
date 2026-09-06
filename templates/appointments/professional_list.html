@@ -3,8 +3,16 @@
 {% block title %}Profesionales · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
 {% block page_heading %}Profesionales{% endblock %}
 
+{% comment %}
+La lista la ve todo el mundo: recepción necesita saber quién atiende y qué
+ofrece para poder dar una cita. Crear y editar fichas AJENAS es cosa de
+administración (`can_manage`, que responde lo mismo que comprueba después
+`ClinicAdminRequiredMixin`); cada usuario gestiona la suya —y su horario— desde
+«Mi cuenta».
+{% endcomment %}
 {% block content %}
 <section class="space-y-6">
+    {% if can_manage %}
     <div class="flex items-center justify-end">
         <a href="{% url 'appointments:professionals-create' %}" class="btn-primary">
             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
@@ -13,6 +21,7 @@
             Nuevo profesional
         </a>
     </div>
+    {% endif %}
 
     <section class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
         <div class="overflow-x-auto">
@@ -22,7 +31,7 @@
                         <th class="px-6 py-4 font-semibold">Usuario</th>
                         <th class="px-6 py-4 font-semibold">Tipo</th>
                         <th class="px-6 py-4 font-semibold">Servicios</th>
-                        <th class="px-6 py-4 font-semibold">Acciones</th>
+                        {% if can_manage %}<th class="px-6 py-4 font-semibold">Acciones</th>{% endif %}
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-line bg-surface">
@@ -37,13 +46,15 @@
                                 Sin servicios
                             {% endfor %}
                         </td>
+                        {% if can_manage %}
                         <td class="px-6 py-4">
                             <a href="{% url 'appointments:professionals-edit' professional.pk %}" class="btn-outlined px-3 py-1.5 text-xs">Editar</a>
                         </td>
+                        {% endif %}
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="4" class="px-6 py-12 text-center text-sm text-content-subtle">No hay profesionales registrados.</td>
+                        <td colspan="{% if can_manage %}4{% else %}3{% endif %}" class="px-6 py-12 text-center text-sm text-content-subtle">No hay profesionales registrados.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

@@ -1,0 +1,65 @@
+{% comment %}
+Pestaña «Cuenta»: con qué te identifica la aplicación, y la contraseña.
+
+Los datos van en solo lectura a propósito. El nombre se edita en la pestaña de
+datos profesionales (donde vive el resto de la ficha) y el correo no se edita en
+ningún sitio: es el identificador de acceso.
+{% endcomment %}
+<div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+    <div class="flex items-start gap-3 border-b border-line px-4 py-6 sm:px-8">
+        <span class="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-fg ring-1 ring-brand-line">{% include 'core/_account_icon.html' with icon='cuenta' %}</span>
+        <div>
+            <h2 class="text-lg font-semibold text-content">Datos de acceso</h2>
+            <p class="mt-1 text-sm text-content-subtle">Así te identifica la aplicación.</p>
+        </div>
+    </div>
+
+    <div class="px-4 py-7 sm:px-8">
+        <dl class="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
+            <div class="sm:col-span-2">
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Correo electrónico</dt>
+                <dd class="mt-1 text-sm font-medium text-content">{{ request.user.email }}</dd>
+                <p class="mt-1 text-xs text-content-faint">Es tu identificador de acceso y no puede cambiarse.</p>
+            </div>
+            <div>
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Nombre</dt>
+                <dd class="mt-1 text-sm text-content">{{ request.user.get_full_name|default:"—" }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Rol</dt>
+                <dd class="mt-1 text-sm text-content">{{ request.user.get_role_display|default:"Personal" }}</dd>
+            </div>
+            <div{% if not professional %} class="sm:col-span-2"{% endif %}>
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Clínica</dt>
+                <dd class="mt-1 text-sm text-content">{{ request.user.clinic.name|default:"—" }}</dd>
+            </div>
+            {% if professional %}
+            {% comment %}`is_active` decide si puedes recibir citas por cualquier
+            vía (`es_elegible()` en appointments/services.py). Va en solo lectura
+            porque es una decisión de la clínica sobre ti, no una preferencia
+            tuya: apagarla a uno mismo sería vaciarse la agenda sin querer. No
+            confundir con «aceptar reservas online», que sí eliges tú en la
+            pestaña de al lado.{% endcomment %}
+            <div>
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Estado</dt>
+                <dd class="mt-1">
+                    {% if professional.is_active %}
+                    <span class="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-xs font-medium text-success ring-1 ring-success-line">
+                        <span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true"></span>
+                        En activo
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center gap-1.5 rounded-full bg-muted-strong px-2.5 py-1 text-xs font-medium text-content-muted ring-1 ring-line">
+                        <span class="h-1.5 w-1.5 rounded-full bg-content-faint" aria-hidden="true"></span>
+                        No activo
+                    </span>
+                    {% endif %}
+                </dd>
+                <p class="mt-1 text-xs text-content-faint">Lo gestiona la administración de la clínica.</p>
+            </div>
+            {% endif %}
+        </dl>
+    </div>
+</div>
+
+{% include 'core/_password_form.html' %}

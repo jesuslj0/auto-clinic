@@ -1,62 +1,28 @@
 {% extends 'base.html' %}
 {% comment %}
-«Mi cuenta»: los datos con los que entras y el cambio de contraseña.
+«Mi cuenta»: todo lo que un usuario puede cambiar de sí mismo, en una sola
+pantalla con pestañas — datos de acceso y contraseña, ficha profesional, y su
+horario y ausencias.
 
-Es una página aparte de «Mi perfil» (`appointments/profile.html`) porque aquella
-es la ficha del *profesional* y redirige al panel a quien no tenga una: sin
-esta, administración y recepción no tendrían dónde cambiar su contraseña. Aquí
-solo hace falta estar autenticado.
+Antes eran dos páginas («Mi cuenta» y «Mi perfil», esta última en `appointments`)
+que compartían la tarjeta de contraseña y se distinguían en poco más. Se
+unificaron aquí, en `core`, porque esta pantalla existe para TODO usuario:
+`ensure_professional_for_user` da ficha de profesional a cualquiera con clínica,
+pero un superusuario de plataforma sin clínica sigue necesitando entrar a cambiar
+su contraseña, y entonces solo ve la primera pestaña.
 
-Los datos van en solo lectura a propósito. El nombre se edita en el perfil
-profesional (donde vive el resto de la ficha) y el correo no se edita en ningún
-sitio: es el identificador de acceso.
+La región intercambiable es `#account-tab-region`, y su contenido —barra
+incluida— es exactamente lo que devuelven las vistas ante una petición de htmx,
+así que el marcado es el mismo se llegue por clic, por F5 o por un enlace pegado.
+Gestionar la ficha de OTRO profesional no está aquí: eso es
+`appointments:professionals-edit`, y es cosa de administradores.
 {% endcomment %}
 
 {% block title %}Mi cuenta · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
 {% block page_heading %}Mi cuenta{% endblock %}
 
 {% block content %}
-<div class="mx-auto max-w-2xl space-y-6">
-
-    <div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
-        <div class="border-b border-line px-4 py-6 sm:px-8">
-            <h2 class="text-lg font-semibold text-content">Datos de acceso</h2>
-            <p class="mt-1 text-sm text-content-subtle">Así te identifica la aplicación.</p>
-        </div>
-
-        <div class="px-4 py-7 sm:px-8">
-            <dl class="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
-                <div class="sm:col-span-2">
-                    <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Correo electrónico</dt>
-                    <dd class="mt-1 text-sm font-medium text-content">{{ request.user.email }}</dd>
-                    <p class="mt-1 text-xs text-content-faint">Es tu identificador de acceso y no puede cambiarse.</p>
-                </div>
-                <div>
-                    <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Nombre</dt>
-                    <dd class="mt-1 text-sm text-content">{{ request.user.get_full_name|default:"—" }}</dd>
-                </div>
-                <div>
-                    <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Rol</dt>
-                    <dd class="mt-1 text-sm text-content">{{ request.user.get_role_display|default:"Personal" }}</dd>
-                </div>
-                <div class="sm:col-span-2">
-                    <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Clínica</dt>
-                    <dd class="mt-1 text-sm text-content">{{ request.user.clinic.name|default:"—" }}</dd>
-                </div>
-            </dl>
-
-            {% if request.user.professional_profile %}
-            <div class="mt-6 border-t border-line pt-5">
-                <a href="{% url 'appointments:profile' %}" class="text-sm font-semibold text-brand-fg transition hover:opacity-80">
-                    Editar mi perfil profesional →
-                </a>
-                <p class="mt-1 text-xs text-content-faint">Foto, nombre, tipo de profesional y servicios que ofreces.</p>
-            </div>
-            {% endif %}
-        </div>
-    </div>
-
-    {% include 'core/_password_form.html' %}
-
+<div id="account-tab-region" class="mx-auto max-w-3xl">
+    {% include 'core/_tab_region.html' %}
 </div>
 {% endblock %}
