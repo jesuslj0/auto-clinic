@@ -1642,6 +1642,12 @@ class PerformedProcedure(SoftDeleteModel, TimeStampedModel):
         null=True, blank=True, related_name='+',
     )
 
+    invoice = models.ForeignKey(
+        'billing.PatientInvoice', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='procedures',
+        help_text='Factura donde se cobró. Null = pendiente de facturar.',
+    )
+
     class Meta(SoftDeleteModel.Meta):
         abstract = False
         db_table = 'clinical_performed_procedure'
@@ -1668,6 +1674,8 @@ class PerformedProcedure(SoftDeleteModel, TimeStampedModel):
     def from_db(cls, db, field_names, values):
         instance = super().from_db(db, field_names, values)
         instance._loaded_frozen = _frozen_state(instance, cls.FROZEN_FIELDS, field_names)
+        if 'invoice_id' in field_names or 'invoice' in field_names:
+            instance._loaded_invoice_id = instance.invoice_id
         return instance
 
     @property
@@ -1721,11 +1729,44 @@ class PerformedProcedure(SoftDeleteModel, TimeStampedModel):
                     'service': 'El servicio pertenece al catálogo de otra clínica.'
                 })
 
+    def _validate_invoice(self):
+        """La factura tiene que ser del mismo paciente, y no estar ya emitida.
+
+        Enganchar un procedimiento a una factura, o soltarlo, es cosa del
+        borrador (`PatientInvoice.add_procedure`/`remove_procedure`). Una vez
+        emitida, mover una línea de sitio cambiaría lo que dice un documento ya
+        entregado, así que se veta aquí: la barrera no puede estar solo en la
+        puerta buena. Anular sí lo permite, y a propósito —una factura anulada
+        libera sus procedimientos para que puedan volver a facturarse—.
+        """
+        if self.invoice_id:
+            invoice = self.invoice
+            if invoice.patient_id != self.patient.pk:
+                raise ValidationError({
+                    'invoice': 'La factura es de otro paciente.'
+                })
+
+        loaded = getattr(self, '_loaded_invoice_id', None)
+        if loaded is None or loaded == self.invoice_id:
+            return
+
+        from billing.models import PatientInvoice
+
+        previous = PatientInvoice.all_objects.filter(pk=loaded).first()
+        if previous is not None and previous.status == PatientInvoice.Status.ISSUED:
+            raise ProtectedClinicalRecord(
+                f'El procedimiento #{self.pk} está cobrado en la factura '
+                f'{previous}, que ya está emitida. Para sacarlo de ahí, '
+                f'anula la factura.'
+            )
+
     def clean(self):
         super().clean()
         self._validate_clinic()
+        self._validate_invoice()
 
     def save(self, *args, **kwargs):
+        self._validate_invoice()
         if self._state.adding:
             # Barrera dura, más allá del formulario: el congelado ocurre aquí
             # para que dé igual por dónde entre el procedimiento.
@@ -1742,6 +1783,7 @@ class PerformedProcedure(SoftDeleteModel, TimeStampedModel):
 
         super().save(*args, **kwargs)
         self._loaded_frozen = _frozen_state(self, self.FROZEN_FIELDS)
+        self._loaded_invoice_id = self.invoice_id
 
 
 # ---------------------------------------------------------------------------

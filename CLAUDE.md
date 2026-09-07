@@ -45,7 +45,7 @@ python manage.py runserver    # Uses config.settings.dev by default
 | `services` | Service catalog per clinic |
 | `appointments` | Appointment lifecycle, WebSocket signals, token-based public actions |
 | `notifications` | Celery beat tasks for reminder dispatch |
-| `billing` | Subscription management |
+| `billing` | `Subscription` (planes de la clínica) y `PatientInvoice`: factura de paciente que agrupa `PerformedProcedure`. Borrador editable; al emitir copia sus líneas (`lines`), congela `total`, toma número de la serie de su clínica (`InvoiceSequence`) y no vuelve a mirar los procedimientos. No se corrige: se anula (`void()`) y se emite otra |
 | `booking` | Template-only public booking flow (no models) |
 | `agent` | WhatsApp bot state: `AgentMemory` (contexto del LLM), `ConversationSession` (hilo), `ChatMessage` (historial append-only), `WorkflowError` |
 | `knowledge` | Clinic knowledge base: `ClinicKnowledgeBase`, `ClinicInfoQuery`, `ClinicInfoCache` |
