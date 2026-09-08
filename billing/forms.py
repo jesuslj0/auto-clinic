@@ -13,9 +13,12 @@ Lo que NO es un campo, y no debe llegar a serlo:
   la serie correlativa, que es justo lo que no puede tener saltos.
 - `frozen_*` — son copias que hace el modelo, no datos de entrada.
 """
+from decimal import Decimal
+
 from django import forms
 
 from billing.filters import pending_procedures_for
+from billing.models import Payment
 from patients.models import Patient
 
 
@@ -151,4 +154,66 @@ class InvoiceVoidForm(forms.Form):
         widget=forms.Textarea(attrs={'rows': 3}),
         max_length=500,
         error_messages={'required': 'Indica por qué se anula la factura.'},
+    )
+
+
+class PaymentForm(forms.Form):
+    """Registro de un cobro contra una factura emitida.
+
+    Es un `Form` plano y **no un `ModelForm`**, y esta vez no es solo por el
+    mismo criterio que `PatientInvoiceForm`: un `ModelForm` aquí estaría roto.
+    `Payment.clean()` llama a `_prepare_receipt()`, y ese método hace
+    `select_for_update()` sobre la factura y toma número de la serie de recibos.
+    Un `ModelForm` lo ejecutaría en `is_valid()` (vía `full_clean()`) y otra vez
+    en `save()`, con tres consecuencias:
+
+    - `select_for_update()` fuera de una transacción es `TransactionManagementError`,
+      y el proyecto no usa `ATOMIC_REQUESTS`: las vistas corren en autocommit.
+      Bajo pytest —que envuelve cada test en un `atomic`— eso **no se vería**:
+      la suite pasaría y fallaría solo en el navegador.
+    - un formulario que se valida y no llega a guardarse dejaría gastado un
+      número de recibo, que es justo el hueco en la serie que no puede haber.
+    - `InvoiceNotPayable` y `Overpayment` no son `ValidationError`, así que
+      escaparían crudas de `is_valid()` en vez de convertirse en errores.
+
+    Así que aquí solo se valida la **forma** de lo que se teclea: que el importe
+    es un número positivo, que el método es uno de los cuatro y que la fecha se
+    entiende. Que la factura admita el cobro y que no se pase del pendiente lo
+    decide el modelo, una sola vez, en el `save()` del alta. Da igual por dónde
+    entre el pago: las reglas son las mismas.
+    """
+
+    amount = forms.DecimalField(
+        label='Importe cobrado',
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal('0.01'),
+        # `localize` para aceptar «12,50»: el panel está en español y es lo que
+        # teclea cualquiera. De paso hace que el widget sea `text` y no `number`,
+        # que rechazaría la coma — mismo criterio que los campos de importe del
+        # filtro del listado (ver `billing.filters._decimal_or_none`).
+        localize=True,
+        error_messages={
+            'required': 'Indica cuánto se ha cobrado.',
+            'invalid': 'El importe tiene que ser un número, por ejemplo 25,50.',
+            'min_value': 'Un recibo de cero euros no prueba nada.',
+        },
+    )
+    # NO hay `max_value` con lo pendiente: el tope de verdad es el `Overpayment`
+    # del modelo, que lo comprueba con la fila de la factura bloqueada. Repetirlo
+    # aquí sería una copia que puede quedarse obsoleta entre que se pinta el
+    # formulario y se envía, y que además no protege de nada concurrente.
+    method = forms.ChoiceField(
+        label='Método de cobro',
+        choices=Payment.Method.choices,
+        error_messages={
+            'required': 'Elige cómo entró el dinero.',
+            'invalid_choice': 'Ese método de cobro no existe.',
+        },
+    )
+    paid_at = forms.DateTimeField(
+        label='Fecha del cobro',
+        required=False,
+        help_text='Déjala vacía si el dinero entra ahora mismo.',
+        error_messages={'invalid': 'No se entiende esa fecha.'},
     )

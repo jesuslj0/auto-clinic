@@ -21,6 +21,9 @@ from billing.exceptions import (
     InvoiceHasPayments,
     InvoiceNotDraft,
     InvoiceNotIssued,
+    InvoiceNotPayable,
+    Overpayment,
+    PaymentFrozen,
 )
 from billing.filters import (
     InvoiceFilters,
@@ -28,8 +31,13 @@ from billing.filters import (
     invoices_for,
     pending_procedures_for,
 )
-from billing.forms import InvoiceVoidForm, PatientInvoiceForm, pending_for_patient
-from billing.models import PatientInvoice, Subscription
+from billing.forms import (
+    InvoiceVoidForm,
+    PatientInvoiceForm,
+    PaymentForm,
+    pending_for_patient,
+)
+from billing.models import PatientInvoice, Payment, Subscription
 from billing.serializers import SubscriptionSerializer
 from core.managers import ProtectedRecordError
 from core.mixins import ExportMixin
@@ -102,11 +110,16 @@ class PatientInvoiceListView(AccessLogMixin, LoginRequiredMixin, ListView):
         de guardar `self.filtered_invoices`, el JOIN a los procedimientos
         multiplicaría las filas de cada factura y el `Sum('total')` de los KPIs
         saldría inflado tantas veces como líneas tenga cada una.
+
+        De las dos anotaciones, esa es la peligrosa y sigue viviendo solo aquí.
+        `with_collection()` no lo es: `amount_collected` es una subconsulta
+        escalar, no un JOIN, así que no multiplica filas y convive con el
+        `Count` sin falsear ninguna de las dos (ver `billing.managers`).
         """
         self.filters = InvoiceFilters.from_query(self.request.GET)
         self.filtered_invoices = self.filters.apply(invoices_for(self.request.user))
 
-        queryset = self.filtered_invoices.select_related('patient').annotate(
+        queryset = self.filtered_invoices.select_related('patient').with_collection().annotate(
             # Una sola consulta para toda la página, en vez de un `.count()` por
             # fila. El `filter=` va DENTRO del `Count` porque una agregación sobre
             # la relación inversa no pasa por el manager de `PerformedProcedure`:
@@ -127,6 +140,7 @@ class PatientInvoiceListView(AccessLogMixin, LoginRequiredMixin, ListView):
             'filters': self.filters,
             'kpis': invoice_kpis(self.filtered_invoices, pending),
             'status_choices': PatientInvoice.Status.choices,
+            'payment_state_choices': PatientInvoice.PaymentState.choices,
             # Base de las URLs de orden y paginación, ya normalizada. Las arma
             # el tag `{% invoice_query %}` a partir de esto, nunca de request.GET.
             'invoice_query_base': self.filters.as_params(),
@@ -349,13 +363,18 @@ class PatientInvoiceDetailView(
     template_name = 'billing/invoice_detail.html'
 
     def get_queryset(self):
-        return super().get_queryset().select_related('patient')
+        # `with_collection()` deja `amount_collected` —y con él `amount_due`—
+        # resueltos en la MISMA consulta que trae la factura, para que el panel
+        # de cobros no dispare un agregado por cada property que lee.
+        return super().get_queryset().select_related('patient').with_collection()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         invoice = self.object
         context['section'] = 'billing'
         context['void_form'] = InvoiceVoidForm()
+        context['payment_form'] = PaymentForm()
+        context['payment_methods'] = Payment.Method.choices
         if invoice.is_draft:
             context['procedures'] = list(
                 invoice.procedures.order_by('performed_at', 'id')
@@ -366,15 +385,32 @@ class PatientInvoiceDetailView(
         else:
             # Emitida o anulada: lo que dice la factura está en `lines`.
             context['lines'] = invoice.lines
+            # Del cobro más antiguo al más reciente: una serie de cobros
+            # parciales se lee al derecho, como un extracto, y no al revés que
+            # el `ordering` del modelo (pensado para una lista suelta).
+            #
+            # Se pinta `frozen_created_by_name`, nunca `payment.created_by`: la
+            # FK es `DO_NOTHING` + `db_constraint=False` y puede apuntar a un
+            # profesional que ya no existe. Por eso tampoco hay
+            # `select_related('created_by')` aquí: no haría falta y además
+            # invitaría a tocar el objeto en vez de la copia congelada.
+            context['payments'] = list(invoice.payments.chronological())
         return context
 
 
 class InvoiceActionMixin(InvoiceScopedMixin, LoginRequiredMixin, SingleObjectMixin, View):
-    """Base de las acciones sobre una factura. Solo POST.
+    """Base de las acciones sobre una factura y sus cobros. Solo POST.
 
-    Son POST y no GET porque cambian el documento: emitir gasta un número de la
-    serie y anular deja una factura sin efecto para siempre. Un GET las dejaría
-    al alcance de un prefetch del navegador o de un enlace pegado en un chat.
+    Son POST y no GET porque mueven dinero o cambian el documento: emitir gasta
+    un número de la serie, anular deja una factura sin efecto para siempre y
+    cobrar gasta un número de la serie de recibos y no se deshace. Un GET las
+    dejaría al alcance de un prefetch del navegador o de un enlace pegado en un
+    chat.
+
+    El `except` recoge TODAS las excepciones de dominio de `billing`, no solo las
+    que lanza cada acción: son estados legítimos de la aplicación —cobrar una
+    factura que otro acaba de anular en otra pestaña— y tienen que salir como un
+    mensaje, no como un 500.
     """
 
     http_method_names = ['post']
@@ -385,7 +421,8 @@ class InvoiceActionMixin(InvoiceScopedMixin, LoginRequiredMixin, SingleObjectMix
             return self.perform(request)
         except (
             DjangoValidationError, EmptyInvoice, InvoiceNotDraft, InvoiceNotIssued,
-            InvoiceHasPayments, InvoiceFrozen, ProtectedRecordError,
+            InvoiceHasPayments, InvoiceFrozen, InvoiceNotPayable, Overpayment,
+            PaymentFrozen, ProtectedRecordError,
         ) as exc:
             messages.error(request, _domain_message(exc))
             return redirect('billing:invoice-detail', pk=self.object.pk)
@@ -456,6 +493,50 @@ class InvoiceProcedureView(InvoiceActionMixin):
         return redirect('billing:invoice-detail', pk=invoice.pk)
 
 
+class InvoicePaymentCreateView(InvoiceActionMixin):
+    """Registra un cobro contra una factura emitida.
+
+    La vista no valida nada del dominio: construye el `Payment` y deja hablar al
+    `save()` del modelo. Ahí está el `select_for_update()` sobre la factura, que
+    es lo único que impide el sobrepago concurrente, y ahí se toma el número de
+    recibo. `InvoiceActionMixin` traduce lo que salga —`InvoiceNotPayable` si
+    alguien cobra un borrador con la URL a mano, `Overpayment` si se pasa del
+    pendiente— a un mensaje y devuelve al detalle.
+
+    No lleva `ClinicRequiredMixin`, al revés que el alta de facturas: la clínica
+    del cobro la HEREDA de la factura, y la factura ya viene acotada por
+    `InvoiceScopedMixin`. La serie de recibos que se gasta es la de esa factura,
+    no la del usuario.
+    """
+
+    def perform(self, request):
+        invoice = self.object
+        form = PaymentForm(request.POST)
+        if not form.is_valid():
+            messages.error(request, _first_error(form))
+            return redirect('billing:invoice-detail', pk=invoice.pk)
+
+        # `paid_at` solo se pasa si se tecleó: si no, manda el `default=now` del
+        # modelo. Pasarlo como `None` rompería el `NOT NULL` de la columna.
+        extra = {}
+        if form.cleaned_data.get('paid_at'):
+            extra['paid_at'] = form.cleaned_data['paid_at']
+
+        payment = Payment.objects.create(
+            invoice=invoice,
+            amount=form.cleaned_data['amount'],
+            method=form.cleaned_data['method'],
+            created_by=_author_for(request.user),
+            **extra,
+        )
+        messages.success(
+            request,
+            f'Cobro {payment.receipt_number} registrado: {payment.amount} € '
+            f'por {payment.get_method_display().lower()}.',
+        )
+        return redirect('billing:invoice-detail', pk=invoice.pk)
+
+
 class InvoiceDeleteView(InvoiceActionMixin):
     """Tira un borrador. Una factura emitida no se borra: se anula.
 
@@ -472,6 +553,21 @@ class InvoiceDeleteView(InvoiceActionMixin):
             'de facturar.',
         )
         return redirect('billing:invoice-list')
+
+
+def _first_error(form) -> str:
+    """El primer error del formulario, en el orden en que se declararon.
+
+    Las acciones sobre una factura redirigen al detalle y hablan por `messages`
+    (igual que `InvoiceVoidView`), así que el formulario no se vuelve a pintar y
+    hay que elegir UN mensaje. Se recorre `form.fields` y no `form.errors` para
+    que ante la misma entrada el elegido sea siempre el mismo.
+    """
+    for name in form.fields:
+        if name in form.errors:
+            return form.errors[name][0]
+    non_field = form.non_field_errors()
+    return non_field[0] if non_field else 'Revisa los datos del cobro.'
 
 
 def _domain_message(exc) -> str:

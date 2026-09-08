@@ -8,6 +8,7 @@ no dispare una consulta por fila.
 from decimal import Decimal
 
 import pytest
+from django.db.models import Count, Q
 from django.urls import reverse
 from django.utils import timezone
 
@@ -231,3 +232,285 @@ def test_la_lectura_deja_rastro_en_el_audit(panel_client, issued_invoice_a):
     log = AccessLog.objects.latest('timestamp')
     assert log.action == AccessLog.Action.SEARCH
     assert log.path == LIST_URL
+
+
+# ---------------------------------------------------------------------------
+# Estado de cobro: la anotación que convive con el recuento de procedimientos
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_el_estado_de_cobro_y_el_recuento_de_procedimientos_conviven(
+    admin_user, clinic_a, patient_a, visit_a, service_a,
+):
+    """Las dos anotaciones del listado no se pisan.
+
+    Es el test que sostiene que `amount_collected` sea una subconsulta escalar y
+    no un `Sum` con JOIN: con el JOIN, las tres filas de procedimientos
+    multiplicaban la suma de los pagos y `amount_collected` salía a 60,00 € en
+    vez de a 20,00 €. Al revés también: el `Count` se inflaba con los cobros.
+    """
+    from billing.models import Payment
+
+    invoice = PatientInvoice.objects.create(clinic=clinic_a, patient=patient_a)
+    for _ in range(3):
+        invoice.add_procedure(
+            PerformedProcedure.objects.create(visit=visit_a, service=service_a)
+        )
+    invoice.issue()
+    Payment.objects.create(
+        invoice=invoice, amount=Decimal('20.00'), method=Payment.Method.CARD,
+    )
+
+    row = (
+        invoices_for(admin_user)
+        .with_collection()
+        .annotate(
+            procedure_count=Count(
+                'procedures', filter=Q(procedures__deleted_at__isnull=True),
+            ),
+        )
+        .get(pk=invoice.pk)
+    )
+
+    assert row.procedure_count == 3
+    assert row.amount_collected == Decimal('20.00')
+    assert row.total == Decimal('150.00')
+    assert row.payment_state == PatientInvoice.PaymentState.PARTIAL
+
+
+@pytest.mark.django_db
+def test_el_listado_ensena_el_estado_de_cobro(panel_client, issued_invoice_a):
+    from billing.models import Payment
+
+    Payment.objects.create(
+        invoice=issued_invoice_a, amount=Decimal('20.00'), method=Payment.Method.CARD,
+    )
+
+    body = panel_client.get(LIST_URL).content.decode()
+
+    assert 'Parcial' in body
+
+
+@pytest.mark.django_db
+def test_el_borrador_no_ensena_estado_de_cobro(panel_client, draft_invoice_a):
+    """Un borrador sale «impagado» de la anotación, y decirlo sería mentir.
+
+    Su importe todavía puede cambiar: no debe nada que se pueda dejar de pagar.
+    Se mira el CHIP de la fila (el enlace que filtra), no el texto suelto: la
+    palabra «Impagada» aparece también en el desplegable del filtro, que está
+    siempre.
+    """
+    body = panel_client.get(LIST_URL).content.decode()
+
+    assert 'cobro=unpaid' not in body
+
+
+# ---------------------------------------------------------------------------
+# Filtro por estado de cobro
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def three_collection_states(db, clinic_a, patient_a, visit_a, service_a):
+    """Tres facturas emitidas de 50 €: sin cobrar, a medias y saldada."""
+    from billing.models import Payment
+
+    invoices = []
+    for _ in range(3):
+        invoice = PatientInvoice.objects.create(clinic=clinic_a, patient=patient_a)
+        invoice.add_procedure(
+            PerformedProcedure.objects.create(visit=visit_a, service=service_a)
+        )
+        invoices.append(invoice.issue())
+
+    unpaid, partial, paid = invoices
+    Payment.objects.create(
+        invoice=partial, amount=Decimal('20.00'), method=Payment.Method.CARD,
+    )
+    Payment.objects.create(
+        invoice=paid, amount=Decimal('50.00'), method=Payment.Method.CASH,
+    )
+    return {'unpaid': unpaid, 'partial': partial, 'paid': paid}
+
+
+@pytest.mark.django_db
+def test_filtro_por_estado_de_cobro(admin_user, three_collection_states):
+    invoices, _ = _kpis(admin_user, {'cobro': 'partial'})
+
+    assert list(invoices) == [three_collection_states['partial']]
+
+
+@pytest.mark.django_db
+def test_el_filtro_de_cobro_no_arrastra_borradores(
+    admin_user, three_collection_states, draft_invoice_a,
+):
+    """Filtrar «impagadas» no puede devolver algo que aún no debe nada."""
+    invoices, _ = _kpis(admin_user, {'cobro': 'unpaid'})
+
+    assert list(invoices) == [three_collection_states['unpaid']]
+
+
+@pytest.mark.django_db
+def test_un_estado_de_cobro_inventado_se_ignora():
+    filters = InvoiceFilters.from_query({'cobro': 'rm -rf'})
+
+    assert filters.collection == ''
+
+
+@pytest.mark.django_db
+def test_el_filtro_de_cobro_sobrevive_al_orden_y_a_la_paginacion():
+    filters = InvoiceFilters.from_query({'cobro': 'paid', 'q': 'ana'})
+
+    params = filters.toggled('amount').as_params()
+
+    assert params['cobro'] == 'paid'
+    assert params['q'] == 'ana'
+
+
+# ---------------------------------------------------------------------------
+# KPIs de cobro
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_kpi_pendiente_de_cobro(admin_user, issued_invoice_a):
+    from billing.models import Payment
+
+    Payment.objects.create(
+        invoice=issued_invoice_a, amount=Decimal('20.00'), method=Payment.Method.CARD,
+    )
+
+    _, kpis = _kpis(admin_user)
+
+    assert kpis['pending_collection_amount'] == Decimal('30.00')
+    assert kpis['unpaid_invoice_count'] == 1
+
+
+@pytest.mark.django_db
+def test_el_kpi_de_cobro_ignora_borradores_y_anuladas(
+    admin_user, clinic_a, patient_a, visit_a, service_a, draft_invoice_a,
+):
+    """Solo se reclama lo emitido y vigente."""
+    voided = PatientInvoice.objects.create(clinic=clinic_a, patient=patient_a)
+    voided.add_procedure(
+        PerformedProcedure.objects.create(visit=visit_a, service=service_a)
+    )
+    voided.issue()
+    voided.void(reason='Error')
+
+    _, kpis = _kpis(admin_user)
+
+    assert kpis['pending_collection_amount'] == Decimal('0.00')
+    assert kpis['unpaid_invoice_count'] == 0
+
+
+@pytest.mark.django_db
+def test_el_pendiente_de_cobro_no_se_infla_con_varias_lineas(
+    admin_user, clinic_a, patient_a, visit_a, service_a,
+):
+    """Gemelo de `test_el_total_no_se_infla_con_varias_lineas`, para el cobro.
+
+    Tres procedimientos y un cobro: si `amount_collected` volviera a ser un
+    `Sum` con JOIN, la resta se haría tres veces y el pendiente saldría a 300 €.
+    """
+    from billing.models import Payment
+
+    invoice = PatientInvoice.objects.create(clinic=clinic_a, patient=patient_a)
+    for _ in range(3):
+        invoice.add_procedure(
+            PerformedProcedure.objects.create(visit=visit_a, service=service_a)
+        )
+    invoice.issue()
+    Payment.objects.create(
+        invoice=invoice, amount=Decimal('50.00'), method=Payment.Method.CARD,
+    )
+
+    _, kpis = _kpis(admin_user)
+
+    assert kpis['total_billed'] == Decimal('150.00')
+    assert kpis['pending_collection_amount'] == Decimal('100.00')
+
+
+@pytest.mark.django_db
+def test_el_listado_no_crece_en_consultas_con_los_cobros(
+    django_assert_max_num_queries, panel_client, clinic_a, patient_a, visit_a, service_a,
+):
+    """El mismo presupuesto que sin cobros: el estado va anotado, no leído."""
+    from billing.models import Payment
+
+    for _ in range(5):
+        invoice = PatientInvoice.objects.create(clinic=clinic_a, patient=patient_a)
+        invoice.add_procedure(
+            PerformedProcedure.objects.create(visit=visit_a, service=service_a)
+        )
+        invoice.issue()
+        Payment.objects.create(
+            invoice=invoice, amount=Decimal('25.00'), method=Payment.Method.CARD,
+        )
+
+    with django_assert_max_num_queries(15):
+        response = panel_client.get(LIST_URL)
+
+    assert response.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Los filtros plegables
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_los_campos_plegables_siguen_dentro_del_formulario(panel_client):
+    """Plegar es cosa del navegador; enviar los filtros, del formulario.
+
+    El bloque que se pliega tiene que quedar DENTRO de `<form
+    id="invoice-filters">`: si un refactor lo sacara, los campos dejarían de
+    enviarse y el listado ignoraría los filtros sin que fallara nada — el peor
+    tipo de rotura, la silenciosa. Aquí se comprueba la anidación real.
+    """
+    body = panel_client.get(LIST_URL).content.decode()
+
+    start = body.index('id="invoice-filters"')
+    form = body[start:body.index('</form>', start)]
+
+    assert 'id="invoice-filter-fields"' in form
+    for name in ('q', 'status', 'cobro', 'desde', 'hasta', 'min', 'max'):
+        assert f'name="{name}"' in form
+
+
+@pytest.mark.django_db
+def test_el_spinner_no_se_pliega_con_los_filtros(panel_client):
+    """Lo comparten las cabeceras ordenables y la paginación.
+
+    Dentro del bloque plegable dejaría de avisar de la carga justo cuando los
+    filtros están escondidos, que es cuando más se usa la tabla.
+    """
+    body = panel_client.get(LIST_URL).content.decode()
+
+    start = body.index('id="invoice-filters"')
+    form = body[start:body.index('</form>', start)]
+
+    assert form.index('id="billing-spinner"') < form.index('id="invoice-filter-fields"')
+
+
+@pytest.mark.django_db
+def test_el_boton_de_restablecer_lo_gobierna_el_cliente(panel_client):
+    """El servidor pinta el estado inicial; a partir de ahí manda Alpine.
+
+    El formulario vive FUERA de `#billing-region`, que es lo único que htmx
+    sustituye, así que un `{% if filters.has_filters %}` se quedaba congelado en
+    lo que fuera cierto al cargar: el botón desaparecía al pulsarlo —correcto,
+    ya no hay nada que restablecer— y no volvía al filtrar de nuevo. De ahí el
+    `x-show`, con el `style` inicial para el instante previo a Alpine y para
+    quien navegue sin JavaScript.
+    """
+    sin_filtros = panel_client.get(LIST_URL).content.decode()
+    con_filtros = panel_client.get(LIST_URL, {'q': 'john'}).content.decode()
+
+    def bloque(body):
+        start = body.index('id="invoice-filters"')
+        form = body[start:body.index('</form>', start)]
+        return form[form.index('Restablecer') - 400:form.index('Restablecer')]
+
+    assert 'x-show="activos.length"' in bloque(sin_filtros)
+    # Sin filtros no se ve, ni siquiera antes de que cargue Alpine.
+    assert 'display: none' in bloque(sin_filtros)
+    # Con filtros sí, y sin depender de JavaScript para aparecer.
+    assert 'display: none' not in bloque(con_filtros)

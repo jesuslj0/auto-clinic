@@ -14,6 +14,7 @@ from decimal import Decimal
 import pytest
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from billing.exceptions import (
     InvoiceHasPayments,
@@ -400,6 +401,28 @@ class TestThePaymentStateIsDerived:
             ]
 
         assert states == [(Decimal('25.00'), PatientInvoice.PaymentState.PARTIAL)] * 3
+
+    def test_a_soft_deleted_payment_stops_counting(self, issued_invoice_a, payment_a):
+        """Un cobro dado de baja deja de sumar, también en la anotación.
+
+        Lo que garantiza esto cambió: antes era un `filter=` dentro del `Sum`,
+        porque una agregación sobre la relación inversa no pasa por el manager;
+        ahora es que la subconsulta parte de `Payment.objects`, que sí lo hace.
+        El mecanismo es otro, la regla es la misma, y este test la vigila.
+
+        Se da de baja con un `update()` porque `Payment.delete()` está vetado:
+        un recibo no se borra. Es la única vía, y por eso es un caso de prueba,
+        no un camino de la aplicación.
+        """
+        Payment.all_objects.filter(pk=payment_a.pk).update(deleted_at=timezone.now())
+
+        invoice = PatientInvoice.objects.with_collection().get(pk=issued_invoice_a.pk)
+
+        assert invoice.amount_collected == Decimal('0.00')
+        assert invoice.payment_state == PatientInvoice.PaymentState.UNPAID
+        # Y la property de la instancia suelta dice lo mismo.
+        issued_invoice_a.refresh_from_db()
+        assert issued_invoice_a.amount_collected == Decimal('0.00')
 
     def test_no_stored_field_backs_the_state(self):
         """Si un día alguien lo almacena, este test se entera."""

@@ -10,9 +10,13 @@ La factura. Dos caras del mismo documento, según su estado:
   después no puede cambiar lo que dice una factura ya entregada al paciente, y
   pintarlos aquí sería justo esa mentira.
 
+A la derecha, en las dos caras, el panel de cobros: el dinero que ha entrado
+contra este documento. Es una columna aparte y no una sección más abajo porque
+se lee A LA VEZ que el total — «debe 50 y ha pagado 20» es una sola pregunta.
+
 Todo lo que cambia el documento va por POST con su `csrf_token`. Emitir gasta un
-número de la serie y anular deja la factura sin efecto para siempre: no son
-enlaces.
+número de la serie, anular deja la factura sin efecto para siempre y cobrar gasta
+un número de la serie de recibos: no son enlaces.
 {% endcomment %}
 
 {% block title %}{{ invoice }} · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
@@ -28,7 +32,17 @@ enlaces.
 {% endblock %}
 
 {% block content %}
-<div class="mx-auto max-w-3xl space-y-6" x-data="{ modal: null }">
+{% comment %}
+El `x-data` se queda en el contenedor EXTERIOR, envolviendo a las dos columnas y
+a los modales: los modales son `fixed inset-0`, así que dónde estén en el árbol
+da igual, pero su estado tiene que ser el mismo que ve el botón que los abre —y
+el de «Registrar cobro» vive dentro del panel de la derecha—.
+{% endcomment %}
+<div class="mx-auto max-w-6xl" x-data="{ modal: null }">
+  <div class="grid gap-6 lg:grid-cols-3 lg:items-start">
+
+  {# ================= El documento ===================================== #}
+  <div class="space-y-6 lg:col-span-2">
 
     {# --- Cabecera: quién, cuándo, cuánto ------------------------------- #}
     <section class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
@@ -211,6 +225,13 @@ enlaces.
     </section>
     {% endif %}
     {% endif %}
+  </div>{# /columna del documento #}
+
+  {# ================= Los cobros ======================================= #}
+  <aside class="lg:col-span-1">
+      {% include 'billing/_payment_panel.html' %}
+  </aside>
+  </div>{# /grid #}
 
     {# --- Modales de confirmación --------------------------------------- #}
     {% if invoice.is_draft %}
@@ -270,6 +291,63 @@ enlaces.
             </form>
         </div>
     </div>
+
+    {% comment %}
+    Modal de cobro. Va bajo la MISMA condición que el botón que lo abre
+    (`amount_due`): con la factura saldada no hay importe que quepa —el modelo
+    rechazaría cualquiera con un `Overpayment`—, así que su formulario no debe
+    ni existir en la página. Un modal oculto sigue siendo un `<form>` con su
+    `action` en el HTML.
+
+    El importe viene prellenado con lo que queda pendiente,
+    porque el caso normal es cobrar todo lo que se debe y así es un solo clic;
+    el `max` es una ayuda al teclear, NO la validación — quien decide si un
+    importe cabe es el modelo, que lo comprueba con la factura bloqueada.
+
+    El campo del importe es `text` con `inputmode="decimal"` y no `number`: un
+    `number` rechaza la coma, y aquí se teclea «25,50». Mismo criterio que los
+    importes del filtro del listado.
+    {% endcomment %}
+    {% if invoice.amount_due %}
+    <div x-show="modal === 'payment'" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="modal-payment-title">
+        <div x-show="modal === 'payment'" x-transition.opacity @click="modal = null" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div x-show="modal === 'payment'" x-transition class="relative w-full max-w-md rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+            <h3 id="modal-payment-title" class="text-base font-semibold text-content">Registrar un cobro</h3>
+            <p class="mt-2 text-sm text-content-subtle">
+                De la factura {{ invoice.number }} quedan pendientes <strong class="font-semibold text-content">{{ invoice.amount_due|euros }}</strong>.
+                Al guardarlo se emite un recibo con su número, y un recibo no se corrige ni se borra.
+            </p>
+            <form method="post" action="{% url 'billing:invoice-payment' invoice.pk %}" class="mt-4 space-y-4" novalidate>
+                {% csrf_token %}
+                <div>
+                    <label for="payment-amount" class="mb-1.5 block text-sm font-medium text-content-muted">Importe cobrado</label>
+                    <input type="text" inputmode="decimal" name="amount" id="payment-amount"
+                           value="{{ invoice.amount_due }}" max="{{ invoice.amount_due }}" required
+                           class="block w-full rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500">
+                </div>
+                <div>
+                    <label for="payment-method" class="mb-1.5 block text-sm font-medium text-content-muted">Método de cobro</label>
+                    <select name="method" id="payment-method" required
+                            class="block w-full rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        {% for value, label in payment_methods %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="payment-paid-at" class="mb-1.5 block text-sm font-medium text-content-muted">Fecha del cobro</label>
+                    <input type="datetime-local" name="paid_at" id="payment-paid-at"
+                           class="block w-full rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    <p class="mt-1.5 text-xs text-content-subtle">Déjala vacía si el dinero entra ahora mismo.</p>
+                </div>
+                <div class="flex justify-end gap-3 pt-1">
+                    <button type="button" @click="modal = null" class="btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn-primary">Registrar cobro</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
     {% endif %}
 </div>
 {% endblock %}

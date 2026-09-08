@@ -8,12 +8,134 @@ reemplazar el campo que se está tecleando: el foco y el cursor se perderían a
 mitad de palabra. Es el mismo reparto que en `patients/_lesion_region.html`, donde
 el estado de la vista vive fuera del fragmento intercambiable.
 
+Que el formulario esté fuera de la región tiene un segundo efecto, este a
+favor: plegarlo es estado de la vista y sobrevive solo a los intercambios de
+htmx. Si viviera dentro, cada filtro aplicado lo volvería a desplegar.
+
 Los dos únicos controles del formulario que sí viven dentro de la región son los
 `hidden` de orden, porque los cambian los enlaces de las cabeceras y tienen que
 llegar refrescados. Se asocian al formulario con `form="invoice-filters"`, que es
 HTML del montón: un control puede estar en cualquier parte del documento y
 pertenecer igualmente a su formulario. Sin JavaScript también funciona.
 {% endcomment %}
+
+{% block extra_head %}
+{% comment %}
+Dos cosas que tienen que ocurrir ANTES de que Alpine llegue (carga con `defer`).
+
+La primera, plegar sin parpadeo: si el usuario dejó los filtros cerrados, este
+script síncrono los oculta ya, antes del primer pintado. Alpine retira la clase
+en cuanto ha aplicado su propio `x-show`, y a partir de ahí manda él.
+{% endcomment %}
+<script>
+    try {
+        if (localStorage.getItem('ac-billing-filters') === '0') {
+            document.documentElement.classList.add('ac-filters-collapsed');
+        }
+    } catch (e) {}
+</script>
+<style>.ac-filters-collapsed #invoice-filter-fields { display: none; }</style>
+
+{% comment %}
+La segunda, el componente del formulario. Vive aquí y no en un `x-data` porque
+son cuarenta líneas de lógica, y un atributo de HTML no es sitio para leerlas.
+
+Lo que resuelve, y que no es un adorno: el formulario está FUERA de
+`#billing-region`, que es lo único que htmx sustituye, así que nada de lo que
+dependa de los filtros puede pintarlo el servidor — se quedaría congelado en lo
+que fuera cierto al cargar la página. Le pasaba al botón «Restablecer», que solo
+reaparecía al recargar entera. Aquí el resumen se DERIVA de los propios campos,
+que son la verdad, y por eso siempre concuerda con lo que se ve en la tabla.
+{% endcomment %}
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('invoiceFilters', () => ({
+            /** Campos del formulario que son filtros. `sort` y `direction` no lo
+             *  son: viajan igual pero ordenan, no acotan. */
+            CAMPOS: ['q', 'status', 'cobro', 'desde', 'hasta', 'min', 'max'],
+
+            open: true,
+            /** Resumen legible de lo que está puesto, para la barra plegada. */
+            activos: [],
+
+            init() {
+                try { this.open = localStorage.getItem('ac-billing-filters') !== '0'; }
+                catch (e) {}
+                this.leer();
+                // En el siguiente tick `x-show` ya ha hecho su trabajo, así que
+                // se puede soltar la clase del script de arriba sin que el panel
+                // asome entre las dos.
+                this.$nextTick(() => {
+                    document.documentElement.classList.remove('ac-filters-collapsed');
+                });
+            },
+
+            toggle() {
+                this.open = !this.open;
+                try { localStorage.setItem('ac-billing-filters', this.open ? '1' : '0'); }
+                catch (e) {}
+            },
+
+            /** Relee los campos y rehace el resumen. */
+            leer() {
+                const campo = (n) => this.$el.elements[n];
+                const valor = (n) => (campo(n)?.value || '').trim();
+                const opcion = (n) => {
+                    const s = campo(n);
+                    return s && s.value ? s.selectedOptions[0].textContent.trim() : '';
+                };
+                // `2026-01-15` se lee como `15/01/2026`: la barra la mira alguien
+                // que trabaja en español, no un `input[type=date]`.
+                const fecha = (v) => (v ? v.split('-').reverse().join('/') : '');
+                const rango = (desde, hasta, sufijo) => {
+                    const s = sufijo || '';
+                    if (desde && hasta) return desde + ' – ' + hasta + s;
+                    if (desde) return 'desde ' + desde + s;
+                    if (hasta) return 'hasta ' + hasta + s;
+                    return '';
+                };
+
+                const chips = [];
+                const q = valor('q');
+                if (q) chips.push('«' + q + '»');
+                for (const nombre of ['status', 'cobro']) {
+                    const etiqueta = opcion(nombre);
+                    if (etiqueta) chips.push(etiqueta);
+                }
+                const fechas = rango(fecha(valor('desde')), fecha(valor('hasta')));
+                if (fechas) chips.push(fechas);
+                const importes = rango(valor('min'), valor('max'), ' €');
+                if (importes) chips.push(importes);
+
+                this.activos = chips;
+            },
+
+            /** Devuelve los campos a lo que dice la URL, tras un salto de htmx.
+             *
+             *  Hace falta porque los chips de la tabla y el filtro de estado
+             *  cambian la dirección sin tocar el formulario: sin esto, el
+             *  desplegable seguiría vacío y el siguiente filtro que se tocara
+             *  enviaría el estado en blanco, descartando en silencio el que el
+             *  usuario acababa de pinchar.
+             */
+            sincronizar() {
+                const params = new URLSearchParams(location.search);
+                for (const nombre of this.CAMPOS) {
+                    const campo = this.$el.elements[nombre];
+                    // El campo con el foco NO se toca: la respuesta llega con la
+                    // URL de hace 400 ms y le borraría a quien teclea las últimas
+                    // letras. Es la misma razón por la que el formulario vive
+                    // fuera de la región que htmx sustituye.
+                    if (campo && campo !== document.activeElement) {
+                        campo.value = params.get(nombre) || '';
+                    }
+                }
+                this.leer();
+            },
+        }));
+    });
+</script>
+{% endblock %}
 
 {% block title %}Facturación · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
 {% block page_heading %}Facturación{% endblock %}
@@ -33,6 +155,17 @@ pertenecer igualmente a su formulario. Sin JavaScript también funciona.
 {% block content %}
 <section class="space-y-6">
     {# --- Filtros. Van por GET: la URL es la dirección de lo que se ve. ----- #}
+    {% comment %}
+    El formulario se pliega, y su estado se recuerda en `localStorage` igual que
+    el tema (`ac-theme`): quien trabaja con la tabla a pantalla completa no
+    quiere volver a plegar los filtros en cada visita. Todos los accesos van en
+    `try` —en una ventana privada `localStorage` lanza al tocarlo— y si fallan,
+    los filtros se quedan desplegados, que es el estado útil.
+
+    La lógica está en `invoiceFilters`, arriba en `extra_head`. Sin JavaScript
+    esto sigue siendo un formulario GET corriente: se ve entero, se envía y
+    filtra igual; lo único que se pierde es el plegado y el resumen.
+    {% endcomment %}
     <form
         id="invoice-filters"
         method="get"
@@ -44,13 +177,92 @@ pertenecer igualmente a su formulario. Sin JavaScript también funciona.
         hx-indicator="#billing-spinner"
         hx-trigger="submit, change, keyup changed delay:400ms from:input[type=search]"
         class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line"
+        x-data="invoiceFilters"
+        @input="leer()"
+        @change="leer()"
+        @htmx:after-settle.window="sincronizar()"
     >
         {% comment %}
-        Reparto en doce columnas, y no en cuatro iguales: los dos rangos llevan
-        DOS controles dentro y necesitan el doble de sitio que un desplegable.
-        Con cuatro columnas iguales, los `input[type=date]` —que tienen un ancho
-        mínimo propio por el selector del navegador— no cabían en su celda y se
-        salían de ella.
+        La cabecera NO se pliega, y el spinner vive aquí y no con los filtros a
+        propósito: lo comparten las cabeceras ordenables de la tabla y los
+        enlaces de la paginación (`hx-indicator="#billing-spinner"`), así que
+        dentro de la parte plegable dejaría de avisar de la carga justo cuando
+        los filtros están escondidos.
+        {% endcomment %}
+        <div class="flex items-center justify-between gap-3">
+            <button
+                type="button"
+                @click="toggle()"
+                :aria-expanded="open ? 'true' : 'false'"
+                aria-controls="invoice-filter-fields"
+                class="-m-1 inline-flex items-center gap-2 rounded-xl p-1 text-sm font-medium text-content-muted transition hover:text-content focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            >
+                <svg class="h-4 w-4 flex-shrink-0 transition-transform duration-200" :class="{ '-rotate-180': open }"
+                     fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                </svg>
+                <span>Filtros</span>
+                {% comment %}
+                El punto se pinta siempre que haya algo puesto —también con el
+                panel abierto— y es lo único que lo explica en un móvil, donde no
+                caben los chips de al lado.
+
+                Su visibilidad la gobierna Alpine (`x-show`), NO un `{% templatetag openblock %} if {% templatetag closeblock %}`: el
+                servidor solo pinta este formulario al cargar la página entera, y
+                un filtro aplicado por htmx no volvería a pasar por aquí. El
+                `style` inicial es para el instante previo a Alpine y para quien
+                navegue sin JavaScript.
+                {% endcomment %}
+                <span x-show="activos.length" {% if not filters.has_filters %}style="display: none"{% endif %}
+                      class="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-brand-fg" aria-hidden="true"></span>
+                <span class="sr-only" x-show="activos.length" {% if not filters.has_filters %}style="display: none"{% endif %}>(hay filtros aplicados)</span>
+            </button>
+
+            {% comment %}
+            El resumen de lo que está puesto, para no tener que desplegar solo
+            para acordarse. Se sale del `<button>` a propósito: son datos, no
+            parte del control, y meterlos dentro haría un objetivo de clic
+            enorme y un nombre accesible larguísimo.
+
+            Solo cuando está plegado —desplegado se leen los campos mismos— y
+            solo de `sm` para arriba, donde hay sitio; en un móvil se queda el
+            punto. `x-cloak` evita que asomen antes de que Alpine los llene.
+            {% endcomment %}
+            <div x-cloak x-show="!open && activos.length"
+                 class="hidden min-w-0 flex-1 items-center gap-1.5 overflow-hidden sm:flex">
+                <template x-for="(chip, i) in activos" :key="i">
+                    <span class="truncate rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-content-muted"
+                          x-text="chip"></span>
+                </template>
+            </div>
+
+            {# Indicador de carga: htmx le pone `htmx-request` mientras vuela la petición. #}
+            <span id="billing-spinner" class="htmx-indicator flex-shrink-0 text-brand-fg" aria-hidden="true">
+                <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
+                    <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"></path>
+                </svg>
+            </span>
+        </div>
+
+        {% comment %}
+        Lo plegable. Sin `padding` ni `margin` propios: con `height: 0` y
+        `box-sizing: border-box` un padding seguiría ocupando su altura y
+        dejaría una franja vacía bajo la cabecera. El aire lo pone el `mt-5` de
+        la rejilla, que al estar dentro de un `overflow: hidden` queda recortado
+        con ella.
+
+        Plegar NO desactiva nada: los campos siguen en el DOM y en el formulario,
+        así que un filtro puesto se sigue enviando con la ordenación y la
+        paginación aunque no se vea.
+        {% endcomment %}
+        <div id="invoice-filter-fields" x-show="open" x-collapse>
+        {% comment %}
+        Reparto en doce columnas y en DOS filas: arriba los tres controles de
+        un solo campo (paciente, estado, cobro), abajo los dos rangos, que
+        llevan dos controles dentro y necesitan el doble de sitio. Con todo en
+        una fila los `input[type=date]` —que tienen un ancho mínimo propio por
+        el selector del navegador— no cabían en su celda y se salían de ella.
 
         Tres detalles que sostienen la alineación, y que conviene no quitar:
 
@@ -67,14 +279,14 @@ pertenecer igualmente a su formulario. Sin JavaScript también funciona.
           y su nombre accesible se conservan con `aria-labelledby`, y cada campo
           lleva además su propio `aria-label`.
         {% endcomment %}
-        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-12">
-            <label class="block xl:col-span-3">
+        <div class="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-12">
+            <label class="block xl:col-span-4">
                 <span class="mb-2 block text-sm font-medium leading-5 text-content-muted">Paciente</span>
                 <input type="search" name="q" value="{{ filters.patient }}" placeholder="Buscar por nombre"
                        class="block h-11 w-full min-w-0 rounded-2xl border-line py-0 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
             </label>
 
-            <label class="block xl:col-span-2">
+            <label class="block xl:col-span-4">
                 <span class="mb-2 block text-sm font-medium leading-5 text-content-muted">Estado</span>
                 <select name="status"
                         class="block h-11 w-full min-w-0 rounded-2xl border-line py-0 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
@@ -85,7 +297,24 @@ pertenecer igualmente a su formulario. Sin JavaScript también funciona.
                 </select>
             </label>
 
-            <div role="group" aria-labelledby="filtro-fechas" class="min-w-0 sm:col-span-2 xl:col-span-4">
+            {% comment %}
+            El estado de COBRO es otro eje que el estado del documento, no una
+            continuación suyo: una factura emitida está en los dos a la vez. Por
+            eso son dos desplegables y no una lista con las opciones mezcladas.
+            Filtrar por cobro implica «emitida», que es donde ese eje existe.
+            {% endcomment %}
+            <label class="block xl:col-span-4">
+                <span class="mb-2 block text-sm font-medium leading-5 text-content-muted">Cobro</span>
+                <select name="cobro"
+                        class="block h-11 w-full min-w-0 rounded-2xl border-line py-0 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
+                    <option value="">Todos los cobros</option>
+                    {% for value, label in payment_state_choices %}
+                        <option value="{{ value }}" {% if filters.collection == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <div role="group" aria-labelledby="filtro-fechas" class="min-w-0 sm:col-span-2 xl:col-span-7">
                 <span id="filtro-fechas" class="mb-2 block text-sm font-medium leading-5 text-content-muted">Fecha de emisión</span>
                 <div class="flex min-w-0 items-center gap-2">
                     <input type="date" name="desde" value="{{ filters.date_from|date:'Y-m-d' }}" aria-label="Emitidas desde"
@@ -96,7 +325,7 @@ pertenecer igualmente a su formulario. Sin JavaScript también funciona.
                 </div>
             </div>
 
-            <div role="group" aria-labelledby="filtro-importe" class="min-w-0 sm:col-span-2 xl:col-span-3">
+            <div role="group" aria-labelledby="filtro-importe" class="min-w-0 sm:col-span-2 xl:col-span-5">
                 <span id="filtro-importe" class="mb-2 block text-sm font-medium leading-5 text-content-muted">Importe (€)</span>
                 <div class="flex min-w-0 items-center gap-2">
                     <input type="text" inputmode="decimal" name="min" value="{{ filters.amount_min|default_if_none:'' }}" placeholder="Mín." aria-label="Importe mínimo"
@@ -109,23 +338,24 @@ pertenecer igualmente a su formulario. Sin JavaScript también funciona.
         </div>
 
         <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p class="flex items-center gap-2 text-xs text-content-subtle">
-                {# Indicador de carga: htmx le pone `htmx-request` mientras vuela la petición. #}
-                <span id="billing-spinner" class="htmx-indicator text-brand-fg" aria-hidden="true">
-                    <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
-                        <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"></path>
-                    </svg>
-                </span>
+            <p class="text-xs text-content-subtle">
                 Las métricas y el listado se calculan siempre sobre los mismos filtros.
             </p>
             <div class="flex flex-col gap-3 sm:flex-row">
                 <button type="submit" class="btn-primary w-full sm:w-auto">Aplicar filtros</button>
-                {% if filters.has_filters %}
-                <a href="{% url 'billing:invoice-list' %}" class="btn-secondary w-full justify-center sm:w-auto">Restablecer</a>
-                {% endif %}
+                {% comment %}
+                Igual que el punto: lo enseña Alpine y no un `{% templatetag openblock %} if {% templatetag closeblock %}`. Con el
+                `{% templatetag openblock %} if {% templatetag closeblock %}` el botón desaparecía al pulsarlo —que es correcto, ya
+                no queda nada que restablecer— pero NO volvía al filtrar otra
+                vez, porque htmx no repinta el formulario. Solo reaparecía
+                recargando la página entera.
+                {% endcomment %}
+                <a href="{% url 'billing:invoice-list' %}"
+                   x-show="activos.length" {% if not filters.has_filters %}style="display: none"{% endif %}
+                   class="btn-secondary w-full justify-center sm:w-auto">Restablecer</a>
             </div>
         </div>
+        </div>{# /invoice-filter-fields #}
     </form>
 
     {# --- Lo que htmx sustituye: KPIs + tabla + paginación, de una vez. ----- #}

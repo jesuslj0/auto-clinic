@@ -1,6 +1,6 @@
 {% load billing_extras %}
 {% comment %}
-Las cuatro métricas de la cabecera. Salen de `billing.filters.invoice_kpis()`,
+Las cinco métricas de la cabecera. Salen de `billing.filters.invoice_kpis()`,
 agregadas en la base de datos y sobre el MISMO queryset que la tabla de abajo:
 al filtrar, las dos mitades de la pantalla se mueven juntas.
 
@@ -8,10 +8,14 @@ Lo facturado y el ticket medio miran solo las facturas EMITIDAS —un borrador n
 se ha cobrado y una anulada dejó de valer—, y se dice en la tarjeta para que el
 número no parezca contradecir al recuento de al lado.
 
-«Pendiente de facturar» es otra cosa y por eso se pinta aparte, con el borde de
-aviso: no es una factura en ningún estado, es trabajo hecho que todavía no lo es.
+Las dos últimas tarjetas se parecen y NO son lo mismo, así que conviene leerlas
+juntas: «pendiente de facturar» es trabajo hecho que todavía no es una factura
+(sale de otro queryset, el de procedimientos, y por eso lleva el borde de aviso),
+mientras que «pendiente de cobro» ya está facturado y lo que falta es que entre
+el dinero. Lo primero es un documento que hay que hacer; lo segundo, dinero que
+hay que reclamar.
 {% endcomment %}
-<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
     {# --- Total facturado --- #}
     <div class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line">
         <div class="flex items-start justify-between gap-3">
@@ -77,6 +81,24 @@ aviso: no es una factura en ningún estado, es trabajo hecho que todavía no lo 
             <span aria-hidden="true" class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-warning-soft text-warning">
                 <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </span>
+        </div>
+    </div>
+
+    {# --- Pendiente de cobro (facturas emitidas con saldo) --- #}
+    <div class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line">
+        <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+                <p class="text-sm font-medium text-content-subtle">Pendiente de cobro</p>
+                <p class="mt-3 text-2xl font-semibold text-warning sm:text-3xl">{{ kpis.pending_collection_amount|euros }}</p>
+                <p class="mt-2 text-sm text-content-subtle">
+                    {{ kpis.unpaid_invoice_count }} factura{{ kpis.unpaid_invoice_count|pluralize }} con saldo pendiente.
+                </p>
+            </div>
+            <span aria-hidden="true" class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-warning-soft text-warning">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
                 </svg>
             </span>
         </div>

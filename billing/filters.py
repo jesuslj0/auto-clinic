@@ -88,6 +88,9 @@ class InvoiceFilters:
     """
 
     status: str = ''
+    #: Estado de COBRO ('unpaid'/'partial'/'paid'), que no es el estado del
+    #: documento: una factura emitida está siempre en los dos ejes a la vez.
+    collection: str = ''
     date_from: date | None = None
     date_to: date | None = None
     patient: str = ''
@@ -108,6 +111,11 @@ class InvoiceFilters:
         status = (params.get('status') or '').strip()
         if status not in valid_statuses:
             status = ''
+
+        valid_collection = {value for value, _ in PatientInvoice.PaymentState.choices}
+        collection = (params.get('cobro') or '').strip()
+        if collection not in valid_collection:
+            collection = ''
 
         sort = (params.get('sort') or '').strip()
         if sort not in SORT_FIELDS:
@@ -131,6 +139,7 @@ class InvoiceFilters:
 
         return cls(
             status=status,
+            collection=collection,
             date_from=date_from,
             date_to=date_to,
             patient=(params.get('q') or '').strip(),
@@ -143,16 +152,31 @@ class InvoiceFilters:
     # -- aplicación ---------------------------------------------------------
 
     def apply(self, queryset):
-        """Aplica los cuatro filtros al queryset de facturas.
+        """Aplica los filtros al queryset de facturas.
 
-        Deliberadamente NO ordena ni anota: quien pinta la tabla encadena
-        `order()` y su `annotate()`, y quien calcula los KPIs agrega sobre esto
-        tal cual. Mezclar aquí un `annotate(Count(...))` inflaría después el
-        `Sum('total')` de las métricas, porque el JOIN a los procedimientos
-        multiplica las filas de cada factura.
+        Deliberadamente NO ordena, y la única anotación que puede añadir es
+        `with_collection()`, cuando se filtra por estado de cobro. Quien pinta la
+        tabla encadena `order()` y su `annotate(Count(...))`, y quien calcula los
+        KPIs agrega sobre esto tal cual: colar aquí ese `Count` inflaría después
+        el `Sum('total')` de las métricas, porque el JOIN a los procedimientos
+        multiplica las filas de cada factura. `with_collection()` sí puede entrar
+        porque es una subconsulta escalar y no multiplica nada (ver
+        `billing.managers`).
         """
+        from billing.models import PatientInvoice
+
         if self.status:
             queryset = queryset.filter(status=self.status)
+        if self.collection:
+            # El estado de cobro solo existe para las EMITIDAS: un borrador
+            # todavía puede cambiar de importe y una anulada dejó de deber nada,
+            # así que las dos saldrían como «impagadas» sin serlo. Acotarlo aquí
+            # es además lo que hace que el chip de una fila lleve siempre a una
+            # lista donde esa misma fila aparece.
+            queryset = queryset.with_collection().filter(
+                status=PatientInvoice.Status.ISSUED,
+                payment_state=self.collection,
+            )
         if self.date_from:
             queryset = queryset.filter(issued_at__date__gte=self.date_from)
         if self.date_to:
@@ -225,7 +249,8 @@ class InvoiceFilters:
     def has_filters(self) -> bool:
         """¿Hay algún filtro puesto? (el orden no cuenta: siempre hay uno)."""
         return any([
-            self.status, self.date_from, self.date_to, self.patient,
+            self.status, self.collection, self.date_from, self.date_to,
+            self.patient,
             self.amount_min is not None, self.amount_max is not None,
         ])
 
@@ -240,6 +265,8 @@ class InvoiceFilters:
         params = {}
         if self.status:
             params['status'] = self.status
+        if self.collection:
+            params['cobro'] = self.collection
         if self.date_from:
             params['desde'] = self.date_from.isoformat()
         if self.date_to:
@@ -322,7 +349,7 @@ def pending_procedures_for(user):
 # ---------------------------------------------------------------------------
 
 def invoice_kpis(invoices, pending_procedures) -> dict:
-    """Las cuatro métricas de la cabecera, en dos consultas.
+    """Las seis métricas de la cabecera, en dos consultas.
 
     `invoices` es el queryset YA filtrado que alimenta también la tabla: los KPIs
     y las filas se mueven juntos por construcción, no por disciplina.
@@ -337,13 +364,20 @@ def invoice_kpis(invoices, pending_procedures) -> dict:
     borrador no se ha cobrado y una anulada dejó de valer—, mientras que el
     recuento cuenta todas las que se están viendo.
 
-    El cuarto es una consulta aparte, y no puede ser de otra forma: se calcula
+    Los dos de cobro entran en ese MISMO agregado, y solo pueden hacerlo porque
+    `amount_collected` es una subconsulta escalar: con el `Sum` con JOIN que
+    tenía antes, sumar los pagos al lado del `Sum('total')` habría inflado los
+    dos —que es justo la trampa contra la que avisa el resto de este módulo—.
+    Django envuelve el conjunto en una subconsulta y agrega por fuera: una sola
+    sentencia.
+
+    El último es una consulta aparte, y no puede ser de otra forma: se calcula
     sobre procedimientos, no sobre facturas.
     """
     from billing.models import PatientInvoice
 
     issued = Q(status=PatientInvoice.Status.ISSUED)
-    totals = invoices.aggregate(
+    totals = invoices.with_collection().aggregate(
         invoice_count=Count('id'),
         issued_count=Count('id', filter=issued),
         total_billed=Coalesce(
@@ -351,6 +385,21 @@ def invoice_kpis(invoices, pending_procedures) -> dict:
         ),
         average_ticket=Coalesce(
             Avg('total', filter=issued), Value(ZERO), output_field=_MONEY,
+        ),
+        # Lo que falta por entrar por la puerta, factura a factura. Mira solo
+        # las emitidas por lo mismo que el total facturado: un borrador todavía
+        # no debe nada y una anulada dejó de deberlo. Como el sobrepago está
+        # vetado en el modelo, la resta nunca sale negativa.
+        pending_collection_amount=Coalesce(
+            Sum(F('total') - F('amount_collected'), filter=issued),
+            Value(ZERO), output_field=_MONEY,
+        ),
+        # Emitidas con saldo pendiente: impagadas Y parciales. Lo que interesa
+        # de esta cifra es a cuántos pacientes hay que reclamar, y una factura
+        # cobrada a medias cuenta igual que una que no se ha tocado.
+        unpaid_invoice_count=Count(
+            'id',
+            filter=issued & ~Q(payment_state=PatientInvoice.PaymentState.PAID),
         ),
     )
     pending = pending_procedures.aggregate(

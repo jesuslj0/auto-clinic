@@ -43,6 +43,68 @@ INVOICE_STATUS_ICON_PATHS = {
 }
 
 
+# Lo mismo para el estado de COBRO, que es otro eje: una factura emitida está
+# siempre en los dos a la vez (emitida + parcial, por ejemplo). Los colores no
+# son decorativos: rojo lo que no ha entrado, ámbar lo que ha entrado a medias,
+# verde lo saldado.
+PAYMENT_STATE_BADGE_CLASSES = {
+    'unpaid': 'bg-danger-soft text-danger',
+    'partial': 'bg-warning-soft text-warning',
+    'paid': 'bg-success-soft text-success',
+}
+
+PAYMENT_STATE_ICON_PATHS = {
+    # Billete tachado: no ha entrado nada.
+    'unpaid': (
+        'M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 '
+        '19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 '
+        '4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 '
+        '5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228'
+        '-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88'
+    ),
+    # Reloj: entró parte, queda pendiente.
+    'partial': 'M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z',
+    # Check en círculo: saldada.
+    'paid': 'M9 12.75 11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+}
+
+
+@register.filter
+def payment_state_badge(state):
+    """Clases de fondo/texto del badge de un estado de cobro."""
+    return PAYMENT_STATE_BADGE_CLASSES.get(state, 'bg-muted-strong text-content-muted')
+
+
+@register.filter
+def payment_state_icon(state, css='h-4 w-4'):
+    """SVG del icono de un estado de cobro. Mismo contrato que el de factura."""
+    path = PAYMENT_STATE_ICON_PATHS.get(state, PAYMENT_STATE_ICON_PATHS['unpaid'])
+    return format_html(
+        '<svg class="{}" fill="none" viewBox="0 0 24 24" stroke-width="1.8" '
+        'stroke="currentColor" aria-hidden="true">'
+        '<path stroke-linecap="round" stroke-linejoin="round" d="{}"/></svg>',
+        css, path,
+    )
+
+
+@register.filter
+def payment_state_label(state):
+    """Etiqueta legible de un estado de cobro: «Impagada», «Parcial», «Pagada».
+
+    Existe porque `get_payment_state_display()` **no**: `payment_state` no es un
+    campo del modelo —es una property derivada y una anotación—, así que Django
+    no genera su `get_..._display`. Y en una plantilla un método inexistente no
+    falla: se resuelve a vacío, y la celda saldría en blanco sin que nadie se
+    entere. Por eso la traducción vive aquí y no en el template.
+    """
+    from billing.models import PatientInvoice
+
+    try:
+        return PatientInvoice.PaymentState(state).label
+    except ValueError:
+        return ''
+
+
 @register.filter
 def invoice_status_badge(status):
     """Clases de fondo/texto del badge de un estado de factura."""

@@ -10,6 +10,7 @@ from django.urls import path
 from billing.views import (
     InvoiceDeleteView,
     InvoiceIssueView,
+    InvoicePaymentCreateView,
     InvoicePendingProceduresView,
     InvoiceProcedureView,
     InvoiceVoidView,
@@ -37,6 +38,13 @@ urlpatterns = [
     # serie y anular deja una factura sin efecto para siempre.
     path('<int:pk>/emitir/', InvoiceIssueView.as_view(), name='invoice-issue'),
     path('<int:pk>/anular/', InvoiceVoidView.as_view(), name='invoice-void'),
+    # Cobrar también: gasta un número de la serie de recibos y no se deshace
+    # (la devolución será un documento propio, todavía no implementado).
+    path(
+        '<int:pk>/cobrar/',
+        InvoicePaymentCreateView.as_view(),
+        name='invoice-payment',
+    ),
     path(
         '<int:pk>/procedimientos/',
         InvoiceProcedureView.as_view(),

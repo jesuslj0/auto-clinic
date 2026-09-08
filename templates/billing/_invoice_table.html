@@ -9,6 +9,9 @@ Dos cosas que NO se hacen aquí:
   en la plantilla sería una consulta por fila.
 - `total` se lee tal cual. Está congelado desde que se emitió la factura y no se
   recalcula ni se suma en la plantilla: lo que la factura dice es lo que dice.
+- `payment_state` viene anotado (`with_collection()`), no se lee de la property:
+  la property haría una consulta por fila. Solo se pinta en las EMITIDAS — un
+  borrador y una anulada saldrían como «impagadas» sin serlo.
 {% endcomment %}
 
 <section class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
@@ -25,7 +28,15 @@ Dos cosas que NO se hacen aquí:
                     {{ invoice.get_status_display }}
                 </span>
             </div>
-            <p class="mt-1 font-mono text-xs text-content-subtle">{{ invoice.number|default:'Sin número' }}</p>
+            <div class="mt-1 flex flex-wrap items-center gap-2">
+                <p class="font-mono text-xs text-content-subtle">{{ invoice.number|default:'Sin número' }}</p>
+                {% if invoice.is_issued and invoice.total %}
+                <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold {{ invoice.payment_state|payment_state_badge }}">
+                    {{ invoice.payment_state|payment_state_icon:"h-3 w-3" }}
+                    {{ invoice.payment_state|payment_state_label }}
+                </span>
+                {% endif %}
+            </div>
             <div class="mt-2 flex items-end justify-between gap-3">
                 <div class="min-w-0 text-xs text-content-subtle">
                     <p>{% if invoice.issued_at %}{{ invoice.issued_at|date:"j M Y" }}{% else %}Sin emitir{% endif %}</p>
@@ -67,6 +78,7 @@ Dos cosas que NO se hacen aquí:
                         </a>
                     </th>
                     <th scope="col" class="w-px whitespace-nowrap px-3 py-4 font-semibold">Estado</th>
+                    <th scope="col" class="w-px whitespace-nowrap px-3 py-4 font-semibold">Cobro</th>
                     <th scope="col" class="w-px whitespace-nowrap px-6 py-4 text-right font-semibold" {% if filters.sort == 'amount' %}aria-sort="{% if filters.direction == 'asc' %}ascending{% else %}descending{% endif %}"{% endif %}>
                         <a href="{% url 'billing:invoice-list' %}?{{ sort_amount_query }}"
                            hx-get="{% url 'billing:invoice-list' %}?{{ sort_amount_query }}"
@@ -120,12 +132,31 @@ Dos cosas que NO se hacen aquí:
                             {{ invoice.get_status_display }}
                         </a>
                     </td>
+                    <td class="px-3 py-4">
+                        {% if invoice.is_issued and invoice.total %}
+                        {# El filtro de cobro implica `status=issued`, así que este #}
+                        {# chip lleva siempre a una lista donde su propia fila está. #}
+                        <a href="{% url 'billing:invoice-list' %}?{% invoice_query cobro=invoice.payment_state %}"
+                           hx-get="{% url 'billing:invoice-list' %}?{% invoice_query cobro=invoice.payment_state %}"
+                           hx-target="#billing-region"
+                           hx-swap="innerHTML"
+                           hx-push-url="true"
+                           hx-indicator="#billing-spinner"
+                           title="Filtrar por este estado de cobro"
+                           class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold transition hover:opacity-75 {{ invoice.payment_state|payment_state_badge }}">
+                            {{ invoice.payment_state|payment_state_icon:"h-3.5 w-3.5" }}
+                            {{ invoice.payment_state|payment_state_label }}
+                        </a>
+                        {% else %}
+                        <span class="text-content-faint" title="{% if invoice.is_draft %}Un borrador todavía no se cobra{% else %}Anulada: no admite cobro{% endif %}">—</span>
+                        {% endif %}
+                    </td>
                     <td class="whitespace-nowrap px-6 py-4 text-right font-semibold text-content">{{ invoice.total|euros }}</td>
                     <td class="whitespace-nowrap px-6 py-4 text-right text-content-muted">{{ invoice.procedure_count }}</td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6" class="px-6 py-12 text-center text-sm text-content-subtle">No hay facturas que coincidan con los filtros seleccionados.</td>
+                    <td colspan="7" class="px-6 py-12 text-center text-sm text-content-subtle">No hay facturas que coincidan con los filtros seleccionados.</td>
                 </tr>
                 {% endfor %}
             </tbody>

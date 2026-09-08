@@ -17,10 +17,24 @@
 from decimal import Decimal
 
 from django.db import models, transaction
-from django.db.models import Case, DecimalField, F, Q, Sum, Value, When
+from django.db.models import (
+    Case,
+    DecimalField,
+    F,
+    OuterRef,
+    Subquery,
+    Sum,
+    Value,
+    When,
+)
 from django.db.models.functions import Coalesce
 
 from core.managers import SoftDeleteQuerySet
+
+#: Tipo de salida del dinero anotado. Explícito porque `Coalesce` mezcla una
+#: subconsulta con un `Value` y sin esto Django no sabe con qué tipo quedarse.
+#: Mismo criterio —y mismo tamaño— que el `_MONEY` de `billing.filters`.
+_MONEY = DecimalField(max_digits=12, decimal_places=2)
 
 
 class PatientInvoiceQuerySet(SoftDeleteQuerySet):
@@ -46,26 +60,49 @@ class PatientInvoiceQuerySet(SoftDeleteQuerySet):
         anulación y cada reembolso futuro. Un campo desincronizado con el dinero
         real es peor que no tener campo.
 
-        Dos detalles que no son opcionales:
+        `amount_collected` es una **subconsulta escalar**, no un `Sum` con JOIN, y
+        eso no es una optimización: es lo que hace posible todo lo demás.
 
-        - El `filter=Q(payments__deleted_at__isnull=True)` va dentro del `Sum`.
-          Una agregación sobre una relación inversa consulta la tabla entera y
-          NO pasa por el manager por defecto del modelo relacionado, así que sin
-          él un pago borrado lógicamente seguiría sumando.
-        - Son dos `annotate()` encadenados y no uno: `payment_state` se apoya en
-          el alias `amount_collected`, que no existe todavía dentro de la misma
-          llamada.
+        - Un `Sum('payments__amount')` traía un JOIN a una tabla hija, y
+          combinarlo con el `Count('procedures')` del listado multiplicaba las
+          filas e inflaba las dos sumas a la vez. Sin JOIN no hay nada que
+          multiplicar, y las dos anotaciones conviven.
+        - `payment_state` queda como un `Case` sobre una expresión ESCALAR, así
+          que se puede filtrar por él en el `WHERE` (`filter(payment_state=...)`)
+          y agregar por encima (`Sum(F('total') - F('amount_collected'))`) sin
+          `HAVING` ni `GROUP BY` postizos. Es lo que sostiene el filtro por estado
+          de cobro del listado y el KPI «Pendiente de cobro».
+        - El borrado lógico de los pagos ya NO se filtra a mano: la subconsulta
+          parte de `Payment.objects`, que es un manager y lo excluye. Antes hacía
+          falta un `filter=Q(payments__deleted_at__isnull=True)` DENTRO del `Sum`,
+          porque una agregación sobre la relación inversa no pasa por el manager
+          del otro lado.
 
-        Cuidado al combinarlo con otra agregación sobre `procedures`: dos JOINs
-        a dos tablas hijas multiplican las filas y ambas sumas salen infladas.
-        Si hace falta, sepáralas en consultas distintas o usa subconsultas.
+        Se paga una subconsulta correlada por fila. Con el índice de `invoice_id`
+        es un index-scan por factura, y es el precio de poder filtrar y agregar
+        por el estado de cobro en la base de datos en vez de en Python.
+
+        Es idempotente a propósito: lo llaman el listado, `invoice_kpis()` y el
+        filtro de cobro, y los tres pueden coincidir sobre el mismo queryset.
         """
+        from billing.models import Payment
+
+        if 'amount_collected' in self.query.annotations:
+            return self
+
         model = self.model
+        collected = (
+            Payment.objects
+            .filter(invoice=OuterRef('pk'))
+            .values('invoice')
+            .annotate(collected=Sum('amount'))
+            .values('collected')
+        )
         return self.annotate(
             amount_collected=Coalesce(
-                Sum('payments__amount', filter=Q(payments__deleted_at__isnull=True)),
+                Subquery(collected, output_field=_MONEY),
                 Value(Decimal('0.00')),
-                output_field=DecimalField(max_digits=12, decimal_places=2),
+                output_field=_MONEY,
             ),
         ).annotate(
             payment_state=Case(
