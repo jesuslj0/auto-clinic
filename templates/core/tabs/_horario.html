@@ -1,0 +1,36 @@
+{% comment %}
+Pestaña «Horario y ausencias»: los tramos y las ausencias del propio usuario.
+
+Los dos formsets y su JavaScript son el mismo parcial que usa el edit del
+profesional (`appointments/partials/_schedule_fieldsets.html`): allí un admin
+gestiona a cualquiera, aquí cada uno lo suyo, y el marcado no se duplica. El
+`<form>` y el botón los pone esta plantilla porque el parcial se comparte.
+{% endcomment %}
+<div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+
+    <div class="flex items-start gap-3 border-b border-line px-4 py-6 sm:px-8">
+        <span class="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-fg ring-1 ring-brand-line">{% include 'core/_account_icon.html' with icon='horario' %}</span>
+        <div>
+            <h2 class="text-lg font-semibold text-content">Horario y ausencias</h2>
+            <p class="mt-1 text-sm text-content-subtle">
+                Cuándo atiendes y cuándo no. De aquí salen los huecos que se ofrecen al reservar cita.
+            </p>
+        </div>
+    </div>
+
+    <form method="post" action="{% url 'core:account-schedule' %}" novalidate class="space-y-6 px-4 py-7 sm:px-8">
+        {% csrf_token %}
+
+        {% comment %}El parcial separa cada sección con un `border-t pt-7`, que en
+        el edit del profesional la despega de los campos de arriba. Aquí la
+        primera sección es lo primero del panel y esa línea quedaría suelta bajo
+        la cabecera, así que se le quita solo a ella.{% endcomment %}
+        <div class="[&>section:first-of-type]:border-t-0 [&>section:first-of-type]:pt-0">
+            {% include 'appointments/partials/_schedule_fieldsets.html' %}
+        </div>
+
+        <div class="flex items-center justify-end border-t border-line pt-6">
+            <button type="submit" class="btn-primary">Guardar cambios</button>
+        </div>
+    </form>
+</div>

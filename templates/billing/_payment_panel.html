@@ -1,0 +1,96 @@
+{% load billing_extras %}
+{% comment %}
+El panel de cobros de una factura, a la derecha del documento.
+
+Solo tiene contenido real si la factura está EMITIDA, porque solo entonces
+existe algo que cobrar: contra un borrador no entra dinero (su importe todavía
+puede cambiar) y una anulada dejó de deber nada. En esos dos casos se dice, en
+vez de enseñar un panel vacío que parecería un error.
+
+Lo que se lee de cada recibo es su copia congelada —`frozen_created_by_name`,
+no `payment.created_by`—: la FK apunta con `DO_NOTHING` y el profesional puede
+haberse dado de baja. `amount_collected` y `amount_due` vienen anotados desde la
+vista (`with_collection()`), así que no cuestan una consulta por lectura.
+{% endcomment %}
+
+{% if invoice.is_issued %}
+<section class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+    <div class="border-b border-line px-5 py-5">
+        <h3 class="text-lg font-semibold text-content">Cobros</h3>
+        <p class="mt-1 text-sm text-content-subtle">
+            Cada entrada de dinero es un recibo con su número. No se corrige ni se borra.
+        </p>
+    </div>
+
+    {# --- Resumen: cuánto ha entrado y cuánto falta --- #}
+    <dl class="grid grid-cols-2 gap-px bg-line">
+        <div class="bg-surface px-5 py-4">
+            <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Cobrado</dt>
+            <dd class="mt-1 text-lg font-semibold text-content">{{ invoice.amount_collected|euros }}</dd>
+        </div>
+        <div class="bg-surface px-5 py-4">
+            <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Pendiente</dt>
+            <dd class="mt-1 text-lg font-semibold {% if invoice.amount_due %}text-warning{% else %}text-success{% endif %}">
+                {{ invoice.amount_due|euros }}
+            </dd>
+        </div>
+    </dl>
+
+    <div class="border-t border-line px-5 py-3">
+        <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold {{ invoice.payment_state|payment_state_badge }}">
+            {{ invoice.payment_state|payment_state_icon:"h-3.5 w-3.5" }}
+            {{ invoice.payment_state|payment_state_label }}
+        </span>
+    </div>
+
+    {# --- Los recibos, del más antiguo al más reciente --- #}
+    {% if payments %}
+    <ul class="divide-y divide-line border-t border-line">
+        {% for payment in payments %}
+        <li class="px-5 py-4">
+            <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <p class="font-mono text-xs text-content-muted">{{ payment.receipt_number }}</p>
+                    <p class="mt-1 text-sm text-content">{{ payment.get_method_display }}</p>
+                    <p class="mt-0.5 text-xs text-content-subtle">
+                        {{ payment.paid_at|date:"j M Y · H:i" }}
+                        {% if payment.frozen_created_by_name %} · {{ payment.frozen_created_by_name }}{% endif %}
+                    </p>
+                </div>
+                <span class="flex-shrink-0 text-sm font-semibold text-content">{{ payment.amount|euros }}</span>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="border-t border-line px-5 py-8 text-center text-sm text-content-subtle">
+        Todavía no hay cobros registrados.
+    </p>
+    {% endif %}
+
+    {# El botón desaparece cuando no queda nada que cobrar: con la factura       #}
+    {# saldada —y en el caso degenerado de un total de 0 €— el modelo rechazaría #}
+    {# cualquier importe con un `Overpayment`, así que ofrecerlo sería mentir.   #}
+    {% if invoice.amount_due %}
+    <div class="border-t border-line px-5 py-4">
+        <button type="button" @click="modal = 'payment'" class="btn-primary w-full justify-center">
+            Registrar cobro
+        </button>
+    </div>
+    {% endif %}
+</section>
+
+{% else %}
+<section class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line">
+    <h3 class="text-base font-semibold text-content">Cobros</h3>
+    <p class="mt-2 text-sm text-content-subtle">
+        {% if invoice.is_draft %}
+        Un borrador todavía no se cobra: su importe puede cambiar mientras se le
+        añadan o quiten procedimientos. Emítelo y podrás registrar los cobros aquí.
+        {% else %}
+        Esta factura está anulada: dejó de deber nada, así que contra ella no
+        entra dinero.
+        {% endif %}
+    </p>
+</section>
+{% endif %}

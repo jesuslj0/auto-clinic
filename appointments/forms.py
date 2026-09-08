@@ -71,11 +71,25 @@ class ProfessionalProfileForm(forms.ModelForm):
 
     class Meta:
         model = Professional
-        fields = ['photo', 'first_name', 'last_name', 'professional_type', 'services']
+        fields = [
+            'photo', 'first_name', 'last_name', 'professional_type', 'services',
+            'accepts_online_booking',
+        ]
         labels = {
             'photo': 'Foto de perfil',
             'professional_type': 'Tipo de profesional',
             'services': 'Servicios que ofrece',
+            'accepts_online_booking': 'Aceptar reservas online',
+        }
+        help_texts = {
+            # Lo que este flag significa de verdad, según `es_elegible()` en
+            # `appointments/services.py`: apaga la vía pública, no al profesional.
+            # Para eso está `is_active`, que decide la clínica y aquí no se toca.
+            'accepts_online_booking': (
+                'Si lo desactivas dejas de aparecer en la reserva pública y el '
+                'agente de WhatsApp no te ofrecerá. La clínica podrá seguir '
+                'dándote citas a mano.'
+            ),
         }
         widgets = {
             'photo': forms.ClearableFileInput(attrs={'accept': 'image/*'}),
@@ -305,3 +319,25 @@ TimeOffFormSet = inlineformset_factory(
     form=ProfessionalTimeOffForm,
     extra=0, can_delete=True,
 )
+
+
+def build_schedule_formsets(professional, data=None):
+    """Los dos inline formsets de horario y ausencias de un profesional.
+
+    Vive aquí y no en una vista porque lo usan dos pantallas distintas: el edit
+    del profesional (un admin gestionando a otro) y la pestaña «Horario» de «Mi
+    cuenta» (cada uno el suyo). El de ausencias necesita la timezone de la
+    clínica para convertir los instantes que se teclean —hora local— a los UTC
+    que guarda la BD; si el profesional aún no tiene clínica, `clinic_tz=None`
+    deja que el formulario use la del proyecto.
+    """
+    clinic_tz = ZoneInfo(professional.clinic.timezone) if professional.clinic_id else None
+    return {
+        'schedule_formset': ScheduleFormSet(
+            data, instance=professional, prefix='schedules',
+        ),
+        'timeoff_formset': TimeOffFormSet(
+            data, instance=professional, prefix='timeoff',
+            form_kwargs={'clinic_tz': clinic_tz},
+        ),
+    }

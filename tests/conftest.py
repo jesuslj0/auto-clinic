@@ -9,10 +9,11 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from appointments.models import Appointment, Professional, ProfessionalSchedule
-from billing.models import Subscription
+from billing.models import PatientInvoice, Subscription
 from clinical.models import (
     ClinicalNote,
     Episode,
+    PerformedProcedure,
     Question,
     QuestionnaireTemplate,
     TemplateVersion,
@@ -314,6 +315,29 @@ def subscription_a(db, clinic_a):
         status=Subscription.Status.ACTIVE,
         starts_at=timezone.now(),
     )
+
+
+# ---------------------------------------------------------------------------
+# Billing fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def procedure_a(db, visit_a, service_a):
+    """Procedimiento de patient_a pendiente de facturar (50.00 congelados)."""
+    return PerformedProcedure.objects.create(visit=visit_a, service=service_a)
+
+
+@pytest.fixture
+def draft_invoice_a(db, clinic_a, patient_a):
+    """Factura de patient_a en borrador, todavía sin líneas."""
+    return PatientInvoice.objects.create(clinic=clinic_a, patient=patient_a)
+
+
+@pytest.fixture
+def issued_invoice_a(db, draft_invoice_a, procedure_a):
+    """La misma factura, con un procedimiento dentro y ya emitida."""
+    draft_invoice_a.add_procedure(procedure_a)
+    return draft_invoice_a.issue()
 
 
 @pytest.fixture

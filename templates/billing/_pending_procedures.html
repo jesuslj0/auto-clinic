@@ -1,0 +1,57 @@
+{% load billing_extras %}
+{% comment %}
+Los procedimientos que se le pueden facturar al paciente elegido: una casilla
+por cada uno, con lo que hace falta para decidir si entra en esta factura.
+
+Es un fragmento propio porque la lista depende del paciente y esa decisión es del
+servidor. Lo pide el formulario de alta al cambiar el desplegable, y sin
+JavaScript llega igual al enviar el formulario.
+
+El importe que se enseña es `frozen_price`: lo que costó el día que se hizo. Ni
+aquí ni en ningún sitio se lee el precio del catálogo.
+
+`name="procedures"` y el valor son lo único que el formulario necesita; el campo
+del `Form` valida contra el queryset del paciente, así que un id de otro no pasa.
+{% endcomment %}
+<div id="pending-procedures" class="space-y-3">
+    {% if not selected_patient %}
+    <p class="rounded-2xl bg-muted px-4 py-6 text-center text-sm text-content-subtle ring-1 ring-line">
+        Elige primero un paciente para ver qué se le puede facturar.
+    </p>
+
+    {% elif pending_procedures %}
+    <div class="overflow-hidden rounded-2xl ring-1 ring-line">
+        <div class="divide-y divide-line">
+            {% for procedure in pending_procedures %}
+            <label class="flex cursor-pointer items-start gap-3 bg-surface px-4 py-3 transition hover:bg-muted">
+                <input type="checkbox" name="procedures" value="{{ procedure.pk }}"
+                       {% if procedure.pk in checked_ids %}checked{% endif %}
+                       class="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-line-strong text-brand-600 focus:ring-brand-500">
+                <span class="min-w-0 flex-1">
+                    <span class="flex items-start justify-between gap-3">
+                        <span class="min-w-0 break-words text-sm font-medium text-content">{{ procedure.frozen_service_name }}</span>
+                        <span class="flex-shrink-0 text-sm font-semibold text-content">{{ procedure.frozen_price|euros }}</span>
+                    </span>
+                    <span class="mt-1 block text-xs text-content-subtle">
+                        {{ procedure.performed_at|date:"j M Y" }}
+                        {% if procedure.affected_zone %} · {{ procedure.get_affected_zone_display }}{% endif %}
+                        {% if procedure.laterality %} · {{ procedure.get_laterality_display }}{% endif %}
+                    </span>
+                </span>
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+    <p class="text-xs text-content-faint">
+        Solo aparecen los procedimientos que aún no están en ninguna factura. Los importes son los congelados el día en que se realizaron.
+    </p>
+
+    {% else %}
+    <div class="rounded-2xl bg-muted px-4 py-6 text-center ring-1 ring-line">
+        <p class="text-sm font-semibold text-content">No hay nada pendiente de facturar</p>
+        <p class="mt-1 text-sm text-content-subtle">
+            A {{ selected_patient }} no le queda ningún procedimiento sin factura. Puedes guardar un borrador vacío y añadirle procedimientos más adelante.
+        </p>
+    </div>
+    {% endif %}
+</div>

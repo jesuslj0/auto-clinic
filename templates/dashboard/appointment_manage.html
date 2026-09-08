@@ -33,24 +33,39 @@
 
         <dl class="mt-5 grid gap-4 sm:grid-cols-2">
             <div class="rounded-2xl bg-muted p-4">
-                <dt class="text-xs font-semibold uppercase tracking-wide text-content-subtle">Paciente</dt>
-                <dd class="mt-1 text-sm font-semibold text-content">{{ appointment.patient|default:appointment.patient_name|default:'Sin paciente asignado' }}</dd>
+                <dt class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-content-subtle">
+                    {% include 'dashboard/_appointment_field_icon.html' with field='patient' %}
+                    Paciente
+                </dt>
+                <dd class="mt-1.5 text-sm font-semibold text-content">{{ appointment.patient|default:appointment.patient_name|default:'Sin paciente asignado' }}</dd>
             </div>
             <div class="rounded-2xl bg-muted p-4">
-                <dt class="text-xs font-semibold uppercase tracking-wide text-content-subtle">Servicio</dt>
-                <dd class="mt-1 text-sm font-semibold text-content">{{ appointment.service|default:appointment.service_name|default:'Sin servicio asignado' }}</dd>
+                <dt class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-content-subtle">
+                    {% include 'dashboard/_appointment_field_icon.html' with field='service' %}
+                    Servicio
+                </dt>
+                <dd class="mt-1.5 text-sm font-semibold text-content">{{ appointment.service|default:appointment.service_name|default:'Sin servicio asignado' }}</dd>
             </div>
             <div class="rounded-2xl bg-muted p-4">
-                <dt class="text-xs font-semibold uppercase tracking-wide text-content-subtle">Fecha y hora</dt>
-                <dd class="mt-1 text-sm font-semibold text-content">{{ appointment.scheduled_at|date:"l, j \d\e F \d\e Y · H:i" }}</dd>
+                <dt class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-content-subtle">
+                    {% include 'dashboard/_appointment_field_icon.html' with field='datetime' %}
+                    Fecha y hora
+                </dt>
+                <dd class="mt-1.5 text-sm font-semibold text-content">{{ appointment.scheduled_at|date:"l, j \d\e F \d\e Y · H:i" }}</dd>
             </div>
             <div class="rounded-2xl bg-muted p-4">
-                <dt class="text-xs font-semibold uppercase tracking-wide text-content-subtle">Profesional asignado</dt>
-                <dd class="mt-1 text-sm font-semibold text-content">{{ appointment.professional|default:'Sin asignar' }}</dd>
+                <dt class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-content-subtle">
+                    {% include 'dashboard/_appointment_field_icon.html' with field='professional' %}
+                    Profesional asignado
+                </dt>
+                <dd class="mt-1.5 text-sm font-semibold text-content">{{ appointment.professional|default:'Sin asignar' }}</dd>
             </div>
             <div class="rounded-2xl bg-muted p-4 sm:col-span-2">
-                <dt class="text-xs font-semibold uppercase tracking-wide text-content-subtle">Notas</dt>
-                <dd class="mt-1 text-sm text-content-muted">{{ appointment.notes|default:'Sin notas registradas.' }}</dd>
+                <dt class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-content-subtle">
+                    {% include 'dashboard/_appointment_field_icon.html' with field='notes' %}
+                    Notas
+                </dt>
+                <dd class="mt-1.5 text-sm text-content-muted">{{ appointment.notes|default:'Sin notas registradas.' }}</dd>
             </div>
         </dl>
 

@@ -1,0 +1,64 @@
+{% comment %}
+Horario semanal y ausencias de un profesional: los dos inline formsets con su
+marcado y el JavaScript que añade y quita filas.
+
+Se incluye en dos sitios (`appointments/professional_form.html`, donde un admin
+gestiona a cualquiera, y `core/tabs/_horario.html`, donde cada uno gestiona lo
+suyo), así que **no lleva `<form>` ni botón de guardar**: los pone quien lo
+incluye. Los formsets los construye `build_schedule_formsets()`
+(`appointments/forms.py`), que es lo que garantiza que ambas pantallas usen los
+mismos prefijos y la misma timezone.
+{% endcomment %}
+{% if schedule_formset %}
+{% include 'appointments/partials/_formset_section.html' with formset=schedule_formset title='Horario semanal' subtitle='Tramos en los que se atiende. Hora local de la clínica.' add_label='Añadir tramo' row_partial='appointments/partials/_schedule_row.html' empty_label='Sin horario configurado. No se ofrecerán huecos hasta que añadas alguno.' %}
+{% endif %}
+
+{% if timeoff_formset %}
+{% include 'appointments/partials/_formset_section.html' with formset=timeoff_formset title='Ausencias' subtitle='Vacaciones, bajas o reuniones que bloquean la agenda. Hora local de la clínica.' add_label='Añadir ausencia' row_partial='appointments/partials/_timeoff_row.html' empty_label='Sin ausencias registradas.' %}
+{% endif %}
+
+<script>
+(function () {
+    // El listener es delegado en `document`, y este parcial puede llegar dos
+    // veces al mismo documento (htmx reejecuta los <script> que inserta): sin
+    // esta guarda, un clic añadiría dos filas.
+    if (window.__formsetRowsWired) { return; }
+    window.__formsetRowsWired = true;
+
+    // Añadir/quitar filas de los inline formsets sin recargar. No decrementamos
+    // TOTAL_FORMS al eliminar: marcamos el checkbox DELETE (Django ignora las
+    // filas nuevas marcadas y borra las existentes) y ocultamos la fila.
+    document.addEventListener('click', function (event) {
+        var addBtn = event.target.closest('[data-formset-add]');
+        if (addBtn) {
+            var section = addBtn.closest('[data-formset]');
+            var prefix = section.dataset.formset;
+            var total = section.querySelector('input[name="' + prefix + '-TOTAL_FORMS"]');
+            var index = parseInt(total.value, 10);
+            var tpl = section.querySelector('[data-formset-empty]');
+            var html = tpl.innerHTML.replace(/__prefix__/g, index);
+
+            var wrapper = document.createElement('div');
+            wrapper.innerHTML = html.trim();
+            section.querySelector('[data-formset-rows]').appendChild(wrapper.firstChild);
+
+            total.value = index + 1;
+            var hint = section.querySelector('[data-formset-empty-hint]');
+            if (hint) { hint.classList.add('hidden'); }
+            return;
+        }
+
+        var removeBtn = event.target.closest('[data-formset-remove]');
+        if (removeBtn) {
+            var row = removeBtn.closest('.formset-row');
+            var del = row.querySelector('input[name$="-DELETE"]');
+            if (del) {
+                del.checked = true;
+                row.classList.add('hidden');
+            } else {
+                row.remove();
+            }
+        }
+    });
+})();
+</script>

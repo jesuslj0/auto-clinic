@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% comment %}
+«Mi cuenta»: todo lo que un usuario puede cambiar de sí mismo, en una sola
+pantalla con pestañas — datos de acceso y contraseña, ficha profesional, y su
+horario y ausencias.
+
+Antes eran dos páginas («Mi cuenta» y «Mi perfil», esta última en `appointments`)
+que compartían la tarjeta de contraseña y se distinguían en poco más. Se
+unificaron aquí, en `core`, porque esta pantalla existe para TODO usuario:
+`ensure_professional_for_user` da ficha de profesional a cualquiera con clínica,
+pero un superusuario de plataforma sin clínica sigue necesitando entrar a cambiar
+su contraseña, y entonces solo ve la primera pestaña.
+
+La región intercambiable es `#account-tab-region`, y su contenido —barra
+incluida— es exactamente lo que devuelven las vistas ante una petición de htmx,
+así que el marcado es el mismo se llegue por clic, por F5 o por un enlace pegado.
+Gestionar la ficha de OTRO profesional no está aquí: eso es
+`appointments:professionals-edit`, y es cosa de administradores.
+{% endcomment %}
+
+{% block title %}Mi cuenta · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Mi cuenta{% endblock %}
+
+{% block content %}
+<div id="account-tab-region" class="mx-auto max-w-3xl">
+    {% include 'core/_tab_region.html' %}
+</div>
+{% endblock %}

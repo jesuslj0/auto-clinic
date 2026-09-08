@@ -1,0 +1,353 @@
+{% extends 'base.html' %}
+{% load billing_extras %}
+{% comment %}
+La factura. Dos caras del mismo documento, según su estado:
+
+- **Borrador**: se compone. Enseña sus procedimientos vivos, se les puede quitar
+  y añadir, y de ahí sale un total que todavía se recalcula.
+- **Emitida o anulada**: solo se lee. Enseña `lines`, la copia literal de lo que
+  se cobró, y `total`, congelado. NO se leen sus procedimientos: dar uno de baja
+  después no puede cambiar lo que dice una factura ya entregada al paciente, y
+  pintarlos aquí sería justo esa mentira.
+
+A la derecha, en las dos caras, el panel de cobros: el dinero que ha entrado
+contra este documento. Es una columna aparte y no una sección más abajo porque
+se lee A LA VEZ que el total — «debe 50 y ha pagado 20» es una sola pregunta.
+
+Todo lo que cambia el documento va por POST con su `csrf_token`. Emitir gasta un
+número de la serie, anular deja la factura sin efecto para siempre y cobrar gasta
+un número de la serie de recibos: no son enlaces.
+{% endcomment %}
+
+{% block title %}{{ invoice }} · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}{% if invoice.number %}Factura {{ invoice.number }}{% else %}Borrador de factura{% endif %}{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'billing:invoice-list' %}" class="btn-secondary max-sm:px-3" aria-label="Volver a facturación">
+    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+    </svg>
+    <span class="hidden sm:inline">Volver</span>
+</a>
+{% endblock %}
+
+{% block content %}
+{% comment %}
+El `x-data` se queda en el contenedor EXTERIOR, envolviendo a las dos columnas y
+a los modales: los modales son `fixed inset-0`, así que dónde estén en el árbol
+da igual, pero su estado tiene que ser el mismo que ve el botón que los abre —y
+el de «Registrar cobro» vive dentro del panel de la derecha—.
+{% endcomment %}
+<div class="mx-auto max-w-6xl" x-data="{ modal: null }">
+  <div class="grid gap-6 lg:grid-cols-3 lg:items-start">
+
+  {# ================= El documento ===================================== #}
+  <div class="space-y-6 lg:col-span-2">
+
+    {# --- Cabecera: quién, cuándo, cuánto ------------------------------- #}
+    <section class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+            <div class="min-w-0">
+                <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold {{ invoice.status|invoice_status_badge }}">
+                    {{ invoice.status|invoice_status_icon:"h-3.5 w-3.5" }}
+                    {{ invoice.get_status_display }}
+                </span>
+                <h2 class="mt-3 truncate text-lg font-semibold text-content">
+                    {% if invoice.patient %}
+                    <a href="{% url 'patients:tab-procedures' invoice.patient.id %}" class="transition hover:text-brand-fg">{{ invoice.patient }}</a>
+                    {% else %}
+                    {# El paciente se dio de baja: la factura sobrevive con el nombre copiado. #}
+                    <span title="Paciente dado de baja">{{ invoice.frozen_patient_name|default:'—' }}</span>
+                    {% endif %}
+                </h2>
+                <dl class="mt-2 space-y-1 text-sm text-content-subtle">
+                    <div class="flex gap-2">
+                        <dt>Emitida:</dt>
+                        <dd class="text-content-muted">{% if invoice.issued_at %}{{ invoice.issued_at|date:"j \d\e F \d\e Y · H:i" }}{% else %}Sin emitir{% endif %}</dd>
+                    </div>
+                    {% if invoice.frozen_created_by_name %}
+                    <div class="flex gap-2">
+                        <dt>Registrada por:</dt>
+                        <dd class="text-content-muted">{{ invoice.frozen_created_by_name }}</dd>
+                    </div>
+                    {% endif %}
+                    {% if invoice.is_void %}
+                    <div class="flex gap-2">
+                        <dt>Anulada:</dt>
+                        <dd class="text-content-muted">{{ invoice.voided_at|date:"j \d\e F \d\e Y · H:i" }}</dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+            <div class="flex-shrink-0 rounded-2xl bg-muted px-5 py-3 text-right ring-1 ring-line">
+                <p class="text-xs font-medium uppercase tracking-wide text-content-faint">Total</p>
+                <p class="text-2xl font-semibold text-content">{{ invoice.total|euros }}</p>
+            </div>
+        </div>
+
+        {% if invoice.is_void and invoice.void_reason %}
+        <div class="mt-4 rounded-2xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line">
+            <p class="text-xs font-semibold uppercase tracking-wide text-danger">Motivo de la anulación</p>
+            <p class="mt-1 text-sm text-danger">{{ invoice.void_reason }}</p>
+        </div>
+        {% endif %}
+    </section>
+
+    {% if invoice.is_draft %}
+    {# ================= BORRADOR: se compone ============================= #}
+    <section class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+        <div class="border-b border-line px-6 py-5">
+            <h3 class="text-lg font-semibold text-content">Procedimientos incluidos</h3>
+            <p class="mt-1 text-sm text-content-subtle">Mientras sea un borrador puedes quitarlos y añadirlos; el importe se recalcula solo.</p>
+        </div>
+
+        {% if procedures %}
+        <ul class="divide-y divide-line">
+            {% for procedure in procedures %}
+            <li class="flex items-start justify-between gap-3 px-5 py-4 sm:px-6">
+                <div class="min-w-0">
+                    <p class="break-words text-sm font-medium text-content">{{ procedure.frozen_service_name }}</p>
+                    <p class="mt-1 text-xs text-content-subtle">
+                        {{ procedure.performed_at|date:"j M Y" }}
+                        {% if procedure.affected_zone %} · {{ procedure.get_affected_zone_display }}{% endif %}
+                        {% if procedure.laterality %} · {{ procedure.get_laterality_display }}{% endif %}
+                    </p>
+                </div>
+                <div class="flex flex-shrink-0 items-center gap-3">
+                    <span class="text-sm font-semibold text-content">{{ procedure.frozen_price|euros }}</span>
+                    <form method="post" action="{% url 'billing:invoice-procedure' invoice.pk %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="remove">
+                        <input type="hidden" name="procedure" value="{{ procedure.pk }}">
+                        <button type="submit" class="icon-btn-ghost h-8 w-8" aria-label="Quitar {{ procedure.frozen_service_name }} del borrador" title="Quitar del borrador">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </form>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="px-6 py-10 text-center text-sm text-content-subtle">
+            Este borrador todavía no tiene procedimientos. Añade alguno de los pendientes para poder emitirlo.
+        </p>
+        {% endif %}
+    </section>
+
+    {% if pending_procedures %}
+    <section class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+        <div class="border-b border-line px-6 py-5">
+            <h3 class="text-lg font-semibold text-content">Pendientes de facturar</h3>
+            <p class="mt-1 text-sm text-content-subtle">Otros procedimientos de {{ invoice.patient|default:invoice.frozen_patient_name }} que aún no están en ninguna factura.</p>
+        </div>
+        <ul class="divide-y divide-line">
+            {% for procedure in pending_procedures %}
+            <li class="flex items-start justify-between gap-3 px-5 py-4 sm:px-6">
+                <div class="min-w-0">
+                    <p class="break-words text-sm font-medium text-content">{{ procedure.frozen_service_name }}</p>
+                    <p class="mt-1 text-xs text-content-subtle">
+                        {{ procedure.performed_at|date:"j M Y" }}
+                        {% if procedure.affected_zone %} · {{ procedure.get_affected_zone_display }}{% endif %}
+                    </p>
+                </div>
+                <div class="flex flex-shrink-0 items-center gap-3">
+                    <span class="text-sm font-semibold text-content-muted">{{ procedure.frozen_price|euros }}</span>
+                    <form method="post" action="{% url 'billing:invoice-procedure' invoice.pk %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="add">
+                        <input type="hidden" name="procedure" value="{{ procedure.pk }}">
+                        <button type="submit" class="btn-outlined px-3 py-1.5 text-xs">Añadir</button>
+                    </form>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {# --- Acciones del borrador --- #}
+    <section class="flex flex-col gap-3 rounded-3xl bg-surface px-5 py-4 shadow-soft ring-1 ring-line sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <p class="text-sm text-content-subtle">
+            Al emitirla tomará número de la serie y quedará cerrada.
+        </p>
+        <div class="flex flex-wrap gap-3">
+            <button type="button" @click="modal = 'delete'" class="btn-secondary">Eliminar borrador</button>
+            <button type="button" @click="modal = 'issue'" class="btn-primary" {% if not procedures %}disabled{% endif %}>Emitir factura</button>
+        </div>
+    </section>
+
+    {% else %}
+    {# ================= EMITIDA O ANULADA: solo se lee =================== #}
+    <section class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+        <div class="border-b border-line px-6 py-5">
+            <h3 class="text-lg font-semibold text-content">Detalle facturado</h3>
+            <p class="mt-1 text-sm text-content-subtle">Copia literal de lo que se cobró el día de la emisión. No cambia aunque cambien el catálogo o los procedimientos.</p>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-line text-left text-sm">
+                <caption class="sr-only">Líneas de la factura {{ invoice.number }}</caption>
+                <thead class="bg-muted text-content-subtle">
+                    <tr>
+                        <th scope="col" class="whitespace-nowrap px-6 py-4 font-semibold">Fecha</th>
+                        <th scope="col" class="px-6 py-4 font-semibold">Concepto</th>
+                        <th scope="col" class="w-px whitespace-nowrap px-6 py-4 text-right font-semibold">Importe</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-line bg-surface">
+                    {% for line in lines %}
+                    <tr>
+                        <td class="whitespace-nowrap px-6 py-4 text-content-muted">{{ line.performed_at|slice:":10" }}</td>
+                        <td class="px-6 py-4 font-medium text-content">{{ line.service_name }}</td>
+                        <td class="whitespace-nowrap px-6 py-4 text-right font-semibold text-content">{{ line.price|euros }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="3" class="px-6 py-10 text-center text-sm text-content-subtle">Esta factura no tiene líneas registradas.</td></tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="border-t border-line bg-muted">
+                    <tr>
+                        <th scope="row" colspan="2" class="px-6 py-4 text-right font-semibold text-content-muted">Total</th>
+                        <td class="whitespace-nowrap px-6 py-4 text-right font-semibold text-content">{{ invoice.total|euros }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </section>
+
+    {% if invoice.is_issued %}
+    <section class="flex flex-col gap-3 rounded-3xl bg-surface px-5 py-4 shadow-soft ring-1 ring-line sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <p class="text-sm text-content-subtle">
+            Una factura emitida no se corrige: se anula y se emite otra.
+        </p>
+        <button type="button" @click="modal = 'void'" class="btn-danger">Anular factura</button>
+    </section>
+    {% endif %}
+    {% endif %}
+  </div>{# /columna del documento #}
+
+  {# ================= Los cobros ======================================= #}
+  <aside class="lg:col-span-1">
+      {% include 'billing/_payment_panel.html' %}
+  </aside>
+  </div>{# /grid #}
+
+    {# --- Modales de confirmación --------------------------------------- #}
+    {% if invoice.is_draft %}
+    <div x-show="modal === 'issue'" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="modal-issue-title">
+        <div x-show="modal === 'issue'" x-transition.opacity @click="modal = null" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div x-show="modal === 'issue'" x-transition class="relative w-full max-w-sm rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+            <h3 id="modal-issue-title" class="text-base font-semibold text-content">¿Emitir esta factura?</h3>
+            <p class="mt-2 text-sm text-content-subtle">
+                Tomará el siguiente número de la serie de la clínica y congelará su importe ({{ invoice.total|euros }}) y sus líneas. A partir de ahí no se puede editar: solo anular y emitir otra.
+            </p>
+            <div class="mt-5 flex justify-end gap-3">
+                <button type="button" @click="modal = null" class="btn-secondary">Volver</button>
+                <form method="post" action="{% url 'billing:invoice-issue' invoice.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-primary">Emitir</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="modal === 'delete'" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="modal-delete-title">
+        <div x-show="modal === 'delete'" x-transition.opacity @click="modal = null" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div x-show="modal === 'delete'" x-transition class="relative w-full max-w-sm rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+            <h3 id="modal-delete-title" class="text-base font-semibold text-content">¿Eliminar este borrador?</h3>
+            <p class="mt-2 text-sm text-content-subtle">
+                Sus procedimientos volverán a estar pendientes de facturar. Como aún no tiene número, no deja hueco en la serie.
+            </p>
+            <div class="mt-5 flex justify-end gap-3">
+                <button type="button" @click="modal = null" class="btn-secondary">Volver</button>
+                <form method="post" action="{% url 'billing:invoice-delete' invoice.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-danger">Eliminar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if invoice.is_issued %}
+    <div x-show="modal === 'void'" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="modal-void-title">
+        <div x-show="modal === 'void'" x-transition.opacity @click="modal = null" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div x-show="modal === 'void'" x-transition class="relative w-full max-w-md rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+            <h3 id="modal-void-title" class="text-base font-semibold text-content">¿Anular la factura {{ invoice.number }}?</h3>
+            <p class="mt-2 text-sm text-content-subtle">
+                El número se queda gastado y la factura sigue siendo legible entera, pero deja de tener efecto. Sus procedimientos vuelven a estar pendientes de facturar.
+            </p>
+            <form method="post" action="{% url 'billing:invoice-void' invoice.pk %}" class="mt-4">
+                {% csrf_token %}
+                <label for="void-reason" class="mb-1.5 block text-sm font-medium text-content-muted">Motivo de la anulación</label>
+                <textarea name="reason" id="void-reason" rows="3" required
+                          placeholder="Ej. Error en los procedimientos incluidos"
+                          class="block w-full resize-none rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+                <div class="mt-5 flex justify-end gap-3">
+                    <button type="button" @click="modal = null" class="btn-secondary">Volver</button>
+                    <button type="submit" class="btn-danger">Anular factura</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% comment %}
+    Modal de cobro. Va bajo la MISMA condición que el botón que lo abre
+    (`amount_due`): con la factura saldada no hay importe que quepa —el modelo
+    rechazaría cualquiera con un `Overpayment`—, así que su formulario no debe
+    ni existir en la página. Un modal oculto sigue siendo un `<form>` con su
+    `action` en el HTML.
+
+    El importe viene prellenado con lo que queda pendiente,
+    porque el caso normal es cobrar todo lo que se debe y así es un solo clic;
+    el `max` es una ayuda al teclear, NO la validación — quien decide si un
+    importe cabe es el modelo, que lo comprueba con la factura bloqueada.
+
+    El campo del importe es `text` con `inputmode="decimal"` y no `number`: un
+    `number` rechaza la coma, y aquí se teclea «25,50». Mismo criterio que los
+    importes del filtro del listado.
+    {% endcomment %}
+    {% if invoice.amount_due %}
+    <div x-show="modal === 'payment'" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="modal-payment-title">
+        <div x-show="modal === 'payment'" x-transition.opacity @click="modal = null" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div x-show="modal === 'payment'" x-transition class="relative w-full max-w-md rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+            <h3 id="modal-payment-title" class="text-base font-semibold text-content">Registrar un cobro</h3>
+            <p class="mt-2 text-sm text-content-subtle">
+                De la factura {{ invoice.number }} quedan pendientes <strong class="font-semibold text-content">{{ invoice.amount_due|euros }}</strong>.
+                Al guardarlo se emite un recibo con su número, y un recibo no se corrige ni se borra.
+            </p>
+            <form method="post" action="{% url 'billing:invoice-payment' invoice.pk %}" class="mt-4 space-y-4" novalidate>
+                {% csrf_token %}
+                <div>
+                    <label for="payment-amount" class="mb-1.5 block text-sm font-medium text-content-muted">Importe cobrado</label>
+                    <input type="text" inputmode="decimal" name="amount" id="payment-amount"
+                           value="{{ invoice.amount_due }}" max="{{ invoice.amount_due }}" required
+                           class="block w-full rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500">
+                </div>
+                <div>
+                    <label for="payment-method" class="mb-1.5 block text-sm font-medium text-content-muted">Método de cobro</label>
+                    <select name="method" id="payment-method" required
+                            class="block w-full rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        {% for value, label in payment_methods %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="payment-paid-at" class="mb-1.5 block text-sm font-medium text-content-muted">Fecha del cobro</label>
+                    <input type="datetime-local" name="paid_at" id="payment-paid-at"
+                           class="block w-full rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    <p class="mt-1.5 text-xs text-content-subtle">Déjala vacía si el dinero entra ahora mismo.</p>
+                </div>
+                <div class="flex justify-end gap-3 pt-1">
+                    <button type="button" @click="modal = null" class="btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn-primary">Registrar cobro</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
+</div>
+{% endblock %}

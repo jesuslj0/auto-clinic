@@ -1,0 +1,120 @@
+{% comment %}
+Pestaña «Datos profesionales»: la ficha del propio usuario.
+
+El `action` es explícito y no vacío: cuando htmx trae este panel, la URL del
+navegador la ha empujado él, y un `action` implícito ataría el envío a lo que
+hubiera en la barra de direcciones. La ficha de OTRO profesional se edita en
+`appointments:professionals-edit`, reservada a administradores.
+{% endcomment %}
+<div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+
+    <div class="flex items-start gap-3 border-b border-line px-4 py-6 sm:px-8">
+        <span class="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-fg ring-1 ring-brand-line">{% include 'core/_account_icon.html' with icon='perfil' %}</span>
+        <div>
+            <h2 class="text-lg font-semibold text-content">Datos profesionales</h2>
+            <p class="mt-1 text-sm text-content-subtle">Actualiza tu foto, tu información y los servicios que ofreces.</p>
+        </div>
+    </div>
+
+    <form method="post" action="{% url 'core:account-profile' %}" enctype="multipart/form-data" novalidate
+          class="space-y-6 px-4 py-7 sm:px-8"
+          x-data="{ preview: '{% if professional.photo %}{{ professional.photo.url }}{% endif %}' }">
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+        <div class="rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line">
+            {% for error in form.non_field_errors %}
+            <p class="text-sm text-danger">{{ error }}</p>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# Foto de perfil #}
+        <div class="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
+            <template x-if="preview">
+                <img :src="preview" alt="Foto de perfil" class="h-20 w-20 flex-shrink-0 rounded-2xl object-cover ring-2 ring-brand-line">
+            </template>
+            <template x-if="!preview">
+                <span class="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-gradient text-2xl font-semibold text-white shadow-glow">
+                    {{ request.user.get_full_name|default:request.user.email|make_list|first|upper }}
+                </span>
+            </template>
+            <div class="flex-1">
+                <label for="{{ form.photo.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.photo.label }}</label>
+                <input
+                    type="file"
+                    name="{{ form.photo.html_name }}"
+                    id="{{ form.photo.id_for_label }}"
+                    accept="image/*"
+                    @change="const f = $event.target.files[0]; if (f) preview = URL.createObjectURL(f)"
+                    class="block w-full text-sm text-content-muted file:mr-4 file:rounded-xl file:border-0 file:bg-brand-soft file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand-fg hover:file:bg-brand-soft-strong"
+                >
+                {% if form.photo.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.photo.errors|join:", " }}</p>{% endif %}
+                <p class="mt-1 text-xs text-content-faint">JPG o PNG. Se mostrará en el calendario y el menú superior.</p>
+            </div>
+        </div>
+
+        {# Nombre y apellidos #}
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+                <label for="{{ form.first_name.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.first_name.label }}</label>
+                <input type="text" name="{{ form.first_name.html_name }}" id="{{ form.first_name.id_for_label }}" value="{{ form.first_name.value|default:'' }}" placeholder="Ej. Lucía"
+                    class="block w-full rounded-xl border {% if form.first_name.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                {% if form.first_name.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.first_name.errors|join:", " }}</p>{% endif %}
+            </div>
+            <div>
+                <label for="{{ form.last_name.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.last_name.label }}</label>
+                <input type="text" name="{{ form.last_name.html_name }}" id="{{ form.last_name.id_for_label }}" value="{{ form.last_name.value|default:'' }}" placeholder="Ej. Martín"
+                    class="block w-full rounded-xl border {% if form.last_name.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                {% if form.last_name.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.last_name.errors|join:", " }}</p>{% endif %}
+            </div>
+        </div>
+
+        {# Tipo de profesional #}
+        <div>
+            <label for="{{ form.professional_type.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.professional_type.label }}</label>
+            <select name="{{ form.professional_type.html_name }}" id="{{ form.professional_type.id_for_label }}"
+                class="block w-full rounded-xl border {% if form.professional_type.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                {% for value, label in form.professional_type.field.choices %}
+                <option value="{{ value }}" {% if form.professional_type.value == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            {% if form.professional_type.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.professional_type.errors|join:", " }}</p>{% endif %}
+        </div>
+
+        {# Servicios #}
+        <div>
+            <label for="{{ form.services.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.services.label }}</label>
+            <p class="mb-2 text-xs text-content-faint">Mantén pulsado Ctrl (o Cmd en Mac) para seleccionar varios.</p>
+            <select name="{{ form.services.html_name }}" id="{{ form.services.id_for_label }}" multiple size="6"
+                class="block w-full rounded-xl border {% if form.services.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                {% for value, label in form.services.field.choices %}
+                <option value="{{ value }}" {% if value in form.services.value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            {% if form.services.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.services.errors|join:", " }}</p>{% endif %}
+        </div>
+
+        {# Reservas online. La única preferencia de esta pestaña que no es un dato #}
+        <div class="rounded-2xl bg-muted p-4 ring-1 ring-line">
+            <label class="flex cursor-pointer items-start gap-3">
+                <input
+                    type="checkbox"
+                    name="{{ form.accepts_online_booking.html_name }}"
+                    id="{{ form.accepts_online_booking.id_for_label }}"
+                    {% if form.accepts_online_booking.value %}checked{% endif %}
+                    class="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                >
+                <span>
+                    <span class="block text-sm font-medium text-content">{{ form.accepts_online_booking.label }}</span>
+                    <span class="mt-0.5 block text-xs text-content-faint">{{ form.accepts_online_booking.help_text }}</span>
+                </span>
+            </label>
+            {% if form.accepts_online_booking.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.accepts_online_booking.errors|join:", " }}</p>{% endif %}
+        </div>
+
+        <div class="flex items-center justify-end border-t border-line pt-6">
+            <button type="submit" class="btn-primary">Guardar cambios</button>
+        </div>
+    </form>
+</div>

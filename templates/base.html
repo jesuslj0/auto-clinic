@@ -30,8 +30,8 @@ emite en toda página del panel, aunque no contenga ningún formulario.
 <body
     class="h-full text-content antialiased"
     hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-    x-data="{ sidebarOpen: false }"
-    @keydown.escape.window="sidebarOpen = false"
+    x-data="{ sidebarOpen: false, logoutOpen: false }"
+    @keydown.escape.window="sidebarOpen = false; logoutOpen = false"
 >
 
     <!-- Mobile overlay -->
@@ -101,15 +101,14 @@ emite en toda página del panel, aunque no contenga ningún formulario.
 
         <div class="space-y-1 border-t border-line px-4 py-4">
             {% include "partials/_theme_toggle.html" %}
-            <form method="post" action="{% url 'core:logout' %}">
-                {% csrf_token %}
-                <button type="submit" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-content-subtle hover:bg-muted-strong hover:text-content-muted transition">
-                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
-                    </svg>
-                    Cerrar sesión
-                </button>
-            </form>
+            {# El panel se va antes de que aparezca el modal: si no, quedaría debajo. #}
+            <button type="button" @click="sidebarOpen = false; logoutOpen = true"
+                    class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-content-subtle hover:bg-muted-strong hover:text-content-muted transition">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+                </svg>
+                Cerrar sesión
+            </button>
         </div>
     </aside>
     {% endif %}
@@ -127,29 +126,62 @@ emite en toda página del panel, aunque no contenga ningún formulario.
         `sidebar-collapsed` del `<html>` (ver `partials/_head_sidebar.html`).
         {% endcomment %}
         {% if request.user.is_authenticated %}
-        <aside class="sidebar-desktop hidden border-r border-line bg-surface transition-[width] duration-200 ease-out lg:fixed lg:inset-y-0 lg:left-0 lg:z-30 lg:flex lg:w-72 lg:flex-col"
+        <aside class="sidebar-desktop hidden border-r border-line bg-surface transition-[width] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] lg:fixed lg:inset-y-0 lg:left-0 lg:z-30 lg:flex lg:w-72 lg:flex-col"
                aria-label="Navegación principal">
             {% comment %}Con el panel abierto, logo y nombre; colapsado, solo el
             logo — el nombre lleva `sidebar-label`, así que se recoge con el resto
-            de las etiquetas y no se pierde para un lector de pantalla.{% endcomment %}
+            de las etiquetas y no se pierde para un lector de pantalla.
+
+            El botón de colapsar va aquí, arriba a la derecha del nombre, y **fuera
+            del enlace**: dentro sería un control anidado en otro. Al colapsar, la
+            fila se vuelve columna (`.sidebar-collapsed .sidebar-head`) y el botón
+            cae bajo el logo, que en 80 px es el único sitio donde cabe.{% endcomment %}
             <div class="sidebar-pad border-b border-line px-6 py-6">
-                <a href="/" class="sidebar-brand flex items-center gap-3"
-                   title="{{ request.user.clinic.name|default:'Auto Clinic' }}"
-                   aria-label="Inicio · {{ request.user.clinic.name|default:'Auto Clinic' }}">
-                    {% if request.user.clinic.logo %}
-                    {% comment %}Fondo blanco fijo, no bg-surface: los logos de clínica suelen
-                    venir en PNG transparente con tinta oscura y desaparecerían en modo oscuro.{% endcomment %}
-                    <div class="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white p-1 ring-1 ring-line">
-                        <img src="{{ request.user.clinic.logo.url }}" alt="Logo de la clínica" class="h-full w-full object-contain">
-                    </div>
-                    {% else %}
-                    <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-gradient text-lg font-semibold text-white shadow-glow" aria-hidden="true">{{ request.user.clinic.name|default:"Auto Clinic"|slice:":1"|upper }}</span>
-                    {% endif %}
-                    <div class="sidebar-label min-w-0">
-                        <h1 class="text-lg font-semibold leading-tight text-content break-words">{{ request.user.clinic.name|default:"Auto Clinic" }}</h1>
-                        <p class="text-[10px] font-medium uppercase tracking-[0.22em] text-content-faint">Auto Clinic</p>
-                    </div>
-                </a>
+                <div class="sidebar-head flex items-start justify-between gap-2">
+                    <a href="/" class="sidebar-brand flex min-w-0 items-center gap-3"
+                       title="{{ request.user.clinic.name|default:'Auto Clinic' }}"
+                       aria-label="Inicio · {{ request.user.clinic.name|default:'Auto Clinic' }}">
+                        {% if request.user.clinic.logo %}
+                        {% comment %}Fondo blanco fijo, no bg-surface: los logos de clínica suelen
+                        venir en PNG transparente con tinta oscura y desaparecerían en modo oscuro.{% endcomment %}
+                        <div class="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white p-1 ring-1 ring-line">
+                            <img src="{{ request.user.clinic.logo.url }}" alt="Logo de la clínica" class="h-full w-full object-contain">
+                        </div>
+                        {% else %}
+                        <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-gradient text-lg font-semibold text-white shadow-glow" aria-hidden="true">{{ request.user.clinic.name|default:"Auto Clinic"|slice:":1"|upper }}</span>
+                        {% endif %}
+                        <div class="sidebar-label min-w-0">
+                            <h1 class="text-lg font-semibold leading-tight text-content break-words">{{ request.user.clinic.name|default:"Auto Clinic" }}</h1>
+                            <p class="text-[10px] font-medium uppercase tracking-[0.22em] text-content-faint">Auto Clinic</p>
+                        </div>
+                    </a>
+                    {% comment %}Mismo sitio y mismo aspecto que la X del panel
+                    móvil. El estado lo lleva `window.acSidebar`, que también le
+                    pone su `aria-label`.{% endcomment %}
+                    <button
+                        type="button"
+                        data-sidebar-toggle
+                        aria-expanded="true"
+                        aria-label="Colapsar el menú"
+                        class="flex-shrink-0 rounded-lg p-2 text-content-faint transition hover:bg-muted-strong hover:text-content-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                    >
+                        {% comment %}Dos iconos y no uno girado: el dibujo es el
+                        propio panel —marco con su columna a la izquierda— y girarlo
+                        lo mandaría al lado contrario. La flecha de dentro apunta a
+                        lo que va a pasar: hacia el borde para recoger, hacia fuera
+                        para desplegar. Los intercambia `.sidebar-collapsed`.{% endcomment %}
+                        <svg class="sidebar-icon-collapse block h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                            <rect x="3" y="4" width="18" height="16" rx="2.5" />
+                            <path stroke-linecap="round" d="M9.5 4v16" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.75 9 13.75 12l3 3" />
+                        </svg>
+                        <svg class="sidebar-icon-expand hidden h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                            <rect x="3" y="4" width="18" height="16" rx="2.5" />
+                            <path stroke-linecap="round" d="M9.5 4v16" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.75 9 16.75 12l-3 3" />
+                        </svg>
+                    </button>
+                </div>
             </div>
 
             <nav class="sidebar-pad flex-1 space-y-1 overflow-y-auto px-4 py-6 text-sm font-medium">
@@ -163,40 +195,30 @@ emite en toda página del panel, aunque no contenga ningún formulario.
                 <div class="mt-3 -mx-3">
                     {% include "partials/_theme_toggle.html" %}
                 </div>
-                <form method="post" action="{% url 'core:logout' %}" class="mt-1 -mx-3">
-                    {% csrf_token %}
-                    <button type="submit" class="sidebar-action flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-content-subtle hover:bg-muted-strong hover:text-content-muted transition"
+                {% comment %}Solo abre la confirmación: el POST lo hace el
+                formulario que acompaña al modal, uno para los dos paneles.{% endcomment %}
+                <div class="mt-1 -mx-3">
+                    <button type="button" @click="logoutOpen = true"
+                            class="sidebar-action flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-content-subtle hover:bg-muted-strong hover:text-content-muted transition"
                             title="Cerrar sesión">
                         <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
                         </svg>
                         <span class="sidebar-label">Cerrar sesión</span>
                     </button>
-                </form>
+                </div>
             </div>
 
-            {% comment %}El tirador, a media altura del panel y montado sobre su
-            borde: es el gesto de «estrechar/ensanchar» y se ve igual con el panel
-            en cualquiera de los dos estados. El estado lo lleva
-            `window.acSidebar`, que también le pone su `aria-label`.{% endcomment %}
-            <button
-                type="button"
-                data-sidebar-toggle
-                aria-expanded="true"
-                aria-label="Colapsar el menú"
-                class="absolute -right-3 top-1/2 z-40 hidden h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-surface text-content-subtle shadow-sm transition hover:border-brand-line hover:text-brand-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 lg:flex"
-            >
-                <svg class="sidebar-toggle-icon h-4 w-4 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                </svg>
-            </button>
         </aside>
         {% endif %}
 
         {% comment %}El hueco del sidebar —y su gancho de colapso— solo existen si
         hay sidebar: sin sesión no hay menú, y un `padding-left` heredado del estado
         guardado dejaría el contenido desplazado contra nada.{% endcomment %}
-        <div class="flex min-h-screen flex-col transition-[padding] duration-200 ease-out {% if request.user.is_authenticated %}sidebar-shell lg:pl-72{% endif %}">
+        {% comment %}La misma duración y curva que el panel: si no coinciden
+        exactamente, el contenido y el borde del sidebar se separan a mitad del
+        movimiento.{% endcomment %}
+        <div class="flex min-h-screen flex-col transition-[padding] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] {% if request.user.is_authenticated %}sidebar-shell lg:pl-72{% endif %}">
             {% block topbar %}{% if request.user.is_authenticated %}{% include 'partials/_topbar.html' %}{% endif %}{% endblock %}
             <header class="sticky top-0 z-30 border-b border-line bg-surface/90 backdrop-blur">
                 <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4 lg:px-8">
@@ -237,6 +259,72 @@ emite en toda página del panel, aunque no contenga ningún formulario.
         </div>
     </div>
     {% block extra_scripts %}{% endblock %}
+
+    {% comment %}
+    Confirmación de cierre de sesión. El formulario vive aquí y no en cada panel:
+    los dos botones —el del sidebar de escritorio y el del móvil— abren este mismo
+    modal, así que el POST se escribe una vez. Sigue siendo un `<form>` normal con
+    su token: cerrar sesión cambia estado del servidor y no puede ser un GET.
+    {% endcomment %}
+    {% if request.user.is_authenticated %}
+    <form id="logout-form" method="post" action="{% url 'core:logout' %}" class="hidden">
+        {% csrf_token %}
+    </form>
+
+    <div
+        x-cloak
+        x-show="logoutOpen"
+        class="fixed inset-0 z-[60] flex items-center justify-center p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="logout-modal-title"
+    >
+        <div
+            x-show="logoutOpen"
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="opacity-0"
+            x-transition:enter-end="opacity-100"
+            x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="opacity-100"
+            x-transition:leave-end="opacity-0"
+            @click="logoutOpen = false"
+            class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+        ></div>
+
+        <div
+            x-show="logoutOpen"
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="opacity-0 scale-95"
+            x-transition:enter-end="opacity-100 scale-100"
+            x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="opacity-100 scale-100"
+            x-transition:leave-end="opacity-0 scale-95"
+            class="relative w-full max-w-sm rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6"
+        >
+            <div class="flex items-start gap-4">
+                <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-danger-soft text-danger">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+                    </svg>
+                </span>
+                <div>
+                    <h2 id="logout-modal-title" class="text-base font-semibold text-content">¿Cerrar sesión?</h2>
+                    <p class="mt-1 text-sm text-content-subtle">
+                        Saldrás de la cuenta de
+                        <strong class="text-content-muted">{{ request.user.get_full_name|default:request.user.email }}</strong>
+                        en este dispositivo y tendrás que volver a entrar.
+                    </p>
+                </div>
+            </div>
+            <div class="mt-5 flex justify-end gap-3">
+                <button type="button" @click="logoutOpen = false" class="btn-secondary">Volver</button>
+                <button type="button" @click="document.getElementById('logout-form').submit()" class="btn-danger">
+                    Sí, cerrar sesión
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Sistema de toasts -->
     <div

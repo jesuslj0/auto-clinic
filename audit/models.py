@@ -172,6 +172,13 @@ class AccessLog(BaseLog):
         EXPORT = 'export', 'Exportar'
         PRINT = 'print', 'Imprimir'
         DOWNLOAD_ATTACHMENT = 'download_attachment', 'Descargar adjunto'
+        # No es una lectura, pero vive aquí y no en `ChangeLog` por dónde acaba
+        # el rastro: el registry excluye `password` de los diffs, así que un
+        # cambio de contraseña no genera ningún `ChangeLog` — se perdería. El
+        # modelo lo admite sin forzarlo: `patient` y `content_type` son nulos y
+        # ya hay precedente de eventos sin objeto (`clinical/admin.py`).
+        # Se registra el hecho, nunca la contraseña.
+        PASSWORD_CHANGE = 'password_change', 'Cambio de contraseña'
 
     # Nulos en los listados: una búsqueda no apunta a un objeto concreto.
     # DO_NOTHING + db_constraint=False: ver la nota en `ChangeLog.content_type`.

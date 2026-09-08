@@ -50,7 +50,13 @@ class TestColapso:
 
     def test_hay_un_tirador_para_colapsar(self, panel):
         assert 'data-sidebar-toggle' in panel
-        assert 'sidebar-toggle-icon' in panel
+
+    def test_el_icono_del_tirador_son_dos_y_no_uno_girado(self, panel):
+        """El dibujo es el panel, con su columna a la izquierda: girarlo lo
+        mandaría al lado contrario, así que se intercambian los dos."""
+        assert 'sidebar-icon-collapse' in panel
+        assert 'sidebar-icon-expand' in panel
+        assert '.sidebar-collapsed .sidebar-icon-expand { @apply block; }' in panel
 
     def test_cada_enlace_del_menu_lleva_su_etiqueta_marcada(self, panel):
         """Sin `sidebar-label`, ese texto no se recoge al colapsar el panel."""

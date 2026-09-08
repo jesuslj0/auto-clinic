@@ -1,0 +1,22 @@
+{% comment %}
+Fragmento intercambiable de «Mi cuenta»: barra de pestañas + panel.
+
+Es lo que devuelven las vistas de pestaña cuando la petición trae `HX-Request`,
+y también lo que incluye la página completa dentro de `#account-tab-region`.
+
+La barra viaja DENTRO del fragmento y no por `hx-swap-oob`: la pestaña activa es
+un estado del propio fragmento, no un aviso a otra parte de la página, así que el
+servidor devuelve una sola respuesta coherente (barra y panel siempre concuerdan).
+Mismo planteamiento que `patients/_tab_region.html`.
+{% endcomment %}
+{% include 'core/_account_tabs.html' %}
+
+<div
+    id="account-tab-panel"
+    class="mt-4 space-y-6 focus:outline-none"
+    role="tabpanel"
+    tabindex="0"
+    aria-labelledby="account-tab-{{ active_tab }}"
+>
+    {% include panel_template %}
+</div>
