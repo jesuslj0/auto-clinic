@@ -66,6 +66,7 @@ urlpatterns = [
     path('services/', include('services.urls')),
     path('knowledge/', include('knowledge.urls')),
     path('chats/', include('agent.urls')),
+    path('facturacion/', include('billing.urls')),
     # Capa clínica: NO es API. Solo el servido protegido de adjuntos, bajo
     # sesión y con AccessLog. Ver `clinical/README.md`.
     path('clinical/', include('clinical.urls')),

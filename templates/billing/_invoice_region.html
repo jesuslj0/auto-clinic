@@ -1,0 +1,23 @@
+{% comment %}
+Contenido de `#billing-region`: métricas, tabla y paginación.
+
+Es UNA sola región intercambiable, y no tres, por la misma razón que el mapa de
+lesiones: los KPIs y las filas se calculan sobre el mismo queryset filtrado, así
+que tienen que llegar en la misma respuesta. Partirlos en dos objetivos de htmx
+—o traerse uno por `hx-swap-oob`— abriría la puerta a que la cabecera dijera un
+total y la tabla enseñara otro.
+
+Lo sirve `PatientInvoiceListView`: la página completa lo incluye, y ante una
+petición de htmx la vista devuelve exactamente esto y nada más.
+{% endcomment %}
+
+{% comment %}
+Estado del orden. Vive aquí, dentro del fragmento, porque lo cambian los enlaces
+de las cabeceras; `form=` lo asocia al formulario de filtros, que está fuera.
+{% endcomment %}
+<input type="hidden" name="sort" value="{{ filters.sort }}" form="invoice-filters">
+<input type="hidden" name="direction" value="{{ filters.direction }}" form="invoice-filters">
+
+{% include 'billing/_invoice_kpis.html' %}
+{% include 'billing/_invoice_table.html' %}
+{% include 'billing/_invoice_pagination.html' %}

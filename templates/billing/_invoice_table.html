@@ -1,0 +1,134 @@
+{% load billing_extras %}
+{% comment %}
+El listado. Tarjetas en móvil y tabla en escritorio, como el resto de listados
+del panel (`appointments/list.html`, `patients/list.html`).
+
+Dos cosas que NO se hacen aquí:
+
+- `procedure_count` viene anotado desde la vista. Un `invoice.procedures.count`
+  en la plantilla sería una consulta por fila.
+- `total` se lee tal cual. Está congelado desde que se emitió la factura y no se
+  recalcula ni se suma en la plantilla: lo que la factura dice es lo que dice.
+{% endcomment %}
+
+<section class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+    {# --- Móvil: tarjetas --- #}
+    <div class="divide-y divide-line md:hidden">
+        {% for invoice in invoices %}
+        <a href="{% url 'billing:invoice-detail' invoice.pk %}" class="block px-5 py-4 transition active:bg-muted">
+            <div class="flex items-start justify-between gap-3">
+                <p class="min-w-0 truncate text-sm font-semibold text-content">
+                    {{ invoice.patient|default:invoice.frozen_patient_name|default:'Paciente dado de baja' }}
+                </p>
+                <span class="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold {{ invoice.status|invoice_status_badge }}">
+                    {{ invoice.status|invoice_status_icon:"h-3.5 w-3.5" }}
+                    {{ invoice.get_status_display }}
+                </span>
+            </div>
+            <p class="mt-1 font-mono text-xs text-content-subtle">{{ invoice.number|default:'Sin número' }}</p>
+            <div class="mt-2 flex items-end justify-between gap-3">
+                <div class="min-w-0 text-xs text-content-subtle">
+                    <p>{% if invoice.issued_at %}{{ invoice.issued_at|date:"j M Y" }}{% else %}Sin emitir{% endif %}</p>
+                    <p class="mt-0.5">{{ invoice.procedure_count }} procedimiento{{ invoice.procedure_count|pluralize }}</p>
+                </div>
+                <p class="flex-shrink-0 text-base font-semibold text-content">{{ invoice.total|euros }}</p>
+            </div>
+        </a>
+        {% empty %}
+        <p class="px-5 py-12 text-center text-sm text-content-subtle">No hay facturas que coincidan con los filtros seleccionados.</p>
+        {% endfor %}
+    </div>
+
+    {# --- Escritorio: tabla --- #}
+    <div class="hidden overflow-x-auto md:block">
+        <table class="min-w-full divide-y divide-line text-left text-sm">
+            <thead class="bg-muted text-content-subtle">
+                <tr>
+                    <th scope="col" class="whitespace-nowrap px-6 py-4 font-semibold">Número</th>
+                    <th scope="col" class="px-6 py-4 font-semibold">Paciente</th>
+                    <th scope="col" class="whitespace-nowrap px-6 py-4 font-semibold" {% if filters.sort == 'date' %}aria-sort="{% if filters.direction == 'asc' %}ascending{% else %}descending{% endif %}"{% endif %}>
+                        {% comment %}
+                        Enlace real con `hx-get` encima: sin JavaScript navega y la
+                        vista devuelve la página entera; con htmx sustituye solo la
+                        región y empuja la dirección al historial.
+                        {% endcomment %}
+                        <a href="{% url 'billing:invoice-list' %}?{{ sort_date_query }}"
+                           hx-get="{% url 'billing:invoice-list' %}?{{ sort_date_query }}"
+                           hx-target="#billing-region"
+                           hx-swap="innerHTML"
+                           hx-push-url="true"
+                           hx-indicator="#billing-spinner"
+                           title="Ordenar por fecha de emisión"
+                           class="inline-flex items-center gap-1 whitespace-nowrap transition hover:text-content-muted">
+                            Fecha de emisión
+                            <svg class="h-3.5 w-3.5 flex-shrink-0 {% if filters.sort != 'date' %}opacity-30{% endif %} {% if filters.sort == 'date' and filters.direction == 'desc' %}rotate-180{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                            </svg>
+                        </a>
+                    </th>
+                    <th scope="col" class="w-px whitespace-nowrap px-3 py-4 font-semibold">Estado</th>
+                    <th scope="col" class="w-px whitespace-nowrap px-6 py-4 text-right font-semibold" {% if filters.sort == 'amount' %}aria-sort="{% if filters.direction == 'asc' %}ascending{% else %}descending{% endif %}"{% endif %}>
+                        <a href="{% url 'billing:invoice-list' %}?{{ sort_amount_query }}"
+                           hx-get="{% url 'billing:invoice-list' %}?{{ sort_amount_query }}"
+                           hx-target="#billing-region"
+                           hx-swap="innerHTML"
+                           hx-push-url="true"
+                           hx-indicator="#billing-spinner"
+                           title="Ordenar por importe"
+                           class="inline-flex items-center gap-1 whitespace-nowrap transition hover:text-content-muted">
+                            Total
+                            <svg class="h-3.5 w-3.5 flex-shrink-0 {% if filters.sort != 'amount' %}opacity-30{% endif %} {% if filters.sort == 'amount' and filters.direction == 'desc' %}rotate-180{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                            </svg>
+                        </a>
+                    </th>
+                    <th scope="col" class="w-px whitespace-nowrap px-6 py-4 text-right font-semibold">Procedimientos</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-line bg-surface">
+                {% for invoice in invoices %}
+                <tr>
+                    <td class="whitespace-nowrap px-6 py-4 font-mono text-xs">
+                        <a href="{% url 'billing:invoice-detail' invoice.pk %}" class="text-content-muted transition hover:text-brand-fg">
+                            {{ invoice.number|default:'Borrador' }}
+                        </a>
+                    </td>
+                    <td class="px-6 py-4 font-medium text-content">
+                        {% if invoice.patient %}
+                        <a href="{% url 'patients:detail' invoice.patient.id %}" class="transition hover:text-brand-fg">{{ invoice.patient }}</a>
+                        {% else %}
+                        {# El paciente se dio de baja: la factura sobrevive y sigue #}
+                        {# diciendo a quién se le emitió, con el nombre congelado.  #}
+                        <span title="Paciente dado de baja">{{ invoice.frozen_patient_name|default:'—' }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4 text-content-muted">
+                        {% if invoice.issued_at %}{{ invoice.issued_at|date:"j M Y" }}{% else %}<span class="text-content-faint">Sin emitir</span>{% endif %}
+                    </td>
+                    <td class="px-3 py-4">
+                        {# Conserva el resto de filtros: acotar por estado no debe perder #}
+                        {# el rango de fechas o el paciente que ya estaban puestos.        #}
+                        <a href="{% url 'billing:invoice-list' %}?{% invoice_query status=invoice.status %}"
+                           hx-get="{% url 'billing:invoice-list' %}?{% invoice_query status=invoice.status %}"
+                           hx-target="#billing-region"
+                           hx-swap="innerHTML"
+                           hx-push-url="true"
+                           hx-indicator="#billing-spinner"
+                           title="Filtrar por este estado"
+                           class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition hover:opacity-75 {{ invoice.status|invoice_status_badge }}">
+                            {{ invoice.status|invoice_status_icon:"h-3.5 w-3.5" }}
+                            {{ invoice.get_status_display }}
+                        </a>
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4 text-right font-semibold text-content">{{ invoice.total|euros }}</td>
+                    <td class="whitespace-nowrap px-6 py-4 text-right text-content-muted">{{ invoice.procedure_count }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="px-6 py-12 text-center text-sm text-content-subtle">No hay facturas que coincidan con los filtros seleccionados.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>

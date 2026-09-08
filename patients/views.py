@@ -511,12 +511,21 @@ class PatientProceduresTabView(PatientTabView):
         procedures = (
             PerformedProcedure.objects
             .filter(visit__episode__history__patient=self.object)
-            .select_related('visit', 'created_by__user')
+            # `invoice` entra en el `select_related` porque la tabla enseña en
+            # qué factura se cobró cada procedimiento: sin él sería una consulta
+            # por fila. Es lo ÚNICO que se lee de la factura aquí —su número y su
+            # estado—; el importe sigue saliendo de `frozen_price`.
+            .select_related('visit', 'created_by__user', 'invoice')
             .order_by('-performed_at', '-id')
         )
         context['procedures'] = list(procedures)
         context['procedures_total'] = (
             procedures.aggregate(total=Sum('frozen_price'))['total'] or Decimal('0.00')
+        )
+        # Cuántos quedan sin cobrar, para poder ofrecer el alta de factura solo
+        # cuando tiene sentido.
+        context['unbilled_count'] = sum(
+            1 for procedure in context['procedures'] if procedure.invoice_id is None
         )
         return context
 

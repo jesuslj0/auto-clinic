@@ -1,4 +1,4 @@
-{% load patient_extras %}
+{% load patient_extras billing_extras %}
 {% comment %}
 Panel «Procedimientos». Procedimientos realizados al paciente (`procedures`).
 
@@ -18,9 +18,25 @@ Responsive: tarjetas en móvil, tabla en escritorio con su propio `overflow-x-au
             <p class="mt-1 text-sm text-content-subtle">Tratamientos realizados en cada visita, con el nombre y el importe congelados en ese momento.</p>
         </div>
         {% if procedures %}
-        <div class="flex-shrink-0 rounded-2xl bg-muted px-4 py-2.5 text-right ring-1 ring-line">
-            <p class="text-xs font-medium uppercase tracking-wide text-content-faint">Total</p>
-            <p class="text-base font-semibold text-content">{{ procedures_total|euros }}</p>
+        <div class="flex flex-shrink-0 items-center gap-3">
+            <div class="rounded-2xl bg-muted px-4 py-2.5 text-right ring-1 ring-line">
+                <p class="text-xs font-medium uppercase tracking-wide text-content-faint">Total</p>
+                <p class="text-base font-semibold text-content">{{ procedures_total|euros }}</p>
+            </div>
+            {% comment %}El alta solo se ofrece si hay algo que cobrar: una
+            factura sin procedimientos no se puede emitir. El paciente viaja en la
+            query string para llegar al formulario con el destinatario fijado.
+            {% endcomment %}
+            {% if unbilled_count %}
+            <a href="{% url 'billing:invoice-create' %}?patient={{ patient.id }}"
+               class="btn-primary max-sm:px-3"
+               title="{{ unbilled_count }} procedimiento{{ unbilled_count|pluralize }} sin facturar">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                <span class="hidden sm:inline">Nueva factura</span>
+            </a>
+            {% endif %}
         </div>
         {% endif %}
     </div>
@@ -35,6 +51,16 @@ Responsive: tarjetas en móvil, tabla en escritorio con su propio `overflow-x-au
                 <span class="flex-shrink-0 text-sm font-semibold text-content">{{ procedure.frozen_price|euros }}</span>
             </div>
             <p class="mt-1 text-xs text-content-subtle">{{ procedure.performed_at|date:"j \d\e F \d\e Y" }} · {{ procedure.performed_at|date:"H:i" }}</p>
+            <p class="mt-1.5 text-xs">
+                {% if procedure.invoice_id %}
+                <a href="{% url 'billing:invoice-detail' procedure.invoice_id %}" class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-semibold {{ procedure.invoice.status|invoice_status_badge }}">
+                    {{ procedure.invoice.status|invoice_status_icon:"h-3 w-3" }}
+                    {{ procedure.invoice.number|default:'Borrador' }}
+                </a>
+                {% else %}
+                <span class="inline-flex items-center rounded-full bg-warning-soft px-2.5 py-0.5 font-semibold text-warning">Sin facturar</span>
+                {% endif %}
+            </p>
             {% if procedure.affected_zone or procedure.laterality %}
             <div class="mt-2 flex flex-wrap gap-2">
                 {% if procedure.affected_zone %}
@@ -63,7 +89,8 @@ Responsive: tarjetas en móvil, tabla en escritorio con su propio `overflow-x-au
                     <th scope="col" class="px-6 py-4 font-semibold">Procedimiento</th>
                     <th scope="col" class="px-6 py-4 font-semibold">Zona</th>
                     <th scope="col" class="px-6 py-4 font-semibold">Lado</th>
-                    <th scope="col" class="px-6 py-4 text-right font-semibold">Importe</th>
+                    <th scope="col" class="whitespace-nowrap px-6 py-4 font-semibold">Factura</th>
+                    <th scope="col" class="w-px whitespace-nowrap px-6 py-4 text-right font-semibold">Importe</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-line bg-surface">
@@ -73,13 +100,27 @@ Responsive: tarjetas en móvil, tabla en escritorio con su propio `overflow-x-au
                     <td class="px-6 py-4 font-medium text-content">{{ procedure.frozen_service_name }}</td>
                     <td class="px-6 py-4 text-content-muted">{{ procedure.get_affected_zone_display|default:"—" }}</td>
                     <td class="px-6 py-4 text-content-muted">{{ procedure.get_laterality_display|default:"—" }}</td>
+                    <td class="whitespace-nowrap px-6 py-4">
+                        {% comment %}De la factura solo se lee su número y su
+                        estado. El importe de la fila sigue siendo el congelado
+                        del procedimiento, no el de la factura.{% endcomment %}
+                        {% if procedure.invoice_id %}
+                        <a href="{% url 'billing:invoice-detail' procedure.invoice_id %}"
+                           class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition hover:opacity-75 {{ procedure.invoice.status|invoice_status_badge }}">
+                            {{ procedure.invoice.status|invoice_status_icon:"h-3.5 w-3.5" }}
+                            {{ procedure.invoice.number|default:'Borrador' }}
+                        </a>
+                        {% else %}
+                        <span class="inline-flex items-center rounded-full bg-warning-soft px-2.5 py-1 text-xs font-semibold text-warning">Sin facturar</span>
+                        {% endif %}
+                    </td>
                     <td class="whitespace-nowrap px-6 py-4 text-right font-semibold text-content">{{ procedure.frozen_price|euros }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
             <tfoot class="border-t border-line bg-muted">
                 <tr>
-                    <th scope="row" colspan="4" class="px-6 py-4 text-right font-semibold text-content-muted">Total</th>
+                    <th scope="row" colspan="5" class="px-6 py-4 text-right font-semibold text-content-muted">Total</th>
                     <td class="whitespace-nowrap px-6 py-4 text-right font-semibold text-content">{{ procedures_total|euros }}</td>
                 </tr>
             </tfoot>
