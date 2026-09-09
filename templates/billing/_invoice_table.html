@@ -11,14 +11,28 @@ Dos cosas que NO se hacen aquí:
   recalcula ni se suma en la plantilla: lo que la factura dice es lo que dice.
 - `payment_state` viene anotado (`with_collection()`), no se lee de la property:
   la property haría una consulta por fila. Solo se pinta en las EMITIDAS — un
-  borrador y una anulada saldrían como «impagadas» sin serlo.
+  borrador y una anulada saldrían como «impagadas» sin serlo. Lo mismo vale para
+  `amount_due`, que se deriva de esa misma anotación y decide si la fila enseña
+  el botón de cobrar.
+
+La fila entera lleva a la factura (`data-row-href`), y quien lo escucha es un
+listener delegado de `invoice_list.html` — no un `@click` de Alpine, que dejaría
+de funcionar en cuanto htmx repintara la tabla. Dentro siguen estando los enlaces
+de verdad al número y al paciente: son los que usan el teclado y los lectores de
+pantalla, y la fila es solo comodidad de ratón.
 {% endcomment %}
 
 <section class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
     {# --- Móvil: tarjetas --- #}
     <div class="divide-y divide-line md:hidden">
         {% for invoice in invoices %}
-        <a href="{% url 'billing:invoice-detail' invoice.pk %}" class="block px-5 py-4 transition active:bg-muted">
+        {% comment %}
+        En móvil la tarjeta ya era un enlace entero, así que el botón de cobrar
+        va DESPUÉS de él y no dentro: un `<button>` dentro de un `<a>` es HTML
+        inválido y el navegador decide por su cuenta qué hace un toque encima.
+        {% endcomment %}
+        <div>
+        <a href="{% url 'billing:invoice-detail' invoice.pk %}" class="block px-5 pt-4 {% if invoice.is_issued and invoice.amount_due %}pb-3{% else %}pb-4{% endif %} transition active:bg-muted">
             <div class="flex items-start justify-between gap-3">
                 <p class="min-w-0 truncate text-sm font-semibold text-content">
                     {{ invoice.patient|default:invoice.frozen_patient_name|default:'Paciente dado de baja' }}
@@ -45,6 +59,19 @@ Dos cosas que NO se hacen aquí:
                 <p class="flex-shrink-0 text-base font-semibold text-content">{{ invoice.total|euros }}</p>
             </div>
         </a>
+        {% if invoice.is_issued and invoice.amount_due %}
+        <div class="px-5 pb-4">
+            <button type="button"
+                    hx-get="{% url 'billing:invoice-payment-form' invoice.pk %}?next={{ request.get_full_path|urlencode }}"
+                    hx-target="#payment-modal"
+                    hx-swap="innerHTML"
+                    hx-indicator="#billing-spinner"
+                    class="btn-outlined w-full justify-center px-3 py-1.5 text-xs">
+                Cobrar {{ invoice.amount_due|euros }}
+            </button>
+        </div>
+        {% endif %}
+        </div>
         {% empty %}
         <p class="px-5 py-12 text-center text-sm text-content-subtle">No hay facturas que coincidan con los filtros seleccionados.</p>
         {% endfor %}
@@ -95,11 +122,13 @@ Dos cosas que NO se hacen aquí:
                         </a>
                     </th>
                     <th scope="col" class="w-px whitespace-nowrap px-6 py-4 text-right font-semibold">Procedimientos</th>
+                    <th scope="col" class="w-px px-6 py-4"><span class="sr-only">Acciones</span></th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-line bg-surface">
                 {% for invoice in invoices %}
-                <tr>
+                <tr data-row-href="{% url 'billing:invoice-detail' invoice.pk %}"
+                    class="cursor-pointer transition hover:bg-muted">
                     <td class="whitespace-nowrap px-6 py-4 font-mono text-xs">
                         <a href="{% url 'billing:invoice-detail' invoice.pk %}" class="text-content-muted transition hover:text-brand-fg">
                             {{ invoice.number|default:'Borrador' }}
@@ -153,10 +182,44 @@ Dos cosas que NO se hacen aquí:
                     </td>
                     <td class="whitespace-nowrap px-6 py-4 text-right font-semibold text-content">{{ invoice.total|euros }}</td>
                     <td class="whitespace-nowrap px-6 py-4 text-right text-content-muted">{{ invoice.procedure_count }}</td>
+                    {% comment %}
+                    Cobrar sin salir de la lista. El botón solo existe donde el
+                    cobro es posible —emitida y con saldo—, que es la misma
+                    condición que comprueba la vista del formulario: un borrador
+                    o una factura saldada no tienen nada que cobrar y el modelo
+                    lo rechazaría igualmente.
+
+                    Pide el modal al servidor en vez de llevarlo escrito: un
+                    modal oculto sigue siendo un `<form>` con su `action` en el
+                    HTML, y veinte filas serían veinte formularios de cobro
+                    cargados a la vez. El `next` devuelve a esta misma lista con
+                    sus filtros después de cobrar.
+
+                    Va como TEXTO y no como botón con borde: un `.btn-outlined`
+                    mide unos diez píxeles más que el `text-sm` del resto de la
+                    fila, así que las filas cobrables quedaban más altas que las
+                    demás y la tabla perdía su pauta. En `text-sm` ocupa lo mismo
+                    que cualquier celda y no mueve nada. El `-mx-1` compensa el
+                    `px-1`, que solo existe para que el aro del foco no salga
+                    pegado a las letras.
+                    {% endcomment %}
+                    <td class="w-px whitespace-nowrap px-6 py-4 text-right">
+                        {% if invoice.is_issued and invoice.amount_due %}
+                        <button type="button"
+                                hx-get="{% url 'billing:invoice-payment-form' invoice.pk %}?next={{ request.get_full_path|urlencode }}"
+                                hx-target="#payment-modal"
+                                hx-swap="innerHTML"
+                                hx-indicator="#billing-spinner"
+                                title="Registrar un cobro de esta factura"
+                                class="-mx-1 rounded px-1 text-sm font-medium text-brand-fg transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                            Cobrar
+                        </button>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="7" class="px-6 py-12 text-center text-sm text-content-subtle">No hay facturas que coincidan con los filtros seleccionados.</td>
+                    <td colspan="8" class="px-6 py-12 text-center text-sm text-content-subtle">No hay facturas que coincidan con los filtros seleccionados.</td>
                 </tr>
                 {% endfor %}
             </tbody>

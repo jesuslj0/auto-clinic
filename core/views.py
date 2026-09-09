@@ -3,7 +3,7 @@ import math
 from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
-from django.db.models import Q, Sum
+from django.db.models import Q
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, LogoutView
@@ -23,6 +23,7 @@ from appointments.models import Appointment, AppointmentStatusHistory
 from appointments.services import AppointmentDomainError, cancel_appointment, confirm_by_clinic
 from audit.mixins import log_access
 from audit.models import AccessLog
+from billing.metrics import dashboard_revenue
 from patients.models import Patient
 from core.forms import (
     AccountPasswordChangeForm,
@@ -608,14 +609,14 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             patients_qs = patients_qs.filter(clinic=user.clinic)
         new_patients_month = patients_qs.filter(created_at__date__gte=month_start).count()
 
-        # Ingresos del mes según citas completadas (suma del precio del servicio)
-        revenue_month = (
-            appointments.filter(
-                status=Appointment.Status.COMPLETED,
-                scheduled_at__date__gte=month_start,
-            ).aggregate(total=Sum('service__price'))['total']
-            or 0
-        )
+        # Las canceladas SÍ se acotan al mes y las pendientes no, y no es un
+        # descuido: una cita que espera confirmación importa sea de cuando sea
+        # —es trabajo por hacer—, mientras que un recuento de canceladas sin
+        # fecha solo crece y no dice nada del momento actual.
+        cancelled_month = appointments.filter(
+            status=Appointment.Status.CANCELLED,
+            scheduled_at__date__gte=month_start,
+        ).count()
 
         context.update(
             {
@@ -625,9 +626,12 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 'today_completed': today_completed,
                 'today_completed_pct': today_completed_pct,
                 'pending_appointments': appointments.filter(status=Appointment.Status.PENDING).count(),
-                'cancelled_appointments': appointments.filter(status=Appointment.Status.CANCELLED).count(),
+                'cancelled_appointments': cancelled_month,
                 'new_patients_month': new_patients_month,
-                'revenue_month': revenue_month,
+                # Todo el bloque económico, agregado en la base de datos. Vive en
+                # `billing` porque allí está decidido qué cuenta como cobrado y
+                # qué como pendiente; el panel solo lo enseña.
+                'revenue': dashboard_revenue(user, today),
                 'professional': professional,
                 'section': 'dashboard',
             }

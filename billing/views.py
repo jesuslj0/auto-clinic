@@ -6,8 +6,10 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Count, Q
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.generic import DetailView, FormView, ListView, TemplateView
 from django.views.generic.detail import SingleObjectMixin
@@ -26,7 +28,9 @@ from billing.exceptions import (
     PaymentFrozen,
 )
 from billing.filters import (
+    COLLECTION_PENDING,
     InvoiceFilters,
+    collection_choices,
     invoice_kpis,
     invoices_for,
     pending_procedures_for,
@@ -140,7 +144,17 @@ class PatientInvoiceListView(AccessLogMixin, LoginRequiredMixin, ListView):
             'filters': self.filters,
             'kpis': invoice_kpis(self.filtered_invoices, pending),
             'status_choices': PatientInvoice.Status.choices,
-            'payment_state_choices': PatientInvoice.PaymentState.choices,
+            'payment_state_choices': collection_choices(),
+            # El valor del filtro agrupado, para que las plantillas no lleven la
+            # cadena 'pending' escrita a mano en tres sitios.
+            'collection_pending': COLLECTION_PENDING,
+            # Qué tarjetas de la cabecera están «puestas». Se resuelve aquí y no
+            # en la plantilla porque una comparación no se puede guardar en una
+            # variable de Django, y repetirla en cada sitio donde hace falta
+            # (el aro, la flecha, el `aria-label`, el enlace) es como se acaba
+            # cambiando una de las cuatro y no las otras tres.
+            'issued_active': self.filters.status == PatientInvoice.Status.ISSUED,
+            'pending_active': self.filters.collection == COLLECTION_PENDING,
             # Base de las URLs de orden y paginación, ya normalizada. Las arma
             # el tag `{% invoice_query %}` a partir de esto, nunca de request.GET.
             'invoice_query_base': self.filters.as_params(),
@@ -155,6 +169,24 @@ class PatientInvoiceListView(AccessLogMixin, LoginRequiredMixin, ListView):
 # ---------------------------------------------------------------------------
 # Alta y gestión de una factura
 # ---------------------------------------------------------------------------
+
+def _safe_next(request, candidate):
+    """Un destino interno para volver tras la acción, o `None`.
+
+    Lo teclea la URL, así que no se puede seguir a ciegas: `next=//evil.com`
+    sería una redirección abierta con la sesión del usuario recién autenticado.
+    Se acepta solo lo que apunta a este mismo sitio y por el mismo esquema.
+    """
+    if not candidate:
+        return None
+    if url_has_allowed_host_and_scheme(
+        candidate,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return candidate
+    return None
+
 
 def _author_for(user):
     """El `Professional` del usuario, o `None`.
@@ -398,6 +430,49 @@ class PatientInvoiceDetailView(
         return context
 
 
+class InvoicePaymentFormView(
+    InvoiceScopedMixin, LoginRequiredMixin, DetailView
+):
+    """El modal de cobro de una factura, como fragmento para el listado.
+
+    Es un GET y no toca nada: solo pinta el formulario. Lo que mueve el dinero
+    sigue siendo el POST a `billing:invoice-payment`, igual que desde el detalle.
+
+    Existe como URL propia —en vez de dejar los veinte modales escritos en la
+    tabla— porque un modal oculto sigue siendo un `<form>` con su `action` en el
+    HTML: veinte filas serían veinte formularios de cobro cargados a la vez. Así
+    solo se construye el de la factura que se ha pulsado.
+
+    Devuelve 404 si la factura no admite cobro (borrador, anulada o ya saldada),
+    que es la misma condición con la que la tabla decide enseñar el botón: si
+    alguien llega con la URL a mano, no se le abre un formulario que el modelo
+    va a rechazar de todas formas.
+    """
+
+    model = PatientInvoice
+    context_object_name = 'invoice'
+    template_name = 'billing/_payment_modal.html'
+
+    def get_queryset(self):
+        # `with_collection()` resuelve `amount_due` en la misma consulta.
+        return super().get_queryset().select_related('patient').with_collection()
+
+    def get_object(self, queryset=None):
+        invoice = super().get_object(queryset)
+        if not invoice.is_issued or invoice.amount_due <= 0:
+            raise Http404('Esta factura no admite cobros.')
+        return invoice
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['payment_methods'] = Payment.Method.choices
+        # A dónde volver tras cobrar: el listado tal y como lo dejó quien pulsó,
+        # con sus filtros y su página. Llega como parámetro y se valida antes de
+        # usarse (ver `_safe_next`), nunca se confía tal cual.
+        context['next_url'] = _safe_next(self.request, self.request.GET.get('next'))
+        return context
+
+
 class InvoiceActionMixin(InvoiceScopedMixin, LoginRequiredMixin, SingleObjectMixin, View):
     """Base de las acciones sobre una factura y sus cobros. Solo POST.
 
@@ -425,7 +500,24 @@ class InvoiceActionMixin(InvoiceScopedMixin, LoginRequiredMixin, SingleObjectMix
             PaymentFrozen, ProtectedRecordError,
         ) as exc:
             messages.error(request, _domain_message(exc))
-            return redirect('billing:invoice-detail', pk=self.object.pk)
+            return self.back(request)
+
+    def back(self, request):
+        """A dónde se vuelve al terminar, salga bien o mal.
+
+        Por defecto al detalle de la factura, que es de donde se viene casi
+        siempre. Cobrando desde el listado llega un `next` con la lista tal y
+        como estaba —sus filtros, su orden, su página— y se vuelve ahí: mandar a
+        alguien al detalle de una factura cuando estaba recorriendo la lista de
+        impagados le hace perder el sitio y volver atrás a mano.
+
+        El destino se valida (`_safe_next`) antes de seguirlo; el error también
+        vuelve por aquí, para que el mensaje se lea donde se estaba trabajando.
+        """
+        destination = _safe_next(request, request.POST.get('next'))
+        if destination:
+            return redirect(destination)
+        return redirect('billing:invoice-detail', pk=self.object.pk)
 
     def perform(self, request):
         raise NotImplementedError
@@ -514,7 +606,7 @@ class InvoicePaymentCreateView(InvoiceActionMixin):
         form = PaymentForm(request.POST)
         if not form.is_valid():
             messages.error(request, _first_error(form))
-            return redirect('billing:invoice-detail', pk=invoice.pk)
+            return self.back(request)
 
         # `paid_at` solo se pasa si se tecleó: si no, manda el `default=now` del
         # modelo. Pasarlo como `None` rompería el `NOT NULL` de la columna.
@@ -534,7 +626,7 @@ class InvoicePaymentCreateView(InvoiceActionMixin):
             f'Cobro {payment.receipt_number} registrado: {payment.amount} € '
             f'por {payment.get_method_display().lower()}.',
         )
-        return redirect('billing:invoice-detail', pk=invoice.pk)
+        return self.back(request)
 
 
 class InvoiceDeleteView(InvoiceActionMixin):

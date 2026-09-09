@@ -1,0 +1,27 @@
+{% load billing_extras %}
+{% comment %}
+El modal de cobro del LISTADO. Llega por htmx cuando se pulsa «Cobrar» en una
+fila, y se inyecta en un contenedor que vive fuera de `#billing-region`: si
+estuviera dentro, filtrar o pasar de página lo borraría a media escritura.
+
+Hay UN modal en la página, no uno por fila. Un modal oculto sigue siendo un
+`<form>` con su `action` en el HTML, así que veinte filas serían veinte
+formularios de cobro cargados a la vez, cada uno con su importe. Aquí el
+contenido lo pide el servidor para la factura que se ha pulsado, y el contenedor
+está vacío el resto del tiempo.
+
+Sin Alpine a propósito: htmx no inicializa Alpine en lo que inserta (no hay
+ningún `htmx:afterSwap` que llame a `Alpine.initTree`), así que cerrar va por el
+listener delegado de `invoice_list.html`, que sí es página completa.
+{% endcomment %}
+<div class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="modal-payment-title">
+    <div data-modal-close class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+    <div class="relative w-full max-w-md rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+        <h3 id="modal-payment-title" class="text-base font-semibold text-content">Registrar un cobro</h3>
+        <p class="mt-2 text-sm text-content-subtle">
+            De la factura {{ invoice.number }} a {{ invoice.patient|default:invoice.frozen_patient_name }}
+            quedan pendientes <strong class="font-semibold text-content">{{ invoice.amount_due|euros }}</strong>.
+        </p>
+        {% include 'billing/_payment_form.html' with standalone=True %}
+    </div>
+</div>

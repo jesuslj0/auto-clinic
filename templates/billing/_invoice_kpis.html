@@ -14,10 +14,40 @@ juntas: «pendiente de facturar» es trabajo hecho que todavía no es una factur
 mientras que «pendiente de cobro» ya está facturado y lo que falta es que entre
 el dinero. Lo primero es un documento que hay que hacer; lo segundo, dinero que
 hay que reclamar.
+
+**Solo son clicables tres de las cinco, y es a propósito.** Una tarjeta lleva a
+una lista únicamente cuando esa lista contiene exactamente lo que la cifra
+cuenta; si no, pinchar y ver otra cosa es peor que no poder pinchar:
+
+- «Facturas» ya cuenta lo que se está viendo — su lista es la de abajo, y no hay
+  a dónde ir.
+- «Pendiente de facturar» cuenta PROCEDIMIENTOS, no facturas. No hay ninguna
+  lista de procedimientos sin facturar a la que mandar; llevar al alta de
+  facturas no enseñaría estos, porque esa pantalla empieza por elegir paciente.
+
+Las tres que sí llevan conservan el resto de filtros (`{% templatetag openblock %} invoice_query {% templatetag closeblock %}`) y **alternan**:
+si su filtro ya está puesto —y entonces la tarjeta va marcada con su color— el
+mismo clic lo quita. Sin eso, pinchar una tarjeta ya activa no haría nada y
+parecería que la página se ha roto.
 {% endcomment %}
 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-    {# --- Total facturado --- #}
-    <div class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line">
+
+    {% comment %}
+    Total facturado → las emitidas, que son justo de las que sale la suma.
+    {% endcomment %}
+    {% if issued_active %}
+        {% url 'billing:invoice-list' as base %}{% invoice_query status='' as billed_query %}
+    {% else %}
+        {% url 'billing:invoice-list' as base %}{% invoice_query status='issued' as billed_query %}
+    {% endif %}
+    <a href="{{ base }}?{{ billed_query }}"
+       hx-get="{{ base }}?{{ billed_query }}"
+       hx-target="#billing-region"
+       hx-swap="innerHTML"
+       hx-push-url="true"
+       hx-indicator="#billing-spinner"
+       aria-label="{% if issued_active %}Quitar el filtro de facturas emitidas{% else %}Ver solo las facturas emitidas{% endif %}"
+       class="group block rounded-3xl bg-surface p-5 shadow-soft ring-1 transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success {% if issued_active %}ring-success{% else %}ring-line hover:ring-success-line{% endif %}">
         <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
                 <p class="text-sm font-medium text-content-subtle">Total facturado</p>
@@ -26,15 +56,21 @@ hay que reclamar.
                     {{ kpis.issued_count }} factura{{ kpis.issued_count|pluralize }} emitida{{ kpis.issued_count|pluralize }}.
                 </p>
             </div>
-            <span aria-hidden="true" class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-success-soft text-success">
-                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-            </span>
+            <div class="flex flex-shrink-0 flex-col items-end gap-3">
+                <span aria-hidden="true" class="flex h-11 w-11 items-center justify-center rounded-2xl bg-success-soft text-success">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </span>
+                {% include 'billing/_kpi_arrow.html' with active=issued_active tone="text-success" tone_hover="group-hover:text-success" %}
+            </div>
         </div>
-    </div>
+    </a>
 
-    {# --- Nº de facturas --- #}
+    {% comment %}
+    Nº de facturas. NO es un enlace: cuenta exactamente las filas de la tabla de
+    abajo, así que ya se está mirando su lista.
+    {% endcomment %}
     <div class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line">
         <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
@@ -52,23 +88,42 @@ hay que reclamar.
         </div>
     </div>
 
-    {# --- Ticket medio --- #}
-    <div class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line">
+    {% comment %}
+    Ticket medio → el mismo conjunto que «Total facturado»: las emitidas son de
+    las que sale la media. Que dos tarjetas lleven al mismo sitio no es un
+    descuido; la pregunta que responde el clic —«¿de dónde sale este número?»— es
+    la misma en las dos.
+    {% endcomment %}
+    <a href="{{ base }}?{{ billed_query }}"
+       hx-get="{{ base }}?{{ billed_query }}"
+       hx-target="#billing-region"
+       hx-swap="innerHTML"
+       hx-push-url="true"
+       hx-indicator="#billing-spinner"
+       aria-label="{% if issued_active %}Quitar el filtro de facturas emitidas{% else %}Ver las facturas emitidas de las que sale la media{% endif %}"
+       class="group block rounded-3xl bg-surface p-5 shadow-soft ring-1 transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info {% if issued_active %}ring-info{% else %}ring-line hover:ring-info-line{% endif %}">
         <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
                 <p class="text-sm font-medium text-content-subtle">Ticket medio</p>
                 <p class="mt-3 text-2xl font-semibold text-content sm:text-3xl">{{ kpis.average_ticket|euros }}</p>
                 <p class="mt-2 text-sm text-content-subtle">Media por factura emitida.</p>
             </div>
-            <span aria-hidden="true" class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-info-soft text-info">
-                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-                </svg>
-            </span>
+            <div class="flex flex-shrink-0 flex-col items-end gap-3">
+                <span aria-hidden="true" class="flex h-11 w-11 items-center justify-center rounded-2xl bg-info-soft text-info">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                    </svg>
+                </span>
+                {% include 'billing/_kpi_arrow.html' with active=issued_active tone="text-info" tone_hover="group-hover:text-info" %}
+            </div>
         </div>
-    </div>
+    </a>
 
-    {# --- Pendiente de facturar (otro queryset: procedimientos sin factura) --- #}
+    {% comment %}
+    Pendiente de facturar. NO es un enlace: cuenta procedimientos, no facturas, y
+    no existe ninguna lista de procedimientos sin facturar a la que llevar. El
+    borde de aviso lo distingue de la tarjeta de al lado.
+    {% endcomment %}
     <div class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-warning-line">
         <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
@@ -86,8 +141,24 @@ hay que reclamar.
         </div>
     </div>
 
-    {# --- Pendiente de cobro (facturas emitidas con saldo) --- #}
-    <div class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line">
+    {% comment %}
+    Pendiente de cobro → `cobro=pending`, que agrupa impagadas y parciales:
+    exactamente las facturas que cuenta `unpaid_invoice_count`. Es el destino más
+    exacto de las cinco y la lista de trabajo de quien va a reclamar.
+    {% endcomment %}
+    {% if pending_active %}
+        {% invoice_query cobro='' as unpaid_query %}
+    {% else %}
+        {% invoice_query cobro=collection_pending as unpaid_query %}
+    {% endif %}
+    <a href="{{ base }}?{{ unpaid_query }}"
+       hx-get="{{ base }}?{{ unpaid_query }}"
+       hx-target="#billing-region"
+       hx-swap="innerHTML"
+       hx-push-url="true"
+       hx-indicator="#billing-spinner"
+       aria-label="{% if pending_active %}Quitar el filtro de facturas con saldo{% else %}Ver las facturas con saldo pendiente{% endif %}"
+       class="group block rounded-3xl bg-surface p-5 shadow-soft ring-1 transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning {% if pending_active %}ring-warning{% else %}ring-line hover:ring-warning-line{% endif %}">
         <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
                 <p class="text-sm font-medium text-content-subtle">Pendiente de cobro</p>
@@ -96,11 +167,14 @@ hay que reclamar.
                     {{ kpis.unpaid_invoice_count }} factura{{ kpis.unpaid_invoice_count|pluralize }} con saldo pendiente.
                 </p>
             </div>
-            <span aria-hidden="true" class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-warning-soft text-warning">
-                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
-                </svg>
-            </span>
+            <div class="flex flex-shrink-0 flex-col items-end gap-3">
+                <span aria-hidden="true" class="flex h-11 w-11 items-center justify-center rounded-2xl bg-warning-soft text-warning">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+                    </svg>
+                </span>
+                {% include 'billing/_kpi_arrow.html' with active=pending_active tone="text-warning" tone_hover="group-hover:text-warning" %}
+            </div>
         </div>
-    </div>
+    </a>
 </div>

@@ -3,13 +3,14 @@ Root conftest.py: shared fixtures and factories for the entire test suite.
 """
 import uuid
 from datetime import time, timedelta
+from decimal import Decimal
 
 import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from appointments.models import Appointment, Professional, ProfessionalSchedule
-from billing.models import PatientInvoice, Subscription
+from billing.models import PatientInvoice, Payment, Subscription
 from clinical.models import (
     ClinicalNote,
     Episode,
@@ -338,6 +339,20 @@ def issued_invoice_a(db, draft_invoice_a, procedure_a):
     """La misma factura, con un procedimiento dentro y ya emitida."""
     draft_invoice_a.add_procedure(procedure_a)
     return draft_invoice_a.issue()
+
+
+@pytest.fixture
+def payment_a(db, issued_invoice_a):
+    """Cobro parcial de 20.00 sobre una factura de 50.00.
+
+    Parcial a propósito: deja la factura con saldo, que es el caso que distingue
+    a los tres estados de cobro y el que más se equivoca al agregarlo.
+    """
+    return Payment.objects.create(
+        invoice=issued_invoice_a,
+        amount=Decimal('20.00'),
+        method=Payment.Method.CARD,
+    )
 
 
 @pytest.fixture

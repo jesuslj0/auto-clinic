@@ -317,34 +317,7 @@ el de «Registrar cobro» vive dentro del panel de la derecha—.
                 De la factura {{ invoice.number }} quedan pendientes <strong class="font-semibold text-content">{{ invoice.amount_due|euros }}</strong>.
                 Al guardarlo se emite un recibo con su número, y un recibo no se corrige ni se borra.
             </p>
-            <form method="post" action="{% url 'billing:invoice-payment' invoice.pk %}" class="mt-4 space-y-4" novalidate>
-                {% csrf_token %}
-                <div>
-                    <label for="payment-amount" class="mb-1.5 block text-sm font-medium text-content-muted">Importe cobrado</label>
-                    <input type="text" inputmode="decimal" name="amount" id="payment-amount"
-                           value="{{ invoice.amount_due }}" max="{{ invoice.amount_due }}" required
-                           class="block w-full rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500">
-                </div>
-                <div>
-                    <label for="payment-method" class="mb-1.5 block text-sm font-medium text-content-muted">Método de cobro</label>
-                    <select name="method" id="payment-method" required
-                            class="block w-full rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500">
-                        {% for value, label in payment_methods %}
-                        <option value="{{ value }}">{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label for="payment-paid-at" class="mb-1.5 block text-sm font-medium text-content-muted">Fecha del cobro</label>
-                    <input type="datetime-local" name="paid_at" id="payment-paid-at"
-                           class="block w-full rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500">
-                    <p class="mt-1.5 text-xs text-content-subtle">Déjala vacía si el dinero entra ahora mismo.</p>
-                </div>
-                <div class="flex justify-end gap-3 pt-1">
-                    <button type="button" @click="modal = null" class="btn-secondary">Cancelar</button>
-                    <button type="submit" class="btn-primary">Registrar cobro</button>
-                </div>
-            </form>
+            {% include 'billing/_payment_form.html' %}
         </div>
     </div>
     {% endif %}

@@ -1,0 +1,23 @@
+{% comment %}
+La señal de «esto lleva a algún sitio» de una tarjeta KPI: una flecha que avanza
+al pasar por encima, igual que las tarjetas del panel de control. Solo la llevan
+las tarjetas clicables, así que de un vistazo se distingue cuáles lo son.
+
+Cuando el filtro de la tarjeta ya está puesto (`active`), la flecha se cambia por
+una equis: ese clic ya no acota, lo quita.
+
+Las clases de color llegan ESCRITAS desde quien incluye (`tone`), no compuestas
+aquí con `text-{{ '{{' }} algo {{ '}}' }}`: el CDN de Tailwind solo compila las clases que
+ve, y una construida por interpolación puede no llegar a existir — el mismo
+motivo por el que los componentes dinámicos del proyecto se declaran en
+`partials/_head_theme.html`.
+{% endcomment %}
+{% if active %}
+    <svg aria-hidden="true" class="h-4 w-4 flex-shrink-0 transition group-hover:rotate-90 {{ tone }}" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+{% else %}
+    <svg aria-hidden="true" class="h-4 w-4 flex-shrink-0 text-content-faint transition group-hover:translate-x-0.5 {{ tone_hover }}" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+    </svg>
+{% endif %}

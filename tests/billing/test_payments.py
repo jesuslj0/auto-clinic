@@ -26,16 +26,6 @@ from billing.models import PatientInvoice, Payment, ReceiptSequence
 from core.managers import ProtectedRecordError
 
 
-@pytest.fixture
-def payment_a(db, issued_invoice_a):
-    """Cobro parcial de 20.00 sobre una factura de 50.00."""
-    return Payment.objects.create(
-        invoice=issued_invoice_a,
-        amount=Decimal('20.00'),
-        method=Payment.Method.CARD,
-    )
-
-
 # ---------------------------------------------------------------------------
 # Alta
 # ---------------------------------------------------------------------------

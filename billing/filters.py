@@ -49,6 +49,31 @@ SORT_FIELDS = {
 DEFAULT_SORT = 'date'
 DEFAULT_DIRECTION = 'desc'
 
+#: Valor sintético del filtro de cobro: agrupa las impagadas Y las parciales.
+#: No es un `PaymentState` porque no es el estado de ninguna factura; es una
+#: pregunta distinta —«¿a quién hay que reclamar?»— y su respuesta incluye a las
+#: dos. Una factura cobrada a medias se reclama igual que una que no se ha
+#: tocado, así que obligar a mirar dos listas para saberlo sería un estorbo.
+#: Es también lo que hace que el «pendiente de cobro» del panel de control lleve
+#: a una lista con exactamente esas facturas y no a una parte de ellas.
+COLLECTION_PENDING = 'pending'
+COLLECTION_PENDING_LABEL = 'Con saldo pendiente'
+
+
+def collection_choices():
+    """Opciones del desplegable de cobro: el agrupado primero, y los tres estados.
+
+    El agrupado va delante porque es lo que se busca a diario; los estados
+    sueltos siguen ahí para cuando se quiera separar «no ha pagado nada» de «ha
+    pagado a medias».
+    """
+    from billing.models import PatientInvoice
+
+    return [
+        (COLLECTION_PENDING, COLLECTION_PENDING_LABEL),
+        *PatientInvoice.PaymentState.choices,
+    ]
+
 
 def _decimal_or_none(raw):
     """Importe de la query string, o `None` si no lo es.
@@ -113,6 +138,7 @@ class InvoiceFilters:
             status = ''
 
         valid_collection = {value for value, _ in PatientInvoice.PaymentState.choices}
+        valid_collection.add(COLLECTION_PENDING)
         collection = (params.get('cobro') or '').strip()
         if collection not in valid_collection:
             collection = ''
@@ -175,8 +201,17 @@ class InvoiceFilters:
             # lista donde esa misma fila aparece.
             queryset = queryset.with_collection().filter(
                 status=PatientInvoice.Status.ISSUED,
-                payment_state=self.collection,
             )
+            if self.collection == COLLECTION_PENDING:
+                # «Con saldo» es todo lo que no está cobrado del todo: se excluye
+                # lo pagado en vez de enumerar los dos estados que quedan, para
+                # que un cuarto estado futuro (un reembolso, por ejemplo) entre
+                # solo en la lista de lo que hay que reclamar.
+                queryset = queryset.exclude(
+                    payment_state=PatientInvoice.PaymentState.PAID,
+                )
+            else:
+                queryset = queryset.filter(payment_state=self.collection)
         if self.date_from:
             queryset = queryset.filter(issued_at__date__gte=self.date_from)
         if self.date_to:
@@ -299,12 +334,17 @@ class InvoiceFilters:
 # Quesysets base, acotados a la clínica
 # ---------------------------------------------------------------------------
 
-def _scope_to_clinic(queryset, user, clinic_path='clinic'):
+def scope_to_clinic(queryset, user, clinic_path='clinic'):
     """Aislamiento multi-tenant, igual que en el resto del panel.
 
     Un usuario con clínica ve la suya —también si es superusuario—; solo el
     superusuario SIN clínica (equipo de plataforma) lo ve todo. Cualquier otro
     caso no ve nada: es preferible una lista vacía a una fuga entre clínicas.
+
+    Es pública porque la comparte todo `billing` —el listado y las métricas del
+    panel de control (`billing.metrics`)—: la regla de quién ve qué se escribe
+    una vez. Copiarla en cada consulta nueva es exactamente como se abre una
+    fuga entre clínicas.
     """
     if user.clinic_id:
         return queryset.filter(**{clinic_path: user.clinic})
@@ -317,7 +357,7 @@ def invoices_for(user):
     """Facturas que `user` puede ver. Sin filtrar todavía: eso es `InvoiceFilters`."""
     from billing.models import PatientInvoice
 
-    return _scope_to_clinic(PatientInvoice.objects.all(), user)
+    return scope_to_clinic(PatientInvoice.objects.all(), user)
 
 
 def pending_procedures_for(user):
@@ -341,7 +381,7 @@ def pending_procedures_for(user):
         visit__episode__deleted_at__isnull=True,
         visit__episode__history__deleted_at__isnull=True,
     )
-    return _scope_to_clinic(queryset, user, 'visit__episode__history__patient__clinic')
+    return scope_to_clinic(queryset, user, 'visit__episode__history__patient__clinic')
 
 
 # ---------------------------------------------------------------------------
