@@ -640,6 +640,11 @@ class Payment(SoftDeleteModel, TimeStampedModel):
             # Los cobros de una factura, en orden. El índice simple sobre
             # `invoice` no se declara: un ForeignKey de Django ya lo trae.
             models.Index(fields=['invoice', 'paid_at'], name='idx_payment_invoice_paid'),
+            # Los cobros de una clínica en un rango de fechas. Es la consulta
+            # del panel de control —lo cobrado en el mes, día a día— y se hace
+            # en cada carga, así que no puede depender de recorrer la tabla
+            # entera de cobros de todas las clínicas.
+            models.Index(fields=['clinic', 'paid_at'], name='idx_payment_clinic_paid'),
         ]
         constraints = [
             models.CheckConstraint(

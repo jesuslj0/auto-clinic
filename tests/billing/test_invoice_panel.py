@@ -12,7 +12,13 @@ from django.db.models import Count, Q
 from django.urls import reverse
 from django.utils import timezone
 
-from billing.filters import InvoiceFilters, invoice_kpis, invoices_for, pending_procedures_for
+from billing.filters import (
+    COLLECTION_PENDING,
+    InvoiceFilters,
+    invoice_kpis,
+    invoices_for,
+    pending_procedures_for,
+)
 from billing.models import PatientInvoice
 from clinical.models import PerformedProcedure
 
@@ -347,6 +353,49 @@ def test_el_filtro_de_cobro_no_arrastra_borradores(
     invoices, _ = _kpis(admin_user, {'cobro': 'unpaid'})
 
     assert list(invoices) == [three_collection_states['unpaid']]
+
+
+@pytest.mark.django_db
+def test_con_saldo_agrupa_impagadas_y_parciales(admin_user, three_collection_states):
+    """«¿A quién hay que reclamar?» no es una pregunta sobre un solo estado.
+
+    Una factura cobrada a medias se reclama igual que una que no se ha tocado, y
+    sin este valor había que mirar dos listas para saberlo. Es además lo que hace
+    que el «por cobrar» del panel de control lleve exactamente a estas facturas.
+    """
+    invoices, _ = _kpis(admin_user, {'cobro': COLLECTION_PENDING})
+
+    assert set(invoices) == {
+        three_collection_states['unpaid'], three_collection_states['partial'],
+    }
+    assert three_collection_states['paid'] not in invoices
+
+
+@pytest.mark.django_db
+def test_con_saldo_tampoco_arrastra_borradores_ni_anuladas(
+    admin_user, three_collection_states, draft_invoice_a, clinic_a, patient_a,
+    visit_a, service_a,
+):
+    """Un borrador aún puede cambiar de importe y una anulada dejó de deber."""
+    voided = PatientInvoice.objects.create(clinic=clinic_a, patient=patient_a)
+    voided.add_procedure(
+        PerformedProcedure.objects.create(visit=visit_a, service=service_a)
+    )
+    voided.issue().void(reason='Error en el importe')
+
+    invoices, _ = _kpis(admin_user, {'cobro': COLLECTION_PENDING})
+
+    assert draft_invoice_a not in invoices
+    assert voided not in invoices
+
+
+@pytest.mark.django_db
+def test_con_saldo_cuadra_con_el_kpi_de_impagadas(admin_user, three_collection_states):
+    """La lista y el número que lleva a ella tienen que decir lo mismo."""
+    invoices, _ = _kpis(admin_user, {'cobro': COLLECTION_PENDING})
+    _, kpis = _kpis(admin_user)
+
+    assert invoices.count() == kpis['unpaid_invoice_count'] == 2
 
 
 @pytest.mark.django_db

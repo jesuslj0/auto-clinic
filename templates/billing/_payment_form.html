@@ -1,0 +1,61 @@
+{% load billing_extras %}
+{% comment %}
+El formulario de cobro, compartido por el detalle de la factura y el listado.
+Estaba escrito a mano dentro del modal del detalle; al añadir el cobro desde el
+listado habría quedado duplicado, y dos copias de un formulario que mueve dinero
+divergen: se corrige el `inputmode` en una y no en la otra.
+
+Quien lo incluye decide dos cosas:
+
+- `standalone` — el modal del listado llega por htmx, donde Alpine NO se
+  inicializa (no hay ningún hook `htmx:afterSwap` que llame a `Alpine.initTree`),
+  así que allí el botón de cancelar se cierra con un listener delegado
+  (`data-modal-close`) en vez de con `@click`. En el detalle, que es una página
+  completa, Alpine sí manda.
+- `next_url` — a dónde volver tras cobrar. Sin él se vuelve al detalle de la
+  factura, que es el comportamiento de siempre.
+
+El importe viene prellenado con lo que queda pendiente —con coma, que es lo que
+`PaymentForm` acepta— porque el caso normal es cobrar todo lo que se debe y así
+es un solo clic. Quien decide si un importe cabe es el modelo, que lo comprueba
+con la factura bloqueada: ni este formulario ni el `max` del campo validan nada,
+y de hecho el navegador ignora ese `max` en un campo de texto. Se conserva como
+dato del valor máximo razonable, no como control.
+
+El campo del importe es `text` con `inputmode="decimal"` y no `number`: un
+`number` rechaza la coma, y aquí se teclea «25,50». Mismo criterio que los
+importes del filtro del listado.
+
+Los `id` llevan el número de la factura porque en el listado puede haber varios
+formularios en la página a lo largo de una sesión de cobros, y dos `label` con el
+mismo `for` dejan de señalar a su campo.
+{% endcomment %}
+<form method="post" action="{% url 'billing:invoice-payment' invoice.pk %}" class="mt-4 space-y-4" novalidate>
+    {% csrf_token %}
+    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+    <div>
+        <label for="payment-amount-{{ invoice.pk }}" class="mb-1.5 block text-sm font-medium text-content-muted">Importe cobrado</label>
+        <input type="text" inputmode="decimal" name="amount" id="payment-amount-{{ invoice.pk }}"
+               value="{{ invoice.amount_due }}" max="{{ invoice.amount_due }}" required
+               class="block w-full rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div>
+        <label for="payment-method-{{ invoice.pk }}" class="mb-1.5 block text-sm font-medium text-content-muted">Método de cobro</label>
+        <select name="method" id="payment-method-{{ invoice.pk }}" required
+                class="block w-full rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500">
+            {% for value, label in payment_methods %}
+            <option value="{{ value }}">{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="payment-paid-at-{{ invoice.pk }}" class="mb-1.5 block text-sm font-medium text-content-muted">Fecha del cobro</label>
+        <input type="datetime-local" name="paid_at" id="payment-paid-at-{{ invoice.pk }}"
+               class="block w-full rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <p class="mt-1.5 text-xs text-content-subtle">Déjala vacía si el dinero entra ahora mismo.</p>
+    </div>
+    <div class="flex justify-end gap-3 pt-1">
+        <button type="button" class="btn-secondary" {% if standalone %}data-modal-close{% else %}@click="modal = null"{% endif %}>Cancelar</button>
+        <button type="submit" class="btn-primary">Registrar cobro</button>
+    </div>
+</form>

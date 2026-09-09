@@ -135,6 +135,54 @@ que son la verdad, y por eso siempre concuerda con lo que se ve en la tabla.
         }));
     });
 </script>
+
+{% comment %}
+Fila clicable y cierre del modal, en dos escuchadores delegados sobre
+`document`. Delegados y NO con Alpine, que es lo que se usa en el resto de la
+página: la tabla y el modal llegan por htmx, y htmx no inicializa Alpine en lo
+que inserta —no hay ningún `htmx:afterSwap` que llame a `Alpine.initTree`—, así
+que un `@click` escrito en una fila dejaría de responder en cuanto se filtrara.
+Escuchando en `document` da igual cuántas veces se repinte la tabla. Es el mismo
+motivo por el que el conmutador de tema (`partials/_theme_toggle.html`) también
+es delegado.
+
+La fila es una comodidad de ratón, no la única salida: dentro sigue habiendo
+enlaces reales al número de factura y al paciente, que son los que usan el
+teclado y los lectores de pantalla. Por eso un clic sobre cualquier elemento
+interactivo —el chip que filtra, el botón de cobrar, el enlace al paciente— no
+navega a la factura: manda lo que se ha pulsado. Y tampoco navega si hay texto
+seleccionado, que si no, copiar un número de factura te sacaba de la lista.
+{% endcomment %}
+<script>
+    document.addEventListener('click', (event) => {
+        const cerrar = event.target.closest('[data-modal-close]');
+        if (cerrar) {
+            document.getElementById('payment-modal').innerHTML = '';
+            return;
+        }
+        const fila = event.target.closest('[data-row-href]');
+        if (!fila) return;
+        if (event.target.closest('a, button, input, select, label, [data-row-ignore]')) return;
+        if (window.getSelection && String(window.getSelection())) return;
+        window.location = fila.dataset.rowHref;
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        const hueco = document.getElementById('payment-modal');
+        if (hueco && hueco.innerHTML !== '') hueco.innerHTML = '';
+    });
+
+    // Al abrirse el modal, el cursor va al importe y con el valor seleccionado.
+    // Cobrar es una tarea en serie —se recorre la lista de impagados factura a
+    // factura— y así el caso normal (cobrar lo que se debe) es Intro, y cobrar
+    // otra cantidad es teclearla sin borrar antes.
+    document.body.addEventListener('htmx:afterSwap', (event) => {
+        if (event.target.id !== 'payment-modal') return;
+        const importe = event.target.querySelector('input[name="amount"]');
+        if (importe) { importe.focus(); importe.select(); }
+    });
+</script>
 {% endblock %}
 
 {% block title %}Facturación · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
@@ -363,4 +411,12 @@ que son la verdad, y por eso siempre concuerda con lo que se ve en la tabla.
         {% include 'billing/_invoice_region.html' %}
     </div>
 </section>
+
+{% comment %}
+El hueco del modal de cobro. Está FUERA de `#billing-region` por lo mismo que los
+filtros: la región entera se sustituye al filtrar, ordenar o pasar de página, y
+si el modal viviera dentro se borraría a media escritura. Vacío hasta que alguien
+pulsa «Cobrar» en una fila; lo rellena `billing:invoice-payment-form`.
+{% endcomment %}
+<div id="payment-modal"></div>
 {% endblock %}

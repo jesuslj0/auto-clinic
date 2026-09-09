@@ -11,6 +11,7 @@ from billing.views import (
     InvoiceDeleteView,
     InvoiceIssueView,
     InvoicePaymentCreateView,
+    InvoicePaymentFormView,
     InvoicePendingProceduresView,
     InvoiceProcedureView,
     InvoiceVoidView,
@@ -44,6 +45,14 @@ urlpatterns = [
         '<int:pk>/cobrar/',
         InvoicePaymentCreateView.as_view(),
         name='invoice-payment',
+    ),
+    # Fragmento: el modal de cobro de una factura, para pedirlo desde el listado
+    # sin dejar veinte formularios escritos en la tabla. Solo pinta; el POST que
+    # mueve el dinero sigue siendo el de arriba.
+    path(
+        '<int:pk>/cobrar/formulario/',
+        InvoicePaymentFormView.as_view(),
+        name='invoice-payment-form',
     ),
     path(
         '<int:pk>/procedimientos/',
