@@ -4,85 +4,136 @@
 {% block page_heading %}{% if object %}Editar profesional{% else %}Nuevo profesional{% endif %}{% endblock %}
 
 {% block content %}
-<div class="mx-auto max-w-2xl">
-    <div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+{% comment %}
+En el edit, dos columnas en escritorio: datos del profesional a la izquierda y
+horario + ausencias a la derecha. Es un único <form> (se guarda todo junto), así
+que la rejilla va dentro del form y las dos tarjetas son solo presentación. En
+el alta no hay formsets, así que se queda en una columna estrecha.
+{% endcomment %}
+{# Al editar, «Guardar cambios» solo se activa si hay algo que guardar (`dirtyForm`, en base.html). #}
+<form method="post" novalidate class="mx-auto {% if object %}max-w-7xl{% else %}max-w-2xl{% endif %} space-y-6"
+      {% if object %}x-data="dirtyForm({{ form.is_bound|yesno:'true,false' }})" @input="check()" @change="check()" @click="check()"{% endif %}>
+    {% csrf_token %}
 
-        <div class="border-b border-line px-4 py-6 sm:px-8">
-            <h2 class="text-lg font-semibold text-content">Datos del profesional</h2>
-            <p class="mt-1 text-sm text-content-subtle">
-                {% if object %}Actualiza la información del profesional.{% else %}Completa la información para añadir un nuevo profesional.{% endif %}
-            </p>
-        </div>
-
-        <form method="post" novalidate class="space-y-6 px-4 py-7 sm:px-8">
-            {% csrf_token %}
-
-            {% if form.non_field_errors %}
-            <div class="rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line">
-                {% for error in form.non_field_errors %}
-                <p class="text-sm text-danger">{{ error }}</p>
-                {% endfor %}
+    <div class="grid grid-cols-1 items-start gap-6 {% if object %}lg:grid-cols-2{% endif %}">
+        <section class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+            <div class="border-b border-line px-4 py-6 sm:px-8">
+                <h2 class="text-lg font-semibold text-content">Datos del profesional</h2>
+                <p class="mt-1 text-sm text-content-subtle">
+                    {% if object %}Actualiza la información del profesional.{% else %}Completa la información para añadir un nuevo profesional.{% endif %}
+                </p>
             </div>
-            {% endif %}
 
-            <div>
-                <label for="{{ form.user.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.user.label }}</label>
-                <select
-                    name="{{ form.user.html_name }}"
-                    id="{{ form.user.id_for_label }}"
-                    class="block w-full rounded-xl border {% if form.user.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
-                >
-                    <option value="">— Selecciona un usuario —</option>
-                    {% for value, label in form.user.field.choices %}
-                    {% if value %}<option value="{{ value }}" {% if form.user.value|stringformat:"s" == value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>{% endif %}
+            <div class="space-y-6 px-4 py-7 sm:px-8">
+                {% if form.non_field_errors %}
+                <div class="rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line">
+                    {% for error in form.non_field_errors %}
+                    <p class="text-sm text-danger">{{ error }}</p>
                     {% endfor %}
-                </select>
-                {% if form.user.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.user.errors|join:", " }}</p>{% endif %}
+                </div>
+                {% endif %}
+
+                {% if object %}
+                {# El usuario es de solo lectura en el edit: la ficha es del usuario y no se reasigna (ver ProfessionalForm). #}
+                <div>
+                    <p class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.user.label }}</p>
+                    <div class="flex items-center gap-3 rounded-xl border border-line bg-muted px-4 py-2.5">
+                        {% if object.photo %}
+                            <img src="{{ object.photo.url }}" alt="" class="h-9 w-9 flex-shrink-0 rounded-xl object-cover ring-1 ring-line">
+                        {% else %}
+                            <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-gradient text-sm font-semibold text-white">
+                                {{ object.user.get_full_name|default:object.user.email|make_list|first|upper }}
+                            </span>
+                        {% endif %}
+                        <div class="min-w-0 flex-1 leading-tight">
+                            <p class="truncate text-sm font-medium text-content">{{ object.user.get_full_name|default:object.user.email }}{% if object.user_id == request.user.pk %}<span class="ml-1.5 inline-flex rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent-fg ring-1 ring-accent-line">Eres tú</span>{% endif %}</p>
+                            <p class="truncate text-xs text-content-subtle">{{ object.user.email }}</p>
+                        </div>
+                        <svg class="h-4 w-4 flex-shrink-0 text-content-faint" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                        </svg>
+                    </div>
+                    <p class="mt-1.5 text-xs text-content-faint">{{ form.user.help_text }}</p>
+                </div>
+                {% else %}
+                <div>
+                    <label for="{{ form.user.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.user.label }}</label>
+                    <select
+                        name="{{ form.user.html_name }}"
+                        id="{{ form.user.id_for_label }}"
+                        class="block w-full rounded-xl border {% if form.user.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                    >
+                        <option value="">— Selecciona un usuario —</option>
+                        {% for value, label in form.user.field.choices %}
+                        {% if value %}<option value="{{ value }}" {% if form.user.value|stringformat:"s" == value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>{% endif %}
+                        {% endfor %}
+                    </select>
+                    {% if form.user.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.user.errors|join:", " }}</p>{% endif %}
+                </div>
+                {% endif %}
+
+                <div>
+                    <label for="{{ form.professional_type.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.professional_type.label }}</label>
+                    <select
+                        name="{{ form.professional_type.html_name }}"
+                        id="{{ form.professional_type.id_for_label }}"
+                        class="block w-full rounded-xl border {% if form.professional_type.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                    >
+                        {% for value, label in form.professional_type.field.choices %}
+                        <option value="{{ value }}" {% if form.professional_type.value == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if form.professional_type.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.professional_type.errors|join:", " }}</p>{% endif %}
+                </div>
+
+                {% include 'appointments/partials/_professional_identity_fields.html' %}
+
+                <div>
+                    <label for="{{ form.services.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.services.label }}</label>
+                    <p class="mb-2 text-xs text-content-faint">Mantén pulsado Ctrl (o Cmd en Mac) para seleccionar varios.</p>
+                    <select
+                        name="{{ form.services.html_name }}"
+                        id="{{ form.services.id_for_label }}"
+                        multiple
+                        size="6"
+                        class="block w-full rounded-xl border {% if form.services.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                    >
+                        {% for value, label in form.services.field.choices %}
+                        <option value="{{ value }}" {% if value in form.services.value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if form.services.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.services.errors|join:", " }}</p>{% endif %}
+                </div>
+            </div>
+        </section>
+
+        {% if object %}
+        <section class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+            <div class="border-b border-line px-4 py-6 sm:px-8">
+                <h2 class="text-lg font-semibold text-content">Horario y ausencias</h2>
+                <p class="mt-1 text-sm text-content-subtle">Cuándo atiende y qué bloquea su agenda.</p>
             </div>
 
-            <div>
-                <label for="{{ form.professional_type.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.professional_type.label }}</label>
-                <select
-                    name="{{ form.professional_type.html_name }}"
-                    id="{{ form.professional_type.id_for_label }}"
-                    class="block w-full rounded-xl border {% if form.professional_type.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
-                >
-                    {% for value, label in form.professional_type.field.choices %}
-                    <option value="{{ value }}" {% if form.professional_type.value == value %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-                {% if form.professional_type.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.professional_type.errors|join:", " }}</p>{% endif %}
+            {# Las secciones del partial traen un separador superior; en la primera sobra. #}
+            <div class="space-y-7 px-4 py-7 sm:px-8 [&>section:first-of-type]:border-t-0 [&>section:first-of-type]:pt-0">
+                {% include 'appointments/partials/_schedule_fieldsets.html' %}
             </div>
-
-            <div>
-                <label for="{{ form.services.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.services.label }}</label>
-                <p class="mb-2 text-xs text-content-faint">Mantén pulsado Ctrl (o Cmd en Mac) para seleccionar varios.</p>
-                <select
-                    name="{{ form.services.html_name }}"
-                    id="{{ form.services.id_for_label }}"
-                    multiple
-                    size="6"
-                    class="block w-full rounded-xl border {% if form.services.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
-                >
-                    {% for value, label in form.services.field.choices %}
-                    <option value="{{ value }}" {% if value in form.services.value %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-                {% if form.services.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.services.errors|join:", " }}</p>{% endif %}
-            </div>
-
-            {% include 'appointments/partials/_schedule_fieldsets.html' %}
-
-            <div class="flex items-center justify-between border-t border-line pt-6">
-                <a href="{% url 'appointments:professionals-list' %}" class="btn-secondary">
-                    Cancelar
-                </a>
-                <button type="submit" class="btn-primary">
-                    {% if object %}Guardar cambios{% else %}Guardar profesional{% endif %}
-                </button>
-            </div>
-        </form>
+        </section>
+        {% endif %}
     </div>
-</div>
+
+    <div class="flex items-center justify-between rounded-3xl bg-surface px-4 py-4 shadow-soft ring-1 ring-line sm:px-8">
+        <a href="{% url 'appointments:professionals-list' %}" class="btn-secondary">
+            Cancelar
+        </a>
+        <button type="submit" class="btn-primary"
+                {% if object %}:disabled="!dirty" :title="dirty ? null : 'No hay cambios que guardar'" {% if not form.is_bound %}disabled{% endif %}{% endif %}>
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+            {% if object %}Guardar cambios{% else %}Guardar profesional{% endif %}
+        </button>
+    </div>
+</form>
 
 {% endblock %}

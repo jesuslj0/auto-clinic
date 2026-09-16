@@ -22,6 +22,12 @@ class Professional(models.Model):
         NUTRICIONISTA = 'nutricionista', 'Nutricionista'
         PODOLOGO = 'podologo', 'Podólogo'
 
+    class Title(models.TextChoices):
+        DR = 'dr', 'Dr.'
+        DRA = 'dra', 'Dra.'
+        D = 'd', 'D.'
+        DNA = 'dna', 'Dña.'
+
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='professional_profile')
     clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name='professionals')
     services = models.ManyToManyField(Service, related_name='professionals', blank=True)
@@ -31,6 +37,13 @@ class Professional(models.Model):
         default=ProfessionalType.MEDICO,
     )
     photo = models.ImageField(upload_to='professional_photos/', blank=True)
+    # Tratamiento con el que se presenta («Te atenderá la Dra. López»). Vacío = sin tratamiento.
+    title = models.CharField(max_length=5, choices=Title.choices, blank=True)
+    bio = models.TextField(max_length=500, blank=True)
+    # Datos de colegiación: salen en informes, justificantes y facturas. Texto
+    # libre porque el formato del número cambia de un colegio a otro.
+    license_number = models.CharField(max_length=30, blank=True)
+    license_body = models.CharField(max_length=120, blank=True)
 
     is_active = models.BooleanField(default=True, db_index=True)
     accepts_online_booking = models.BooleanField(default=True)
@@ -45,6 +58,13 @@ class Professional(models.Model):
 
     def __str__(self):
         return self.user.get_full_name() or self.user.email
+
+    @property
+    def display_name(self):
+        """Nombre con tratamiento («Dra. Lucía Martín»). `__str__` no lo lleva a
+        propósito: lo usan el agente y los avisos, que no deben cambiar por esto."""
+        name = str(self)
+        return f'{self.get_title_display()} {name}' if self.title else name
 
 
 class ProfessionalSchedule(models.Model):

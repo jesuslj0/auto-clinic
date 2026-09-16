@@ -1,11 +1,14 @@
 {% extends 'base.html' %}
+{% load patient_extras %}
 
 {% block title %}{% if object %}Editar servicio{% else %}Nuevo servicio{% endif %} · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
 {% block page_heading %}{% if object %}Editar servicio{% else %}Nuevo servicio{% endif %}{% endblock %}
 
 {% block content %}
-<div class="mx-auto max-w-xl">
-    <div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+<div class="mx-auto {% if object %}max-w-5xl{% else %}max-w-xl{% endif %}" x-data="{ modal: null }" @keydown.escape.window="modal = null">
+  {# Al editar, el formulario comparte fila con el resumen de uso; al crear va solo. #}
+  <div class="{% if object %}grid gap-6 lg:grid-cols-3 lg:items-start{% endif %}">
+    <div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line {% if object %}lg:col-span-2{% endif %}">
 
         <div class="border-b border-line px-4 py-6 sm:px-8">
             <h2 class="text-lg font-semibold text-content">Datos del servicio</h2>
@@ -18,7 +21,27 @@
             </p>
         </div>
 
-        <form method="post" novalidate class="space-y-6 px-4 py-7 sm:px-8">
+        {# Al editar, «Guardar cambios» solo se activa si el formulario difiere de como se cargó. #}
+        {# Se compara el formulario serializado entero: así cuentan también los campos ocultos #}
+        {# que rellenan los selectores Fijo/Variable. Si vuelve con errores, lo enviado aún no #}
+        {# está guardado, así que arranca activo. #}
+        <form
+            method="post"
+            novalidate
+            class="space-y-6 px-4 py-7 sm:px-8"
+            {% if object %}
+            x-data="{
+                initial: null,
+                dirty: {{ form.is_bound|yesno:'true,false' }},
+                snapshot() { return new URLSearchParams(new FormData(this.$root)).toString(); },
+                check() { this.$nextTick(() => { this.dirty = {{ form.is_bound|yesno:'true,false' }} || this.snapshot() !== this.initial; }); }
+            }"
+            x-init="$nextTick(() => { initial = snapshot(); })"
+            @input="check()"
+            @change="check()"
+            @click="check()"
+            {% endif %}
+        >
             {% csrf_token %}
 
             {% if form.non_field_errors %}
@@ -255,15 +278,132 @@
                 </div>
             </div>
 
-            <div class="flex items-center justify-between pt-2">
+            <div class="flex items-center justify-between gap-3 pt-2">
                 <a href="{% url 'services:list' %}" class="btn-secondary">
                     Cancelar
                 </a>
-                <button type="submit" class="btn-primary">
-                    {% if object %}Guardar cambios{% else %}Guardar servicio{% endif %}
-                </button>
+                <div class="flex items-center gap-3">
+                    {% if object %}
+                    <button type="button" @click="modal = 'delete'" class="btn-danger">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                        </svg>
+                        Eliminar
+                    </button>
+                    {% endif %}
+                    <button
+                        type="submit"
+                        class="btn-primary"
+                        {% if object %}:disabled="!dirty" :title="dirty ? null : 'No hay cambios que guardar'"{% endif %}
+                    >
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                        {% if object %}Guardar cambios{% else %}Guardar servicio{% endif %}
+                    </button>
+                </div>
             </div>
         </form>
     </div>
+
+    {% if object %}
+    {# --- Resumen de uso ------------------------------------------------- #}
+    <aside class="space-y-4" aria-label="Resumen de uso del servicio">
+        {% with a=stats.appointments p=stats.procedures %}
+        <section class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line">
+            <div class="flex items-center gap-3">
+                <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-info-soft text-info ring-1 ring-info-line">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                    </svg>
+                </span>
+                <div>
+                    <h3 class="text-sm font-medium text-content-subtle">Citas</h3>
+                    <p class="text-2xl font-semibold tabular-nums text-content">{{ a.total }}</p>
+                </div>
+                {% if a.upcoming %}
+                <span class="ml-auto self-start rounded-full bg-info-soft px-2.5 py-0.5 text-xs font-medium text-info ring-1 ring-info-line">
+                    {{ a.upcoming }} próxima{{ a.upcoming|pluralize }}
+                </span>
+                {% endif %}
+            </div>
+            {# Una fila por estado: son excluyentes, así que suman el total. #}
+            <dl class="mt-4 divide-y divide-line border-t border-line text-sm">
+                {% for row in a.by_status %}
+                <div class="flex items-center justify-between py-2 {% if forloop.last %}pb-0{% endif %}">
+                    <dt class="text-content-subtle">{{ row.label }}</dt>
+                    <dd class="font-semibold tabular-nums {% if not row.count %}text-content-faint{% elif row.status == 'completed' %}text-success{% elif row.status == 'no_show' %}text-warning{% elif row.status == 'cancelled' %}text-content-muted{% else %}text-content{% endif %}">{{ row.count }}</dd>
+                </div>
+                {% endfor %}
+            </dl>
+        </section>
+
+        <section class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line">
+            <div class="flex items-center gap-3">
+                <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-accent-soft text-accent-fg ring-1 ring-accent-line">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
+                    </svg>
+                </span>
+                <div>
+                    <h3 class="text-sm font-medium text-content-subtle">Procedimientos realizados</h3>
+                    <p class="text-2xl font-semibold tabular-nums text-content">{{ p.total }}</p>
+                </div>
+            </div>
+            <dl class="mt-4 divide-y divide-line border-t border-line text-sm">
+                <div class="flex items-center justify-between py-2">
+                    <dt class="text-content-subtle">Importe acumulado</dt>
+                    <dd class="font-semibold tabular-nums text-content">{{ p.amount|euros }}</dd>
+                </div>
+                <div class="flex items-center justify-between py-2">
+                    <dt class="text-content-subtle">Pendientes de facturar</dt>
+                    <dd class="font-semibold tabular-nums {% if p.pending_invoice %}text-warning{% else %}text-content-muted{% endif %}">{{ p.pending_invoice }}</dd>
+                </div>
+                <div class="flex items-center justify-between pt-2">
+                    <dt class="text-content-subtle">Último</dt>
+                    <dd class="font-semibold text-content">{% if p.last_performed %}{{ p.last_performed|date:"j M Y" }}{% else %}<span class="font-normal text-content-faint">—</span>{% endif %}</dd>
+                </div>
+            </dl>
+            <p class="mt-3 text-xs text-content-faint">Importes al precio del día en que se hicieron.</p>
+        </section>
+        {% endwith %}
+    </aside>
+    {% endif %}
+  </div>{# /grid #}
+
+    {% if object %}
+    {# --- Modal de confirmación de borrado ------------------------------ #}
+    <div x-show="modal === 'delete'" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="modal-delete-title">
+        <div x-show="modal === 'delete'" x-transition.opacity @click="modal = null" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div x-show="modal === 'delete'" x-transition class="relative w-full max-w-sm rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+            {% if appointments_count %}
+            <h3 id="modal-delete-title" class="text-base font-semibold text-content">No se puede eliminar</h3>
+            <p class="mt-2 text-sm text-content-subtle">
+                «{{ object.name }}» tiene {{ appointments_count }} cita{{ appointments_count|pluralize }} asociada{{ appointments_count|pluralize }}. Para que deje de ofrecerse, desmarca «Servicio activo» y guarda los cambios.
+            </p>
+            <div class="mt-5 flex justify-end">
+                <button type="button" @click="modal = null" class="btn-secondary">Entendido</button>
+            </div>
+            {% else %}
+            <h3 id="modal-delete-title" class="text-base font-semibold text-content">¿Eliminar este servicio?</h3>
+            <p class="mt-2 text-sm text-content-subtle">
+                «{{ object.name }}» desaparecerá del catálogo y del portal de reservas. Los procedimientos ya realizados conservan su nombre y su precio.
+            </p>
+            <div class="mt-5 flex justify-end gap-3">
+                <button type="button" @click="modal = null" class="btn-secondary">Volver</button>
+                <form method="post" action="{% url 'services:delete' object.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-danger">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                        </svg>
+                        Eliminar
+                    </button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

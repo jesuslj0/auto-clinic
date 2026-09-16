@@ -29,15 +29,38 @@ administración (`can_manage`, que responde lo mismo que comprueba después
                 <thead class="bg-muted text-content-subtle">
                     <tr>
                         <th class="px-6 py-4 font-semibold">Usuario</th>
+                        <th class="px-6 py-4 font-semibold">Rol</th>
                         <th class="px-6 py-4 font-semibold">Tipo</th>
                         <th class="px-6 py-4 font-semibold">Servicios</th>
+                        <th class="px-6 py-4 font-semibold">Alta</th>
                         {% if can_manage %}<th class="px-6 py-4 font-semibold">Acciones</th>{% endif %}
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-line bg-surface">
                     {% for professional in professionals %}
                     <tr>
-                        <td class="px-6 py-4 text-content">{{ professional.user.get_full_name|default:professional.user.email }}</td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-3">
+                                {% if professional.photo %}
+                                    <img src="{{ professional.photo.url }}" alt="" class="h-9 w-9 flex-shrink-0 rounded-xl object-cover ring-1 ring-line">
+                                {% else %}
+                                    <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-gradient text-sm font-semibold text-white" aria-hidden="true">
+                                        {{ professional.user.get_full_name|default:professional.user.email|make_list|first|upper }}
+                                    </span>
+                                {% endif %}
+                                <div class="min-w-0 leading-tight">
+                                    <p class="truncate font-medium text-content">{{ professional.display_name }}{% if professional.user_id == request.user.pk %}<span class="ml-1.5 inline-flex rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent-fg ring-1 ring-accent-line">Eres tú</span>{% endif %}</p>
+                                    <p class="truncate text-xs text-content-subtle">{% if professional.user.get_full_name %}{{ professional.user.email }}{% endif %}{% if professional.user.get_full_name and professional.license_number %} · {% endif %}{% if professional.license_number %}Nº col. {{ professional.license_number }}{% endif %}</p>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            {% if professional.user.role == 'admin' %}
+                                <span class="inline-flex rounded-full bg-brand-soft px-2.5 py-1 text-xs font-semibold text-brand-fg ring-1 ring-brand-line">{{ professional.user.get_role_display }}</span>
+                            {% else %}
+                                <span class="inline-flex rounded-full bg-muted-strong px-2.5 py-1 text-xs font-semibold text-content-muted">{{ professional.user.get_role_display }}</span>
+                            {% endif %}
+                        </td>
                         <td class="px-6 py-4 text-content-muted">{{ professional.get_professional_type_display }}</td>
                         <td class="px-6 py-4 text-content-muted">
                             {% for service in professional.services.all %}
@@ -46,6 +69,7 @@ administración (`can_manage`, que responde lo mismo que comprueba después
                                 Sin servicios
                             {% endfor %}
                         </td>
+                        <td class="whitespace-nowrap px-6 py-4 text-content-muted" title="{{ professional.user.date_joined|date:'d/m/Y H:i' }}">{{ professional.user.date_joined|date:"d/m/Y" }}</td>
                         {% if can_manage %}
                         <td class="px-6 py-4">
                             <a href="{% url 'appointments:professionals-edit' professional.pk %}" class="btn-outlined px-3 py-1.5 text-xs">Editar</a>
@@ -54,7 +78,7 @@ administración (`can_manage`, que responde lo mismo que comprueba después
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="{% if can_manage %}4{% else %}3{% endif %}" class="px-6 py-12 text-center text-sm text-content-subtle">No hay profesionales registrados.</td>
+                        <td colspan="{% if can_manage %}6{% else %}5{% endif %}" class="px-6 py-12 text-center text-sm text-content-subtle">No hay profesionales registrados.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

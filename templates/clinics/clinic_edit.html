@@ -83,7 +83,10 @@
                         {# Thumbnail #}
                         <div class="flex-shrink-0 h-20 w-20 rounded-2xl bg-muted-strong ring-1 ring-line overflow-hidden flex items-center justify-center">
                             <template x-if="preview">
-                                <img :src="preview" class="h-full w-full object-contain p-1" alt="Logo">
+                                {% comment %}Sin relleno: la miniatura tiene que enseñar el
+                                logo tal y como va a salir luego en el sidebar, borde
+                                incluido.{% endcomment %}
+                                <img :src="preview" class="h-full w-full object-contain" alt="Logo">
                             </template>
                             <template x-if="!preview">
                                 <svg class="h-8 w-8 text-content-faint" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">

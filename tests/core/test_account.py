@@ -396,3 +396,76 @@ def test_the_professional_list_shows_management_to_admin(client, admin_user):
 
     assert response.context['can_manage'] is True
     assert '/editar/' in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_the_professional_list_shows_role_and_join_date(client, admin_user):
+    client.force_login(admin_user)
+    html = client.get(reverse('appointments:professionals-list')).content.decode()
+
+    assert '>Rol<' in html and '>Alta<' in html
+    assert admin_user.get_role_display() in html
+    assert admin_user.date_joined.strftime('%d/%m/%Y') in html
+
+
+@pytest.mark.django_db
+def test_the_professional_list_marks_the_current_user(client, admin_user, staff_user):
+    client.force_login(admin_user)
+    html = client.get(reverse('appointments:professionals-list')).content.decode()
+
+    assert html.count('Eres tú') == 1
+
+
+@pytest.mark.django_db
+def test_profile_saves_title_bio_and_license(client, staff_user):
+    client.force_login(staff_user)
+    response = client.post(PROFILE_URL, {
+        'first_name': 'Lucía',
+        'last_name': 'Martín',
+        'professional_type': Professional.ProfessionalType.PODOLOGO,
+        'title': Professional.Title.DRA,
+        'bio': 'Pie diabético y biomecánica.',
+        'license_number': '28/1234',
+        'license_body': 'Colegio Oficial de Podólogos de Madrid',
+    })
+
+    assert response.status_code == 302
+    professional = Professional.objects.get(user=staff_user)
+    assert professional.title == Professional.Title.DRA
+    assert professional.bio == 'Pie diabético y biomecánica.'
+    assert (professional.license_number, professional.license_body) == (
+        '28/1234', 'Colegio Oficial de Podólogos de Madrid',
+    )
+    assert professional.display_name == 'Dra. Lucía Martín'
+
+
+@pytest.mark.django_db
+def test_profile_rejects_a_bio_over_500_characters(client, staff_user):
+    client.force_login(staff_user)
+    response = client.post(PROFILE_URL, {
+        'professional_type': Professional.ProfessionalType.PODOLOGO,
+        'bio': 'x' * 501,
+    })
+
+    assert response.status_code == 200
+    assert 'bio' in response.context['form'].errors
+
+
+@pytest.mark.django_db
+def test_display_name_without_title_is_just_the_name(staff_user):
+    professional = staff_user.professional_profile
+    assert professional.display_name == str(professional)
+
+
+@pytest.mark.django_db
+def test_the_professional_list_shows_title_and_license(client, admin_user):
+    professional = admin_user.professional_profile
+    professional.title = Professional.Title.DR
+    professional.license_number = '28/9999'
+    professional.save()
+
+    client.force_login(admin_user)
+    html = client.get(reverse('appointments:professionals-list')).content.decode()
+
+    assert f'Dr. {admin_user.get_full_name()}' in html
+    assert 'Nº col. 28/9999' in html

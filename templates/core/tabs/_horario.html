@@ -18,7 +18,8 @@ gestiona a cualquiera, aquí cada uno lo suyo, y el marcado no se duplica. El
         </div>
     </div>
 
-    <form method="post" action="{% url 'core:account-schedule' %}" novalidate class="space-y-6 px-4 py-7 sm:px-8">
+    <form method="post" action="{% url 'core:account-schedule' %}" novalidate class="space-y-6 px-4 py-7 sm:px-8"
+          x-data="dirtyForm({{ schedule_formset.is_bound|yesno:'true,false' }})" @input="check()" @change="check()" @click="check()">
         {% csrf_token %}
 
         {% comment %}El parcial separa cada sección con un `border-t pt-7`, que en
@@ -30,7 +31,12 @@ gestiona a cualquiera, aquí cada uno lo suyo, y el marcado no se duplica. El
         </div>
 
         <div class="flex items-center justify-end border-t border-line pt-6">
-            <button type="submit" class="btn-primary">Guardar cambios</button>
+            <button type="submit" class="btn-primary" :disabled="!dirty" :title="dirty ? null : 'No hay cambios que guardar'" {% if not schedule_formset.is_bound %}disabled{% endif %}>
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+                Guardar cambios
+            </button>
         </div>
     </form>
 </div>

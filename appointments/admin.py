@@ -22,7 +22,7 @@ class ProfessionalTimeOffInline(admin.TabularInline):
 @admin.register(Professional)
 class ProfessionalAdmin(admin.ModelAdmin):
     list_display = ('user', 'professional_type', 'clinic', 'is_active', 'accepts_online_booking')
-    search_fields = ('user__email', 'user__first_name', 'user__last_name', 'clinic__name')
+    search_fields = ('user__email', 'user__first_name', 'user__last_name', 'license_number', 'clinic__name')
     list_filter = ('clinic', 'professional_type', 'is_active', 'accepts_online_booking')
     filter_horizontal = ('services',)
     inlines = [ProfessionalScheduleInline, ProfessionalTimeOffInline]

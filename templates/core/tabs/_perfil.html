@@ -18,7 +18,7 @@ hubiera en la barra de direcciones. La ficha de OTRO profesional se edita en
 
     <form method="post" action="{% url 'core:account-profile' %}" enctype="multipart/form-data" novalidate
           class="space-y-6 px-4 py-7 sm:px-8"
-          x-data="{ preview: '{% if professional.photo %}{{ professional.photo.url }}{% endif %}' }">
+          x-data="dirtyForm({{ form.is_bound|yesno:'true,false' }})" @input="check()" @change="check()" @click="check()">
         {% csrf_token %}
 
         {% if form.non_field_errors %}
@@ -30,7 +30,8 @@ hubiera en la barra de direcciones. La ficha de OTRO profesional se edita en
         {% endif %}
 
         {# Foto de perfil #}
-        <div class="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
+        <div class="flex flex-col items-center gap-4 sm:flex-row sm:items-center"
+             x-data="{ preview: '{% if professional.photo %}{{ professional.photo.url }}{% endif %}' }">
             <template x-if="preview">
                 <img :src="preview" alt="Foto de perfil" class="h-20 w-20 flex-shrink-0 rounded-2xl object-cover ring-2 ring-brand-line">
             </template>
@@ -82,6 +83,8 @@ hubiera en la barra de direcciones. La ficha de OTRO profesional se edita en
             {% if form.professional_type.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.professional_type.errors|join:", " }}</p>{% endif %}
         </div>
 
+        {% include 'appointments/partials/_professional_identity_fields.html' %}
+
         {# Servicios #}
         <div>
             <label for="{{ form.services.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.services.label }}</label>
@@ -114,7 +117,12 @@ hubiera en la barra de direcciones. La ficha de OTRO profesional se edita en
         </div>
 
         <div class="flex items-center justify-end border-t border-line pt-6">
-            <button type="submit" class="btn-primary">Guardar cambios</button>
+            <button type="submit" class="btn-primary" :disabled="!dirty" :title="dirty ? null : 'No hay cambios que guardar'" {% if not form.is_bound %}disabled{% endif %}>
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+                Guardar cambios
+            </button>
         </div>
     </form>
 </div>

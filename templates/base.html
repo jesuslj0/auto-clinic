@@ -70,8 +70,14 @@ emite en toda página del panel, aunque no contenga ningún formulario.
                    aria-label="Inicio · {{ request.user.clinic.name|default:'Auto Clinic' }}">
                     {% if request.user.clinic.logo %}
                     {% comment %}Fondo blanco fijo, no bg-surface: los logos de clínica suelen
-                    venir en PNG transparente con tinta oscura y desaparecerían en modo oscuro.{% endcomment %}
-                    <div class="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white p-1 ring-1 ring-line">
+                    venir en PNG transparente con tinta oscura y desaparecerían en modo oscuro.
+
+                    Sin relleno: el logo llega al borde del marco. Un logo cuadrado —que es
+                    lo habitual— dejaba con `p-1` un cerco blanco alrededor que lo hacía
+                    parecer pegado encima en vez de ser el icono. `object-contain` se queda:
+                    es lo que sigue protegiendo al logo apaisado, que se ajusta sin
+                    recortarse y ahí sí apoya sobre el fondo.{% endcomment %}
+                    <div class="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white ring-1 ring-line">
                         <img src="{{ request.user.clinic.logo.url }}" alt="Logo de la clínica" class="h-full w-full object-contain">
                     </div>
                     {% else %}
@@ -142,9 +148,11 @@ emite en toda página del panel, aunque no contenga ningún formulario.
                        title="{{ request.user.clinic.name|default:'Auto Clinic' }}"
                        aria-label="Inicio · {{ request.user.clinic.name|default:'Auto Clinic' }}">
                         {% if request.user.clinic.logo %}
-                        {% comment %}Fondo blanco fijo, no bg-surface: los logos de clínica suelen
-                        venir en PNG transparente con tinta oscura y desaparecerían en modo oscuro.{% endcomment %}
-                        <div class="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white p-1 ring-1 ring-line">
+                        {% comment %}Mismo marco que el del panel móvil, y por los mismos dos
+                        motivos: fondo blanco fijo para que un PNG transparente de tinta oscura
+                        no desaparezca en modo oscuro, y sin relleno para que el logo llegue al
+                        borde en vez de flotar dentro de un cerco.{% endcomment %}
+                        <div class="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white ring-1 ring-line">
                             <img src="{{ request.user.clinic.logo.url }}" alt="Logo de la clínica" class="h-full w-full object-contain">
                         </div>
                         {% else %}
@@ -364,6 +372,33 @@ emite en toda página del panel, aunque no contenga ningún formulario.
     </div>
 
     <script>
+        // `x-data="dirtyForm(true|false)"` en un <form>: `dirty` indica si difiere
+        // de como se cargó, comparando el formulario serializado entero (cuenta
+        // también ocultos como TOTAL_FORMS o DELETE, que el JS de los formsets
+        // cambia sin emitir `input`). Si el usuario deshace el cambio, vuelve a
+        // `false`. `startDirty` es para cuando la página vuelve con errores: lo
+        // enviado aún no está guardado. Se registra aquí, y no en cada plantilla,
+        // porque las pestañas de «Mi cuenta» llegan por htmx.
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('dirtyForm', (startDirty = false) => ({
+                dirty: startDirty,
+                initial: null,
+                init() {
+                    // setTimeout y no $nextTick: los listeners delegados en
+                    // `document` (añadir/quitar filas) corren después que los del form.
+                    setTimeout(() => { this.initial = this.snapshot(); });
+                },
+                snapshot() {
+                    return [...new FormData(this.$root)]
+                        .map(([key, value]) => `${key}=${value instanceof File ? `${value.name}:${value.size}` : value}`)
+                        .join('&');
+                },
+                check() {
+                    setTimeout(() => { this.dirty = startDirty || this.snapshot() !== this.initial; });
+                },
+            }));
+        });
+
         function toastManager() {
             return {
                 toasts: [],
