@@ -12,7 +12,8 @@
     <div class="flex items-center justify-between">
         <div class="flex items-center gap-4">
             {% if clinic_obj.logo %}
-            <div class="h-16 w-16 flex-shrink-0 overflow-hidden rounded-2xl bg-surface shadow-soft ring-1 ring-line flex items-center justify-center p-1">
+            {# Sin relleno: el logo llega al borde del marco, como en el sidebar. #}
+            <div class="h-16 w-16 flex-shrink-0 overflow-hidden rounded-2xl bg-surface shadow-soft ring-1 ring-line flex items-center justify-center">
                 <img src="{{ clinic_obj.logo.url }}" alt="Logo {{ clinic_obj.name }}" class="h-full w-full object-contain">
             </div>
             {% endif %}
@@ -41,8 +42,10 @@
                 Identificación
             </h4>
             <div class="flex items-start gap-6">
-                {# Logo grande #}
-                <div class="flex-shrink-0 h-24 w-24 rounded-3xl {% if clinic_obj.logo %}bg-surface ring-1 ring-line shadow-soft{% else %}bg-muted-strong ring-1 ring-line{% endif %} flex items-center justify-center overflow-hidden p-2">
+                {% comment %}Logo grande. El relleno solo lo lleva el marco vacío, donde
+                centra el icono de «sin logo»; con logo estorba, porque lo separaría
+                del borde.{% endcomment %}
+                <div class="flex-shrink-0 h-24 w-24 rounded-3xl {% if clinic_obj.logo %}bg-surface ring-1 ring-line shadow-soft{% else %}bg-muted-strong ring-1 ring-line p-2{% endif %} flex items-center justify-center overflow-hidden">
                     {% if clinic_obj.logo %}
                     <img src="{{ clinic_obj.logo.url }}" alt="Logo {{ clinic_obj.name }}" class="h-full w-full object-contain">
                     {% else %}
