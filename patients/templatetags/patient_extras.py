@@ -8,6 +8,7 @@ estilo pinta cada una.
 from decimal import Decimal, InvalidOperation
 
 from django import template
+from django.utils import timezone
 from django.utils.formats import number_format
 
 from clinical.snapshots import is_answered
@@ -115,6 +116,29 @@ def phone_parts(value):
 # ---------------------------------------------------------------------------
 # Importes
 # ---------------------------------------------------------------------------
+
+@register.filter
+def age(date_of_birth, today=None):
+    """La edad a partir de la fecha de nacimiento: «72 años», «1 año», «8 meses».
+
+    Se calcula al pintar, nunca se guarda: una edad almacenada caduca sola. Por
+    debajo del año se da en meses, que es lo que se dice de un bebé. Sin fecha
+    (o con una futura, que sería una errata) devuelve cadena vacía y la
+    plantilla no pinta nada.
+    """
+    if not date_of_birth:
+        return ''
+    today = today or timezone.localdate()
+    months = (today.year - date_of_birth.year) * 12 + today.month - date_of_birth.month
+    if today.day < date_of_birth.day:
+        months -= 1
+    if months < 0:
+        return ''
+    if months < 12:
+        return f'{months} mes{"es" if months != 1 else ""}'
+    years = months // 12
+    return f'{years} año{"s" if years != 1 else ""}'
+
 
 @register.filter
 def euros(value):
