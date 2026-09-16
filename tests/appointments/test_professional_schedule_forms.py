@@ -213,3 +213,39 @@ class TestTimeOff:
         resp = edit_client.post(_url(prof_sin_horario), data)
         assert resp.status_code == 200
         assert ProfessionalTimeOff.objects.count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Usuario de solo lectura
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestUserIsReadOnly:
+    def test_edit_marks_user_field_as_disabled(self, edit_client, prof_sin_horario):
+        resp = edit_client.get(_url(prof_sin_horario))
+        form = resp.context['form']
+        assert form.fields['user'].disabled is True
+        assert 'no se puede cambiar' in resp.content.decode()
+
+    def test_posting_another_user_does_not_reassign_the_profile(self, edit_client, prof_sin_horario, clinic_a):
+        otro = User.objects.create_user(email='otro@alpha.test', password='x', clinic=clinic_a)
+        resp = edit_client.post(_url(prof_sin_horario), _base_post(prof_sin_horario, user=otro.pk))
+        assert resp.status_code == 302
+        prof_sin_horario.refresh_from_db()
+        assert prof_sin_horario.user_id != otro.pk
+        assert prof_sin_horario.user.email == 'nuevo@alpha.test'
+
+    def test_admin_edit_saves_license(self, edit_client, prof_sin_horario):
+        resp = edit_client.post(_url(prof_sin_horario), _base_post(
+            prof_sin_horario, title='dr', license_number='28/1234', license_body='COP Madrid',
+        ))
+        assert resp.status_code == 302
+        prof_sin_horario.refresh_from_db()
+        assert (prof_sin_horario.title, prof_sin_horario.license_number) == ('dr', '28/1234')
+
+
+def test_new_fields_stay_out_of_the_api():
+    """El serializer lo alcanza el token de n8n: colegiación y presentación no se exponen."""
+    from appointments.serializers import ProfessionalSerializer
+    fields = set(ProfessionalSerializer.Meta.fields)
+    assert not fields & {'title', 'bio', 'license_number', 'license_body'}

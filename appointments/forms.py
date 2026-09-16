@@ -12,22 +12,50 @@ from patients.models import Patient
 from services.models import Service
 
 
+# Campos de presentación y colegiación: los mismos en el edit del admin y en
+# «Mi cuenta», con el mismo marcado (`appointments/partials/_professional_identity_fields.html`).
+PROFESSIONAL_IDENTITY_FIELDS = ['title', 'bio', 'license_number', 'license_body']
+PROFESSIONAL_IDENTITY_LABELS = {
+    'title': 'Tratamiento',
+    'bio': 'Presentación',
+    'license_number': 'Nº de colegiado',
+    'license_body': 'Colegio profesional',
+}
+PROFESSIONAL_IDENTITY_HELP = {
+    'bio': 'Unas líneas sobre experiencia y enfoque. Máximo 500 caracteres.',
+    'license_body': 'Ej. Colegio Oficial de Podólogos de Madrid.',
+}
+PROFESSIONAL_IDENTITY_WIDGETS = {
+    'bio': forms.Textarea(attrs={'rows': 4, 'maxlength': 500}),
+}
+
+
 class ProfessionalForm(forms.ModelForm):
     class Meta:
         model = Professional
-        fields = ['user', 'professional_type', 'services']
+        fields = ['user', 'professional_type', *PROFESSIONAL_IDENTITY_FIELDS, 'services']
         labels = {
             'user': 'Usuario',
             'professional_type': 'Tipo de profesional',
             'services': 'Servicios que ofrece',
+            **PROFESSIONAL_IDENTITY_LABELS,
         }
+        help_texts = PROFESSIONAL_IDENTITY_HELP
         widgets = {
             'services': forms.SelectMultiple(attrs={'size': 8}),
+            **PROFESSIONAL_IDENTITY_WIDGETS,
         }
 
     def __init__(self, *args, request_user=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.request_user = request_user
+
+        # Cada usuario tiene su ficha profesional (se crea con él): reasignarla a
+        # otro usuario no tiene sentido. `disabled` hace que Django ignore lo que
+        # llegue en el POST y use siempre el valor inicial.
+        if self.instance.pk:
+            self.fields['user'].disabled = True
+            self.fields['user'].help_text = 'El usuario asociado a un profesional no se puede cambiar.'
 
         # Alcance de plataforma (todas las clínicas) solo sin usuario de contexto
         # o para un superusuario SIN clínica. Un superusuario con clínica queda
@@ -63,7 +91,7 @@ class ProfessionalProfileForm(forms.ModelForm):
     """Perfil editable por el propio profesional autenticado.
 
     Combina datos personales del User (nombre/apellidos) con los del
-    Professional (foto, tipo y servicios que ofrece).
+    Professional (foto, tipo, presentación, colegiación y servicios).
     """
 
     first_name = forms.CharField(label='Nombre', max_length=150, required=False)
@@ -72,16 +100,18 @@ class ProfessionalProfileForm(forms.ModelForm):
     class Meta:
         model = Professional
         fields = [
-            'photo', 'first_name', 'last_name', 'professional_type', 'services',
-            'accepts_online_booking',
+            'photo', 'first_name', 'last_name', 'professional_type',
+            *PROFESSIONAL_IDENTITY_FIELDS, 'services', 'accepts_online_booking',
         ]
         labels = {
             'photo': 'Foto de perfil',
             'professional_type': 'Tipo de profesional',
             'services': 'Servicios que ofrece',
             'accepts_online_booking': 'Aceptar reservas online',
+            **PROFESSIONAL_IDENTITY_LABELS,
         }
         help_texts = {
+            **PROFESSIONAL_IDENTITY_HELP,
             # Lo que este flag significa de verdad, según `es_elegible()` en
             # `appointments/services.py`: apaga la vía pública, no al profesional.
             # Para eso está `is_active`, que decide la clínica y aquí no se toca.
@@ -94,6 +124,7 @@ class ProfessionalProfileForm(forms.ModelForm):
         widgets = {
             'photo': forms.ClearableFileInput(attrs={'accept': 'image/*'}),
             'services': forms.SelectMultiple(attrs={'size': 8}),
+            **PROFESSIONAL_IDENTITY_WIDGETS,
         }
 
     def __init__(self, *args, **kwargs):

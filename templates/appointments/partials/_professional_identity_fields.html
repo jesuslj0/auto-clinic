@@ -1,0 +1,45 @@
+{% comment %}
+Tratamiento, presentación y colegiación de un profesional. Lo incluyen el edit
+del admin (`appointments/professional_form.html`) y «Mi cuenta»
+(`core/tabs/_perfil.html`); los campos salen de `PROFESSIONAL_IDENTITY_FIELDS`
+(`appointments/forms.py`). No lleva `<form>`: lo pone quien lo incluye.
+{% endcomment %}
+<div>
+    <label for="{{ form.title.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.title.label }}</label>
+    <select name="{{ form.title.html_name }}" id="{{ form.title.id_for_label }}"
+        class="block w-full rounded-xl border {% if form.title.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+        {% for value, label in form.title.field.choices %}
+        <option value="{{ value }}" {% if form.title.value|default:'' == value %}selected{% endif %}>{% if value %}{{ label }}{% else %}Sin tratamiento{% endif %}</option>
+        {% endfor %}
+    </select>
+    {% if form.title.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.title.errors|join:", " }}</p>{% endif %}
+</div>
+
+<div>
+    <label for="{{ form.bio.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.bio.label }}</label>
+    <textarea name="{{ form.bio.html_name }}" id="{{ form.bio.id_for_label }}" rows="4" maxlength="500"
+        placeholder="Ej. Podóloga especializada en pie diabético y biomecánica deportiva."
+        class="block w-full rounded-xl border {% if form.bio.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">{{ form.bio.value|default:'' }}</textarea>
+    <p class="mt-1.5 text-xs text-content-faint">{{ form.bio.help_text }}</p>
+    {% if form.bio.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.bio.errors|join:", " }}</p>{% endif %}
+</div>
+
+<fieldset class="rounded-2xl bg-muted p-4 ring-1 ring-line">
+    <legend class="sr-only">Colegiación</legend>
+    <p class="mb-3 text-sm font-medium text-content">Colegiación</p>
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div>
+            <label for="{{ form.license_number.id_for_label }}" class="mb-1.5 block text-xs font-medium text-content-subtle">{{ form.license_number.label }}</label>
+            <input type="text" name="{{ form.license_number.html_name }}" id="{{ form.license_number.id_for_label }}" value="{{ form.license_number.value|default:'' }}" maxlength="30" placeholder="Ej. 28/1234"
+                class="block w-full rounded-xl border {% if form.license_number.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+            {% if form.license_number.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.license_number.errors|join:", " }}</p>{% endif %}
+        </div>
+        <div class="sm:col-span-2">
+            <label for="{{ form.license_body.id_for_label }}" class="mb-1.5 block text-xs font-medium text-content-subtle">{{ form.license_body.label }}</label>
+            <input type="text" name="{{ form.license_body.html_name }}" id="{{ form.license_body.id_for_label }}" value="{{ form.license_body.value|default:'' }}" maxlength="120" placeholder="{{ form.license_body.help_text }}"
+                class="block w-full rounded-xl border {% if form.license_body.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+            {% if form.license_body.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.license_body.errors|join:", " }}</p>{% endif %}
+        </div>
+    </div>
+    <p class="mt-3 text-xs text-content-faint">Aparece en informes, justificantes y facturas.</p>
+</fieldset>

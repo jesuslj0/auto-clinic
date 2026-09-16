@@ -364,6 +364,33 @@ emite en toda página del panel, aunque no contenga ningún formulario.
     </div>
 
     <script>
+        // `x-data="dirtyForm(true|false)"` en un <form>: `dirty` indica si difiere
+        // de como se cargó, comparando el formulario serializado entero (cuenta
+        // también ocultos como TOTAL_FORMS o DELETE, que el JS de los formsets
+        // cambia sin emitir `input`). Si el usuario deshace el cambio, vuelve a
+        // `false`. `startDirty` es para cuando la página vuelve con errores: lo
+        // enviado aún no está guardado. Se registra aquí, y no en cada plantilla,
+        // porque las pestañas de «Mi cuenta» llegan por htmx.
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('dirtyForm', (startDirty = false) => ({
+                dirty: startDirty,
+                initial: null,
+                init() {
+                    // setTimeout y no $nextTick: los listeners delegados en
+                    // `document` (añadir/quitar filas) corren después que los del form.
+                    setTimeout(() => { this.initial = this.snapshot(); });
+                },
+                snapshot() {
+                    return [...new FormData(this.$root)]
+                        .map(([key, value]) => `${key}=${value instanceof File ? `${value.name}:${value.size}` : value}`)
+                        .join('&');
+                },
+                check() {
+                    setTimeout(() => { this.dirty = startDirty || this.snapshot() !== this.initial; });
+                },
+            }));
+        });
+
         function toastManager() {
             return {
                 toasts: [],

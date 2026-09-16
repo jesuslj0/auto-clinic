@@ -8,7 +8,17 @@
     x-data="{
         search: '',
         filter: 'all',
-        category: ''
+        category: '',
+        visible(el) {
+            const d = el.dataset;
+            return (this.filter === 'all' || (this.filter === 'active') === (d.active === 'true'))
+                && (this.search === '' || d.name.includes(this.search.toLowerCase()))
+                && (this.category === '' || d.category === this.category);
+        },
+        anyVisible(active) {
+            return [...this.$root.querySelectorAll('[data-service]')]
+                .some(el => el.dataset.active === String(active) && this.visible(el));
+        }
     }"
     class="space-y-5"
 >
@@ -53,18 +63,27 @@
                 <button
                     @click="filter = 'all'"
                     :class="filter === 'all' ? 'bg-surface shadow-sm text-content' : 'text-content-subtle hover:text-content-muted'"
-                    class="rounded-xl px-4 py-1.5 text-sm font-medium transition"
-                >Todos</button>
+                    class="inline-flex items-center rounded-xl px-3 py-1.5 text-sm font-medium transition sm:px-4"
+                >Todos<span
+                        class="ml-1.5 inline-flex min-w-[1.25rem] justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums transition"
+                        :class="filter === 'all' ? 'bg-muted-strong text-content-muted' : 'bg-line/70 text-content-subtle'"
+                    >{{ total_count }}</span></button>
                 <button
                     @click="filter = 'active'"
                     :class="filter === 'active' ? 'bg-surface shadow-sm text-success' : 'text-content-subtle hover:text-content-muted'"
-                    class="rounded-xl px-4 py-1.5 text-sm font-medium transition"
-                >Activos</button>
+                    class="inline-flex items-center rounded-xl px-3 py-1.5 text-sm font-medium transition sm:px-4"
+                >Activos<span
+                        class="ml-1.5 inline-flex min-w-[1.25rem] justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums transition"
+                        :class="filter === 'active' ? 'bg-muted-strong text-content-muted' : 'bg-line/70 text-content-subtle'"
+                    >{{ active_count }}</span></button>
                 <button
                     @click="filter = 'inactive'"
                     :class="filter === 'inactive' ? 'bg-surface shadow-sm text-content-muted' : 'text-content-subtle hover:text-content-muted'"
-                    class="rounded-xl px-4 py-1.5 text-sm font-medium transition"
-                >Inactivos</button>
+                    class="inline-flex items-center rounded-xl px-3 py-1.5 text-sm font-medium transition sm:px-4"
+                >Inactivos<span
+                        class="ml-1.5 inline-flex min-w-[1.25rem] justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums transition"
+                        :class="filter === 'inactive' ? 'bg-muted-strong text-content-muted' : 'bg-line/70 text-content-subtle'"
+                    >{{ inactive_count }}</span></button>
             </div>
         </div>
 
@@ -82,18 +101,25 @@
     {# ── Cuadrícula de servicios ── #}
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {% for service in services %}
+        {# Separador entre activos e inactivos: la vista los ordena activos primero, #}
+        {# así que el único cambio de `is_active` es donde empiezan los inactivos. #}
+        {% ifchanged service.is_active %}{% if not forloop.first %}
+        <div
+            x-show="filter === 'all' && anyVisible(true) && anyVisible(false)"
+            class="col-span-full flex items-center gap-3 pt-2"
+            role="separator"
+            aria-label="Servicios inactivos"
+        >
+            <span class="text-xs font-semibold uppercase tracking-wide text-content-subtle">Inactivos</span>
+            <span class="h-px flex-1 bg-line"></span>
+        </div>
+        {% endif %}{% endifchanged %}
         <article
             data-service
             data-name="{{ service.name|lower }}"
             data-active="{{ service.is_active|yesno:'true,false' }}"
             data-category="{{ service.category_id|default_if_none:'' }}"
-            x-show="
-                (filter === 'all' || (filter === 'active' && $el.dataset.active === 'true') || (filter === 'inactive' && $el.dataset.active === 'false'))
-                &&
-                (search === '' || $el.dataset.name.includes(search.toLowerCase()))
-                &&
-                (category === '' || $el.dataset.category === category)
-            "
+            x-show="visible($el)"
             x-transition:enter="transition ease-out duration-200"
             x-transition:enter-start="opacity-0 scale-95"
             x-transition:enter-end="opacity-100 scale-100"
@@ -114,17 +140,19 @@
                         </span>
                         {% endif %}
                     </div>
-                    {% if service.is_active %}
-                        <span class="inline-flex shrink-0 items-center gap-1 rounded-full bg-success-soft px-2.5 py-0.5 text-xs font-semibold text-success">
-                            <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                            Activo
-                        </span>
-                    {% else %}
-                        <span class="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted-strong px-2.5 py-0.5 text-xs font-semibold text-content-subtle">
-                            <span class="h-1.5 w-1.5 rounded-full bg-line-strong"></span>
-                            Inactivo
-                        </span>
-                    {% endif %}
+                    {# Estado: solo el punto; el texto aparece al pasar el ratón o enfocar. #}
+                    {# El tooltip va debajo: arriba lo cortaría el `overflow-hidden` de la tarjeta. #}
+                    <span
+                        tabindex="0"
+                        aria-label="{{ service.is_active|yesno:'Activo,Inactivo' }}"
+                        class="group/estado relative inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full focus:outline-none focus-visible:ring-2 {% if service.is_active %}bg-success-soft ring-1 ring-success-line focus-visible:ring-success{% else %}bg-muted-strong ring-1 ring-line focus-visible:ring-line-strong{% endif %}"
+                    >
+                        <span class="h-2 w-2 rounded-full {% if service.is_active %}bg-emerald-500{% else %}bg-line-strong{% endif %}" aria-hidden="true"></span>
+                        <span
+                            role="tooltip"
+                            class="pointer-events-none absolute right-0 top-full z-10 mt-1.5 whitespace-nowrap rounded-lg bg-content px-2 py-1 text-xs font-medium text-surface opacity-0 shadow-soft transition group-hover/estado:opacity-100 group-focus-visible/estado:opacity-100"
+                        >{{ service.is_active|yesno:'Activo,Inactivo' }}</span>
+                    </span>
                 </div>
 
                 {# Descripción #}
@@ -133,6 +161,39 @@
                 {% else %}
                     <p class="text-sm italic text-content-faint">Sin descripción</p>
                 {% endif %}
+
+                {# Uso: citas y procedimientos realizados. Solo icono y número; #}
+                {# el texto completo aparece al pasar el ratón o enfocar. #}
+                <div class="flex flex-wrap items-center gap-2">
+                    <span
+                        tabindex="0"
+                        aria-label="{{ service.appointments_count }} cita{{ service.appointments_count|pluralize }}"
+                        class="group/citas relative inline-flex items-center gap-1.5 rounded-full bg-info-soft text-info ring-1 ring-info-line focus-visible:ring-info px-2.5 py-0.5 text-xs font-medium focus:outline-none focus-visible:ring-2"
+                    >
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                        </svg>
+                        <span aria-hidden="true">{{ service.appointments_count }}</span>
+                        <span
+                            role="tooltip"
+                            class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-lg bg-content px-2 py-1 text-xs font-medium text-surface opacity-0 shadow-soft transition group-hover/citas:opacity-100 group-focus-visible/citas:opacity-100"
+                        >{{ service.appointments_count }} cita{{ service.appointments_count|pluralize }}</span>
+                    </span>
+                    <span
+                        tabindex="0"
+                        aria-label="{{ service.procedures_count }} procedimiento{{ service.procedures_count|pluralize }}"
+                        class="group/procs relative inline-flex items-center gap-1.5 rounded-full bg-accent-soft text-accent-fg ring-1 ring-accent-line focus-visible:ring-accent-fg px-2.5 py-0.5 text-xs font-medium focus:outline-none focus-visible:ring-2"
+                    >
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
+                        </svg>
+                        <span aria-hidden="true">{{ service.procedures_count }}</span>
+                        <span
+                            role="tooltip"
+                            class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-lg bg-content px-2 py-1 text-xs font-medium text-surface opacity-0 shadow-soft transition group-hover/procs:opacity-100 group-focus-visible/procs:opacity-100"
+                        >{{ service.procedures_count }} procedimiento{{ service.procedures_count|pluralize }}</span>
+                    </span>
+                </div>
 
                 {# Duración + precio #}
                 <div class="mt-auto flex items-center justify-between gap-3 border-t border-line pt-3">
@@ -144,9 +205,11 @@
                     </span>
                     <div class="flex items-center gap-3">
                         <span class="text-lg font-semibold text-content">{{ service.price_display }}</span>
+                        {% if can_manage %}
                         <a href="{% url 'services:edit' service.pk %}" class="btn-outlined px-3 py-1.5 text-xs">
-                            Editar
+                            Ver
                         </a>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -165,12 +228,9 @@
 
     {# Mensaje de "sin resultados" al filtrar #}
     <p
-        class="hidden py-10 text-center text-sm text-content-faint"
+        x-cloak class="py-10 text-center text-sm text-content-faint"
         x-show="
-            search !== '' &&
-            [...document.querySelectorAll('[data-service]')].every(el =>
-                !el.dataset.name.includes(search.toLowerCase())
-            )
+            search !== '' && !anyVisible(true) && !anyVisible(false)
         "
     >
         No se encontraron servicios que coincidan con "<span x-text="search" class="font-medium text-content-muted"></span>".

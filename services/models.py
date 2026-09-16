@@ -146,6 +146,21 @@ class Service(TimeStampedModel):
         return f'{self.duration_minutes} – {self.duration_max_minutes} min'
 
     # ------------------------------------------------------------------
+    # Borrado
+    # ------------------------------------------------------------------
+
+    def can_be_deleted(self):
+        """
+        Un servicio con citas no se borra: se desactiva.
+
+        `Appointment.service` es `SET_NULL`, y Django lo resuelve con un
+        `UPDATE` masivo que se salta la auditoría de las citas; además la cita
+        perdería qué servicio fue. Los procedimientos realizados no bloquean:
+        su FK no tiene restricción y el nombre y el precio están congelados.
+        """
+        return not self.appointments.exists()
+
+    # ------------------------------------------------------------------
     # Validación
     # ------------------------------------------------------------------
 
