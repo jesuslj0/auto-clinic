@@ -100,7 +100,7 @@ filtrar vuelva siempre a la primera página.
         {% for patient in patients %}
         <a href="{% url 'patients:detail' patient.id %}" class="block px-5 py-4 transition active:bg-muted">
             <div class="flex items-start justify-between gap-3">
-                <p class="min-w-0 truncate text-sm font-semibold text-content">{{ patient }}</p>
+                <p class="min-w-0 truncate text-sm font-semibold text-content">{{ patient }}{% with edad=patient.date_of_birth|age %}{% if edad %}<span class="font-normal text-content-faint"> · {{ edad }}</span>{% endif %}{% endwith %}</p>
                 <span class="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-muted-strong px-2.5 py-1 text-xs font-semibold text-content-muted" title="Citas (sin contar canceladas)">
                     <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
@@ -144,9 +144,9 @@ filtrar vuelva siempre a la primera página.
                     <tr>
                         <td class="px-6 py-4">
                             <a href="{% url 'patients:detail' patient.id %}" class="font-medium text-content hover:text-brand-fg">{{ patient }}</a>
-                            {% if patient.date_of_birth %}
-                            <p class="mt-0.5 text-xs text-content-faint">Nacimiento: {{ patient.date_of_birth|date:"j M Y" }}</p>
-                            {% endif %}
+                            {% with edad=patient.date_of_birth|age %}{% if edad %}
+                            <p class="mt-0.5 text-xs text-content-faint"><span title="Nacimiento: {{ patient.date_of_birth|date:'j M Y' }}">{{ edad }}</span></p>
+                            {% endif %}{% endwith %}
                         </td>
                         <td class="px-6 py-4">
                             {% with tel=patient.phone|phone_parts %}

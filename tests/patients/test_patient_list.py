@@ -1,5 +1,5 @@
 """Directorio de pacientes: búsqueda, orden, filtros calculados y paginación."""
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 from django.urls import reverse
@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from appointments.models import Appointment
 from patients.models import Patient
+from patients.templatetags.patient_extras import age
 
 
 def _patient(clinic, first, last, *, days_ago=0):
@@ -104,3 +105,16 @@ class TestPatientList:
     def test_other_clinic_patients_are_not_listed(self, listing, clinic_a, patient_b):
         _patient(clinic_a, 'Mia', 'Clinica')
         assert _names(listing()) == ['Mia Clinica']
+
+
+@pytest.mark.parametrize('born, expected', [
+    (date(1951, 3, 14), '75 años'),   # ya cumplidos este año
+    (date(1951, 9, 18), '74 años'),   # los cumple mañana
+    (date(2025, 9, 17), '1 año'),
+    (date(2026, 1, 17), '8 meses'),
+    (date(2026, 8, 20), '0 meses'),
+    (date(2027, 1, 1), ''),           # fecha futura: errata, no se pinta
+    (None, ''),
+])
+def test_age_filter(born, expected):
+    assert age(born, today=date(2026, 9, 17)) == expected
