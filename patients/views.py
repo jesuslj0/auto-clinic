@@ -1,14 +1,16 @@
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.db.models import Case, Count, IntegerField, Prefetch, Q, Sum, When
+from django.db.models import Case, Count, F, IntegerField, Max, Min, Prefetch, Q, Sum, When
 from django.shortcuts import get_object_or_404, redirect
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from rest_framework import viewsets
 from django.urls import reverse, reverse_lazy
+from django.utils import timezone
 
 from appointments.models import Appointment
 from audit.mixins import AccessLogMixin, AuditedViewSetMixin
@@ -62,29 +64,135 @@ class PatientViewSet(
 
 
 class PatientListView(AccessLogMixin, LoginRequiredMixin, ListView):
+    """Directorio de pacientes: búsqueda, orden y tres filtros calculados.
+
+    Nada de esto necesita campos nuevos: el alta es `created_at` y lo demás se
+    deduce de las citas con agregaciones en la misma consulta. Las tres
+    agregaciones cuelgan del MISMO JOIN a `appointments`, así que no se
+    multiplican entre sí.
+
+    - **Próxima cita**: la primera futura que sigue en pie (pendiente o
+      confirmada). Una cancelada o reagendada no trae al paciente de vuelta.
+    - **Última visita**: la última cita pasada completada o confirmada. La
+      confirmada cuenta porque no todo el mundo marca «completada» al terminar;
+      pendientes, canceladas, reagendadas y ausencias no son una visita.
+    - **Inactivo desde hace N meses**: última visita anterior al corte, o ninguna
+      visita y alta anterior al corte — si no, un paciente dado de alta ayer
+      saldría como «perdido».
+
+    Los parámetros desconocidos se ignoran en vez de dar error: es una URL que
+    se teclea y se comparte.
+    """
+
     model = Patient
     template_name = 'patients/list.html'
     context_object_name = 'patients'
+    paginate_by = 20
+
+    SORT_OPTIONS = {
+        'recientes': ('Alta más reciente', ['-created_at']),
+        'antiguos': ('Alta más antigua', ['created_at']),
+        'apellidos': ('Apellidos A–Z', ['last_name', 'first_name']),
+        'ultima_visita': ('Última visita', [F('last_visit').desc(nulls_last=True), 'last_name']),
+    }
+    DEFAULT_SORT = 'recientes'
+    APPOINTMENT_OPTIONS = {'proxima': 'Con próxima cita', 'sin': 'Sin cita futura'}
+    INACTIVE_OPTIONS = {'3': 'Más de 3 meses', '6': 'Más de 6 meses', '12': 'Más de 12 meses'}
+    JOINED_OPTIONS = {'30d': 'Últimos 30 días', 'mes': 'Este mes', 'anio': 'Este año'}
+
+    def read_filters(self):
+        get = self.request.GET
+        sort = get.get('orden', '')
+        return {
+            'q': get.get('q', '').strip(),
+            'orden': sort if sort in self.SORT_OPTIONS else self.DEFAULT_SORT,
+            'cita': get.get('cita', '') if get.get('cita') in self.APPOINTMENT_OPTIONS else '',
+            'inactivo': get.get('inactivo', '') if get.get('inactivo') in self.INACTIVE_OPTIONS else '',
+            'alta': get.get('alta', '') if get.get('alta') in self.JOINED_OPTIONS else '',
+        }
+
+    def get_queryset(self):
+        self.filters = filters = self.read_filters()
+        user = self.request.user
+        now = timezone.now()
+        Status = Appointment.Status
+
+        queryset = Patient.objects.annotate(
+            appointment_count=Count(
+                'appointments', filter=~Q(appointments__status=Status.CANCELLED),
+            ),
+            next_appointment=Min(
+                'appointments__scheduled_at',
+                filter=Q(
+                    appointments__scheduled_at__gte=now,
+                    appointments__status__in=[Status.PENDING, Status.CONFIRMED],
+                ),
+            ),
+            last_visit=Max(
+                'appointments__scheduled_at',
+                filter=Q(
+                    appointments__scheduled_at__lt=now,
+                    appointments__status__in=[Status.COMPLETED, Status.CONFIRMED],
+                ),
+            ),
+        )
+        if user.clinic_id:
+            queryset = queryset.filter(clinic=user.clinic)
+
+        # Cada palabra tiene que aparecer en algún campo: así «Ana López»
+        # encuentra a quien tiene «Ana» de nombre y «López» de apellido.
+        for word in filters['q'].split():
+            queryset = queryset.filter(
+                Q(first_name__icontains=word)
+                | Q(last_name__icontains=word)
+                | Q(email__icontains=word)
+                | Q(phone__icontains=word)
+            )
+
+        if filters['cita'] == 'proxima':
+            queryset = queryset.filter(next_appointment__isnull=False)
+        elif filters['cita'] == 'sin':
+            queryset = queryset.filter(next_appointment__isnull=True)
+
+        if filters['inactivo']:
+            cutoff = now - timedelta(days=round(int(filters['inactivo']) * 30.44))
+            queryset = queryset.filter(
+                Q(last_visit__lt=cutoff) | Q(last_visit__isnull=True, created_at__lt=cutoff)
+            )
+
+        if filters['alta']:
+            today = timezone.localdate()
+            since = {
+                '30d': now - timedelta(days=30),
+                'mes': today.replace(day=1),
+                'anio': today.replace(month=1, day=1),
+            }[filters['alta']]
+            if not isinstance(since, datetime):
+                since = timezone.make_aware(datetime.combine(since, time.min))
+            queryset = queryset.filter(created_at__gte=since)
+
+        return queryset.order_by(*self.SORT_OPTIONS[filters['orden']][1])
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['section'] = 'patients'
+        filters = self.filters
+        # Base de los enlaces de paginación: los filtros ya validados, sin
+        # `page` y sin valores vacíos ni el orden por defecto.
+        params = {
+            key: value for key, value in filters.items()
+            if value and not (key == 'orden' and value == self.DEFAULT_SORT)
+        }
+        context.update({
+            'section': 'patients',
+            'filters': filters,
+            'has_filters': any(filters[key] for key in ('q', 'cita', 'inactivo', 'alta')),
+            'sort_options': [(key, label) for key, (label, _) in self.SORT_OPTIONS.items()],
+            'appointment_options': self.APPOINTMENT_OPTIONS.items(),
+            'inactive_options': self.INACTIVE_OPTIONS.items(),
+            'joined_options': self.JOINED_OPTIONS.items(),
+            'query_base': urlencode(params),
+        })
         return context
-
-    def get_queryset(self):
-        query = self.request.GET.get('q', '').strip()
-        user = self.request.user
-        queryset = Patient.objects.annotate(appointment_count=Count('appointments')).prefetch_related('appointments')
-        if user.clinic_id:
-            queryset = queryset.filter(clinic=user.clinic)
-        if query:
-            queryset = queryset.filter(
-                Q(first_name__icontains=query)
-                | Q(last_name__icontains=query)
-                | Q(email__icontains=query)
-                | Q(phone__icontains=query)
-            )
-        return queryset
 
 
 # ---------------------------------------------------------------------------
