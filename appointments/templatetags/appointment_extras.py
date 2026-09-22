@@ -1,3 +1,5 @@
+from urllib.parse import urlencode
+
 from django import template
 from django.utils import timezone
 from django.utils.html import format_html
@@ -107,3 +109,28 @@ def duration_minutes(appointment):
         return max(int(delta.total_seconds() // 60), 5)
     except Exception:
         return 30
+
+
+@register.simple_tag(takes_context=True)
+def appointment_query(context, **overrides):
+    """Query string del listado de citas, con los cambios que se le pasen.
+
+    Uso: `{% appointment_query page=3 %}`, `{% appointment_query status='pending' %}`.
+
+    Parte de `appointment_query_base` —los filtros YA normalizados por
+    `AppointmentFilters`— y no de `request.GET`, para no arrastrar de enlace en
+    enlace parámetros inventados o repetidos que vinieran en la dirección
+    original. Es el motivo de que ordenar o pasar de página no pierda los filtros.
+
+    Un `override` vacío quita el parámetro (así `{% appointment_query page='' %}`
+    vuelve a la primera página). Ojo: eso vale para lo que se pasa AQUÍ; los
+    pares vacíos que ya trae la base se conservan, porque en este listado
+    `desde=` o `profesional=` vacíos significan «todas» y no «sin filtro».
+    """
+    params = dict(context.get('appointment_query_base') or {})
+    for key, value in overrides.items():
+        if value in (None, ''):
+            params.pop(key, None)
+        else:
+            params[key] = value
+    return urlencode(params)

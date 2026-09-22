@@ -581,6 +581,38 @@ documento tiene que poder leerse tal y como se emitió.
 - Esta capa **no factura**: registra lo que se hizo y por cuánto. Emitir la
   factura es otra cosa y vive fuera.
 
+### Cómo se dan de alta
+
+El alta va **siempre** por `clinical.procedures.record_procedure()`, que resuelve
+el episodio y la visita y guarda el procedimiento en una transacción. Hay dos
+puertas en el panel, y las dos comparten ese servicio y
+`PerformedProcedureForm`, para que la regla de «qué visita es esta» se decida en
+un solo sitio:
+
+| Puerta | URL | Qué aporta |
+|---|---|---|
+| **Desde la cita** (la normal) | `appointments:procedure-create` | La visita queda enganchada a la cita (`Visit.appointment`), con su profesional y su fecha. Es lo que hace que el listado de citas pueda filtrar «con / sin procedimiento». |
+| **Desde la ficha** | `patients:procedure-create` | Para lo que no sale de la agenda: urgencia, paciente sin cita, algo que se apunta días después. La visita nace sin cita. |
+
+Dos reglas que sostienen el resto:
+
+- **Un encuentro es un encuentro.** Desde una cita se reutiliza su visita si ya
+  existe; desde la ficha, la visita *suelta* de ese episodio en esa fecha. Sin
+  esto, anotar tres procedimientos del mismo día por separado dejaría tres
+  visitas donde hubo una. La puerta de la ficha nunca se cuelga de la visita de
+  una cita: haría que esa cita figurase atendida sin que nadie la haya cerrado.
+- **Con precio variable, el importe se pide siempre.** `_freeze_from_catalog()`
+  congela `service.price` cuando no le dan importe, y en un servicio de rango
+  («145 – 200 €») o de mínimo («Desde 40 €») eso es el **suelo**. Como un importe
+  congelado no se corrige, dejarlo pasar es facturar de menos para siempre. Lo
+  impone el formulario, no la plantilla: el aviso del navegador sale de la misma
+  lista (`variable_price_service_ids`) que decide la validación.
+
+Ninguna de las dos puertas es un endpoint: son formularios de sesión con CSRF,
+como el resto de la capa, para que el `Api-Key` del agente no llegue hasta aquí.
+La escritura queda en el `ChangeLog` por señales y la lectura de las dos
+pantallas, por `AccessLogMixin`.
+
 ## Datos de ejemplo (solo desarrollo)
 
 ```bash

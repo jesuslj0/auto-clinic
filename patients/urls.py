@@ -17,6 +17,7 @@ from patients.views import (
     PatientLesionResolveView,
     PatientLesionsTabView,
     PatientListView,
+    PatientProcedureCreateView,
     PatientProceduresTabView,
 )
 
@@ -83,5 +84,12 @@ urlpatterns = [
     ),
     path('<int:id>/consentimientos/', PatientConsentsTabView.as_view(), name='tab-consents'),
     path('<int:id>/procedimientos/', PatientProceduresTabView.as_view(), name='tab-procedures'),
+    # Alta sin cita de por medio: urgencia, paciente sin avisar o algo que
+    # se apunta después. La puerta normal es `appointments:procedure-create`.
+    path(
+        '<int:id>/procedimientos/nuevo/',
+        PatientProcedureCreateView.as_view(),
+        name='procedure-create',
+    ),
     path('<int:id>/editar/', PatientEditView.as_view(), name='edit'),
 ]

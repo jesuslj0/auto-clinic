@@ -19,6 +19,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from appointments.forms import ProfessionalProfileForm, build_schedule_formsets
+from appointments.filters import month_bounds
 from appointments.models import Appointment, AppointmentStatusHistory
 from appointments.services import AppointmentDomainError, cancel_appointment, confirm_by_clinic
 from audit.mixins import log_access
@@ -600,8 +601,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         today_completed_pct = round(today_completed / today_count * 100) if today_count else 0
         professional = getattr(user, 'professional_profile', None)
 
-        # Inicio del mes actual para métricas mensuales
-        month_start = today.replace(day=1)
+        # Mes actual, completo, para las métricas mensuales.
+        month_start, month_end = month_bounds(today)
 
         # Nuevos pacientes registrados este mes (scopeados por clínica)
         patients_qs = Patient.objects.all()
@@ -613,14 +614,23 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         # descuido: una cita que espera confirmación importa sea de cuando sea
         # —es trabajo por hacer—, mientras que un recuento de canceladas sin
         # fecha solo crece y no dice nada del momento actual.
+        #
+        # El mes se cierra por los DOS extremos. Con solo el `gte`, una cita del
+        # mes que viene ya cancelada entraba en el recuento de este, y la tarjeta
+        # dejaba de coincidir con la lista a la que lleva. El eje es
+        # `scheduled_at` (para cuándo era la cita) porque no hay fecha de
+        # cancelación en el modelo; el texto de la tarjeta lo dice así.
         cancelled_month = appointments.filter(
             status=Appointment.Status.CANCELLED,
             scheduled_at__date__gte=month_start,
+            scheduled_at__date__lte=month_end,
         ).count()
 
         context.update(
             {
                 'today': today,
+                'month_start': month_start,
+                'month_end': month_end,
                 'today_schedule': today_schedule,
                 'today_appointments': today_count,
                 'today_completed': today_completed,
@@ -759,11 +769,47 @@ class DashboardAppointmentActionView(LoginRequiredMixin, View):
         return redirect('core:dashboard')
 
 class DashboardAppointmentManageView(LoginRequiredMixin, TemplateView):
+    """Detalle y gestión de una cita.
+
+    **Esta pantalla no enseña historia clínica, y por eso no lleva `AccessLog`.**
+    De los procedimientos de la cita solo sale CUÁNTOS hay: ni qué se hizo, ni
+    por cuánto, ni sobre qué zona. Un recuento dice que la cita acabó en algo
+    —que es información de agenda, la misma que ya distingue el listado entre
+    «con» y «sin» procedimiento—, no qué le pasa al paciente.
+
+    Para ver el contenido hay un enlace a la pestaña de la ficha
+    (`patients:tab-procedures`), que sí es una lectura de historia clínica y sí
+    la registra. La frontera está ahí a propósito: se cruza con un clic
+    deliberado, y ese clic queda anotado.
+
+    Si algún día esta pantalla pasa a enseñar el nombre, el importe o la zona de
+    un procedimiento, tiene que instrumentar `AccessLog` (ver `audit/README.md`).
+    """
+
     template_name = 'dashboard/appointment_manage.html'
+
+    def count_procedures(self, appointment):
+        """Cuántos procedimientos se registraron en esta cita. Solo el número.
+
+        `PerformedProcedure.objects` ya excluye los dados de baja, pero el salto
+        a `visit` es un JOIN y ese NO pasa por el manager de `Visit`: sin el
+        `deleted_at` explícito, una visita borrada seguiría contando los suyos.
+        """
+        from clinical.models import PerformedProcedure
+
+        if not appointment.patient_id:
+            return 0
+        return (
+            PerformedProcedure.objects
+            .filter(visit__appointment=appointment, visit__deleted_at__isnull=True)
+            .count()
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['appointment'] = self._get_scoped_appointment()
+        appointment = self._get_scoped_appointment()
+        context['appointment'] = appointment
+        context['procedure_count'] = self.count_procedures(appointment)
         context['section'] = 'dashboard'
         return context
 

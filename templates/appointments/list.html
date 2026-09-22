@@ -16,25 +16,48 @@
 {% block content %}
 <section class="space-y-6">
     <form method="get" class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line">
-        <input type="hidden" name="sort" value="{{ sort_dir }}">
-        <div class="grid gap-4 md:grid-cols-3">
+        <input type="hidden" name="sort" value="{{ filters.sort }}">
+        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <label class="block">
-                <span class="mb-2 block text-sm font-medium text-content-muted">Fecha</span>
-                <input type="date" name="date" value="{{ selected_date }}" class="block w-full rounded-2xl border-line text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
+                <span class="mb-2 block text-sm font-medium text-content-muted">Desde</span>
+                <input type="date" name="desde" value="{{ filters.date_from|date:'Y-m-d' }}" class="block w-full rounded-2xl border-line text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
+            </label>
+            <label class="block">
+                <span class="mb-2 block text-sm font-medium text-content-muted">Hasta</span>
+                <input type="date" name="hasta" value="{{ filters.date_to|date:'Y-m-d' }}" class="block w-full rounded-2xl border-line text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
+            </label>
+            <label class="block">
+                <span class="mb-2 block text-sm font-medium text-content-muted">Asignado a</span>
+                <select name="profesional" class="block w-full rounded-2xl border-line text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
+                    <option value="">Todos los profesionales</option>
+                    {% for professional in professionals %}
+                        <option value="{{ professional.pk }}" {% if filters.professional == professional.pk %}selected{% endif %}>{{ professional.display_name }}</option>
+                    {% endfor %}
+                </select>
             </label>
             <label class="block">
                 <span class="mb-2 block text-sm font-medium text-content-muted">Estado</span>
                 <select name="status" class="block w-full rounded-2xl border-line text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
                     <option value="">Todos los estados</option>
                     {% for value, label in status_choices %}
-                        <option value="{{ value }}" {% if request.GET.status == value or selected_status == value %}selected{% endif %}>{{ label }}</option>
+                        <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </label>
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-end md:col-span-1">
-                <button type="submit" class="btn-primary w-full sm:w-auto">Aplicar filtros</button>
-                <a href="{% url 'appointments:list' %}" class="btn-secondary w-full justify-center sm:w-auto">Restablecer</a>
-            </div>
+            <label class="block">
+                <span class="mb-2 block text-sm font-medium text-content-muted">Procedimiento</span>
+                <select name="procedimiento" class="block w-full rounded-2xl border-line text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
+                    <option value="">Con y sin</option>
+                    {% for value, label in procedure_choices %}
+                        <option value="{{ value }}" {% if filters.procedure == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+        </div>
+        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <button type="submit" class="btn-primary w-full sm:w-auto">Aplicar filtros</button>
+            <a href="{% url 'appointments:list' %}" class="btn-secondary w-full justify-center sm:w-auto">Restablecer</a>
+            <p class="text-xs text-content-subtle sm:ml-auto">Por defecto se muestran tus citas del mes en curso.</p>
         </div>
     </form>
 
@@ -51,6 +74,7 @@
                     </span>
                 </div>
                 <p class="mt-1 text-sm text-content-muted">{{ appointment.service }}</p>
+                {% if appointment.has_procedure %}<p class="mt-1.5"><span class="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success" title="Tiene un procedimiento registrado"><svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>Procedimiento</span></p>{% endif %}
                 <div class="mt-2 flex items-center gap-2 text-xs text-content-subtle">
                     <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
@@ -74,11 +98,11 @@
                         <th class="px-6 py-4 font-semibold">Paciente</th>
                         <th class="px-6 py-4 font-semibold">Servicio</th>
                         <th class="px-6 py-4 font-semibold">
-                            <a href="?date={{ selected_date }}&status={{ selected_status }}&sort={% if sort_dir == 'asc' %}desc{% else %}asc{% endif %}"
+                            <a href="?{{ sort_query }}"
                                title="Ordenar por fecha y hora"
                                class="inline-flex items-center gap-1 transition hover:text-content-muted">
                                 Fecha y hora
-                                <svg class="h-3.5 w-3.5 flex-shrink-0 {% if sort_dir == 'desc' %}rotate-180{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <svg class="h-3.5 w-3.5 flex-shrink-0 {% if filters.sort == 'desc' %}rotate-180{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
                                 </svg>
                             </a>
@@ -101,10 +125,13 @@
                             {{ appointment.patient_name|default:"Sin ficha" }}
                             {% endif %}
                         </td>
-                        <td class="px-6 py-4 text-content-muted">{{ appointment.service }}</td>
+                        <td class="px-6 py-4 text-content-muted">
+                            {{ appointment.service }}
+                            {% if appointment.has_procedure %}<span class="mt-1.5 block"><span class="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success" title="Tiene un procedimiento registrado"><svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>Procedimiento</span></span>{% endif %}
+                        </td>
                         <td class="px-6 py-4 text-content-muted">{{ appointment.scheduled_at|date:"j M Y" }}<br><span class="text-xs text-content-subtle">{{ appointment.scheduled_at|date:"g:i A" }} – {{ appointment.end_at|date:"g:i A" }}</span></td>
                         <td class="px-6 py-4">
-                            <a href="?status={{ appointment.status }}&date={{ selected_date }}&sort={{ sort_dir }}"
+                            <a href="?{% appointment_query status=appointment.status page='' %}"
                                title="Filtrar por este estado"
                                class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition hover:opacity-75 {{ appointment.status|status_badge }}">
                                 {{ appointment.status|status_icon:"h-3.5 w-3.5" }}
@@ -139,7 +166,7 @@
         </p>
         <div class="flex flex-wrap items-center justify-center gap-1">
             {% if page_obj.has_previous %}
-                <a href="?page={{ page_obj.previous_page_number }}&date={{ selected_date }}&status={{ selected_status }}&sort={{ sort_dir }}"
+                <a href="?{% appointment_query page=page_obj.previous_page_number %}"
                    class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line text-content-muted transition hover:bg-muted">
                     <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
@@ -157,7 +184,7 @@
                 {% if num == page_obj.number %}
                     <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-sm font-semibold text-white">{{ num }}</span>
                 {% elif num == 1 or num == paginator.num_pages or num >= page_obj.number|add:"-2" and num <= page_obj.number|add:"2" %}
-                    <a href="?page={{ num }}&date={{ selected_date }}&status={{ selected_status }}&sort={{ sort_dir }}"
+                    <a href="?{% appointment_query page=num %}"
                        class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line text-sm font-medium text-content-muted transition hover:bg-muted">{{ num }}</a>
                 {% elif num == page_obj.number|add:"-3" or num == page_obj.number|add:"3" %}
                     <span class="inline-flex h-9 w-9 items-center justify-center text-sm text-content-faint">…</span>
@@ -165,7 +192,7 @@
             {% endfor %}
 
             {% if page_obj.has_next %}
-                <a href="?page={{ page_obj.next_page_number }}&date={{ selected_date }}&status={{ selected_status }}&sort={{ sort_dir }}"
+                <a href="?{% appointment_query page=page_obj.next_page_number %}"
                    class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line text-content-muted transition hover:bg-muted">
                     <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />

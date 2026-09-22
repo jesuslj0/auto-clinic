@@ -40,7 +40,14 @@ from django.core.exceptions import NON_FIELD_ERRORS
 from django.utils import timezone
 
 from clinical.files import ALLOWED_IMAGE_TYPES, validate_clinical_image
-from clinical.models import Episode, Lesion, LesionObservation, Question, Visit
+from clinical.models import (
+    Episode,
+    Lesion,
+    LesionObservation,
+    PerformedProcedure,
+    Question,
+    Visit,
+)
 
 #: Prefijo del nombre de cada campo de pregunta: `q_<id de la pregunta>`.
 QUESTION_FIELD_PREFIX = 'q_'
@@ -786,3 +793,152 @@ class LesionResolveForm(ErrorHighlightMixin, forms.Form):
                 f'({self.lesion.detected_at:%d/%m/%Y}).'
             )
         return resolved_at
+
+
+class ServiceChoiceField(forms.ModelChoiceField):
+    """Selector de servicio del catálogo, etiquetado con su precio.
+
+    La etiqueta lleva `price_display` y no `price`: con precio variable, `price`
+    es solo el mínimo del rango, y enseñarlo a secas haría creer que «Plantilla
+    personalizada» cuesta 145 € cuando la ficha dice «145 – 200 €».
+    """
+
+    def label_from_instance(self, obj):
+        return f'{obj.name} · {obj.price_display}'
+
+
+class PerformedProcedureForm(ErrorHighlightMixin, EpisodeSelectionMixin, forms.ModelForm):
+    """Registrar lo que se le ha hecho al paciente, con su importe congelado.
+
+    Lo comparten las dos puertas de entrada —desde la cita y desde la ficha—,
+    porque lo que se registra es lo mismo y las reglas también. Lo único que
+    cambia es quién resuelve la visita, y eso es cosa de `clinical.procedures`.
+
+    Cuatro decisiones:
+
+    1. **Con precio variable, el importe se pide SIEMPRE.**
+       `PerformedProcedure._freeze_from_catalog()` respeta el importe que se le
+       dé y, si no se le da ninguno, congela `service.price` — que en un servicio
+       de rango («145 – 200 €») o de mínimo («Desde 40 €») es el **suelo**. Dejar
+       ese campo en blanco congelaría de más y de menos a la vez: de menos en la
+       factura, y para siempre, porque un importe ya congelado no se corrige — se
+       da de baja el procedimiento y se registra otro. Así que si el servicio
+       elegido tiene precio variable y no viene importe, es un error de campo.
+       Con precio fijo se acepta vacío y lo copia el catálogo.
+
+    2. **El servicio se valida contra el catálogo de la clínica DEL PACIENTE.**
+       El modelo lo comprueba (`_validate_clinic`), pero eso sería una excepción;
+       aquí el `queryset` ya está acotado, así que colar por POST el servicio de
+       otro inquilino es un error de validación y no llega al modelo.
+
+    3. **La fecha se pide como día y la hora la pone la vista.** `performed_at`
+       es un instante y aquí solo se teclea el día; combinarlos es
+       responsabilidad de `moment()`, por lo mismo que en
+       `LesionObservationForm`: fechar a las 00:00 un registro retrospectivo lo
+       colocaría antes que todo lo demás de ese día en la ficha.
+
+    4. **La zona tratada es un código, nunca texto libre**, igual que en la
+       lesión: sobrevive a un rediseño del mapa y se puede agrupar.
+    """
+
+    episode_help_text = 'El procedimiento queda colgado del proceso asistencial al que pertenece.'
+
+    service = ServiceChoiceField(
+        label='Servicio realizado',
+        queryset=None,   # lo acota `__init__` al catálogo de la clínica
+        empty_label='Selecciona el servicio…',
+        widget=forms.Select(attrs={'class': FIELD_CLASS, 'x-model': 'servicio'}),
+        help_text='Del catálogo de la clínica. Su nombre y su importe se congelan al guardar.',
+    )
+    performed_on = forms.DateField(
+        label='Fecha',
+        widget=forms.DateInput(attrs={'type': 'date', 'class': FIELD_CLASS}, format='%Y-%m-%d'),
+    )
+
+    class Meta:
+        model = PerformedProcedure
+        fields = ('service', 'frozen_price', 'laterality', 'affected_zone')
+        labels = {
+            'frozen_price': 'Importe cobrado (€)',
+            'laterality': 'Pie',
+            'affected_zone': 'Zona tratada',
+        }
+
+    def __init__(self, *args, patient, professional=None, episode=None, **kwargs):
+        """`episode` fijo salta la elección: es el caso de la cita que ya tiene visita."""
+        super().__init__(*args, **kwargs)
+        from services.models import Service
+
+        self.patient = patient
+        self.professional = professional
+        #: Episodio ya resuelto (la visita de la cita trae el suyo). Cuando llega,
+        #: no se pregunta: elegir otro colgaría el procedimiento de un proceso
+        #: distinto al de la visita en la que se hizo.
+        self.fixed_episode = episode
+
+        services = Service.objects.filter(clinic_id=patient.clinic_id, is_active=True)
+        self.fields['service'].queryset = services
+        #: Qué servicios exigen importe, para que la plantilla lo pida sin
+        #: esperar al POST. Las claves son cadenas: es lo que vale un `<option>`.
+        self.variable_price_service_ids = [
+            str(service.pk) for service in services if service.has_variable_price
+        ]
+
+        self.fields['frozen_price'].required = False
+        self.fields['frozen_price'].widget.attrs.update({
+            'class': FIELD_CLASS, 'step': '0.01', 'min': '0', 'inputmode': 'decimal',
+            'placeholder': '0,00',
+        })
+        self.fields['frozen_price'].help_text = (
+            'Obligatorio cuando el servicio tiene precio variable: se cobra por lo '
+            'que se ha hecho, no por el mínimo de la ficha. Con precio fijo se puede '
+            'dejar vacío y se copia del catálogo.'
+        )
+        for name in ('laterality', 'affected_zone'):
+            self.fields[name].widget.attrs['class'] = FIELD_CLASS
+
+        if self.fixed_episode is None:
+            self.build_episode_fields(patient)
+
+        if not self.is_bound:
+            self.fields['performed_on'].initial = timezone.localdate()
+
+    # -- validación ---------------------------------------------------------
+
+    def clean_performed_on(self):
+        performed_on = self.cleaned_data.get('performed_on')
+        if performed_on and performed_on > timezone.localdate():
+            raise forms.ValidationError('Un procedimiento no se puede fechar en el futuro.')
+        return performed_on
+
+    def clean(self):
+        cleaned = super().clean()
+        if self.fixed_episode is None:
+            self.validate_episode_choice(cleaned)
+
+        service = cleaned.get('service')
+        if service is not None and service.has_variable_price and cleaned.get('frozen_price') is None:
+            self.add_error(
+                'frozen_price',
+                f'«{service.name}» tiene precio variable ({service.price_display}): indica '
+                'el importe que se ha cobrado. Se congela y después no se puede corregir.',
+            )
+        return cleaned
+
+    # -- salida -------------------------------------------------------------
+
+    def moment(self):
+        """Cuándo ocurrió, como instante: el día tecleado y la hora de ahora."""
+        from datetime import datetime
+
+        performed_on = self.cleaned_data['performed_on']
+        now = timezone.localtime()
+        if performed_on == now.date():
+            return now
+        return timezone.make_aware(datetime.combine(performed_on, now.time()), now.tzinfo)
+
+    @property
+    def needs_price_now(self):
+        """¿El servicio ya elegido exige importe? Para repintar con el error puesto."""
+        value = self.data.get(self.add_prefix('service')) if self.is_bound else None
+        return str(value) in self.variable_price_service_ids if value else False

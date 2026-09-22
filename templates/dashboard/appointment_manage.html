@@ -143,6 +143,65 @@
             {% endif %}
         </div>
         {% endif %}
+
+        {% comment %}Procedimientos de esta cita: solo CUÁNTOS hay.
+
+        Esta pantalla no enseña historia clínica a propósito, y por eso no
+        registra un `AccessLog`. Un recuento dice que la cita acabó en algo
+        —información de agenda, la misma que distingue el listado entre «con» y
+        «sin» procedimiento—, no qué se le hizo al paciente ni por cuánto.
+
+        El contenido está a un clic, en la pestaña de la ficha, que sí es una
+        lectura clínica y sí queda registrada. La frontera está ahí para que
+        cruzarla sea deliberado. Si algún día se pinta aquí el nombre, el importe
+        o la zona de un procedimiento, esta vista tiene que instrumentar
+        `AccessLog`.
+
+        El botón de alta se ofrece mientras la cita no esté cancelada y tenga
+        ficha de paciente (la historia clínica cuelga de ella). Una cita se
+        atiende antes de marcarse completada, y también se puede anotar después,
+        así que el alta no espera al estado.
+        {% endcomment %}
+        {% if appointment.patient_id %}
+        <div class="mt-5 flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <p class="text-sm font-semibold text-content">
+                    Procedimientos
+                    {% if procedure_count %}
+                    <span class="ml-1.5 inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-brand-soft px-2 py-0.5 text-xs font-semibold text-brand-fg ring-1 ring-brand-line">{{ procedure_count }}</span>
+                    {% endif %}
+                </p>
+                <p class="mt-0.5 text-sm text-content-subtle">
+                    {% if procedure_count %}
+                    Se registr{{ procedure_count|pluralize:"ó,aron" }} {{ procedure_count }} procedimiento{{ procedure_count|pluralize }} en esta cita.
+                    {% else %}
+                    Todavía no se ha registrado ninguno en esta cita.
+                    {% endif %}
+                </p>
+            </div>
+            <div class="flex flex-shrink-0 flex-wrap items-center gap-3 max-sm:w-full">
+                {% if procedure_count %}
+                <a href="{% url 'patients:tab-procedures' appointment.patient_id %}"
+                   class="btn-secondary max-sm:w-full max-sm:justify-center"
+                   title="Ver los procedimientos en la ficha del paciente">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Ver procedimientos
+                </a>
+                {% endif %}
+                {% if appointment.status != 'cancelled' %}
+                <a href="{% url 'appointments:procedure-create' appointment.id %}" class="btn-secondary max-sm:w-full max-sm:justify-center">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    Registrar procedimiento
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </article>
 
     <!-- Forms ocultos que se envían desde los modales -->

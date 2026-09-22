@@ -6,8 +6,9 @@ from zoneinfo import ZoneInfo
 import django_filters
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
@@ -17,6 +18,11 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from appointments.filters import (
+    PROCEDURE_CHOICES,
+    AppointmentFilters,
+    annotate_procedures,
+)
 from appointments.forms import (
     AppointmentForm,
     ProfessionalForm,
@@ -33,7 +39,9 @@ from appointments.services import (
     register_patient_confirmation,
 )
 from appointments.serializers import AppointmentSerializer, ProfessionalScheduleSerializer, ProfessionalSerializer
-from audit.mixins import log_access
+from clinical.forms import PerformedProcedureForm
+from clinical.procedures import record_procedure
+from audit.mixins import AccessLogMixin, log_access
 from audit.models import AccessLog
 from core.authentication import ClinicAgent
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ClinicAdminRequiredMixin, ExportMixin, is_clinic_admin
@@ -521,8 +529,45 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
 
 
 class AppointmentListView(LoginRequiredMixin, TemplateView):
+    """Listado de citas del panel.
+
+    Qué citas entran lo decide `AppointmentFilters`, no esta vista: aquí solo se
+    encadena filtro → orden → paginación. Los filtros viajan por GET y la URL es
+    la dirección real de lo que se ve, así que se puede pegar y recargar.
+
+    **No registra `AccessLog`, y es deliberado.** Del filtro «con / sin
+    procedimiento» solo sale un sí o un no: que la cita acabó en algo. Eso es
+    información de agenda —la misma que el recuento del detalle de la cita—, no
+    qué se le hizo al paciente. El contenido vive en la pestaña de la ficha
+    (`patients:tab-procedures`), que sí es una lectura clínica y sí la registra.
+    Mismo criterio que `DashboardAppointmentManageView`: la frontera se cruza con
+    un clic deliberado, y ese clic queda anotado.
+
+    Si este listado pasa a enseñar el nombre, el importe o la zona de un
+    procedimiento, tiene que instrumentar `AccessLog` (ver `audit/README.md`).
+    """
+
     template_name = 'appointments/list.html'
     paginate_by = 20
+
+    def get_professionals(self):
+        """Los profesionales del desplegable «Asignado a», acotados a la clínica."""
+        queryset = Professional.objects.select_related('user')
+        user = self.request.user
+        if user.clinic_id:
+            return queryset.filter(clinic=user.clinic)
+        if user.is_superuser:
+            return queryset
+        return queryset.none()
+
+    def default_professional_id(self):
+        """La ficha de quien mira, que es el valor por defecto de «Asignado a».
+
+        `None` cuando no tiene ficha (un superusuario de plataforma sin clínica),
+        y entonces el listado abre con todos.
+        """
+        professional = getattr(self.request.user, 'professional_profile', None)
+        return professional.pk if professional else None
 
     def get_context_data(self, **kwargs):
         from django.core.paginator import Paginator
@@ -538,25 +583,11 @@ class AppointmentListView(LoginRequiredMixin, TemplateView):
         elif not user.is_superuser:
             appointments = appointments.none()
 
-        # Por defecto (sin `date` en la query string) mostramos las citas de
-        # hoy. Si el usuario limpia el campo de fecha a propósito, `date`
-        # llega vacío en el GET y respetamos ese "todas las fechas".
-        if 'date' in self.request.GET:
-            selected_date = self.request.GET.get('date', '')
-        else:
-            selected_date = timezone.localdate().isoformat()
-
-        selected_status = self.request.GET.get('status', '')
-        sort_dir = self.request.GET.get('sort', 'asc')
-        if sort_dir not in ('asc', 'desc'):
-            sort_dir = 'asc'
-
-        if selected_date:
-            appointments = appointments.filter(scheduled_at__date=selected_date)
-        if selected_status:
-            appointments = appointments.filter(status=selected_status)
-
-        appointments = appointments.order_by('scheduled_at' if sort_dir == 'asc' else '-scheduled_at')
+        filters = AppointmentFilters.from_query(
+            self.request.GET,
+            default_professional_id=self.default_professional_id(),
+        )
+        appointments = filters.order(filters.apply(annotate_procedures(appointments)))
 
         paginator = Paginator(appointments, self.paginate_by)
         page_number = self.request.GET.get('page')
@@ -568,10 +599,15 @@ class AppointmentListView(LoginRequiredMixin, TemplateView):
                 'page_obj': page_obj,
                 'paginator': paginator,
                 'is_paginated': paginator.num_pages > 1,
-                'selected_date': selected_date,
-                'selected_status': selected_status,
-                'sort_dir': sort_dir,
+                'filters': filters,
+                'professionals': self.get_professionals(),
                 'status_choices': Appointment.Status.choices,
+                'procedure_choices': PROCEDURE_CHOICES,
+                # Base de las URLs de orden y paginación, ya normalizada. Las
+                # arma `{% appointment_query %}` a partir de esto, nunca de
+                # request.GET.
+                'appointment_query_base': filters.as_params(),
+                'sort_query': urlencode(filters.toggled().as_params()),
                 'appointments_list_url': 'appointments:list',
                 'section': 'appointments',
             }
@@ -1056,3 +1092,106 @@ class ProfessionalUpdateView(ClinicAdminRequiredMixin, UpdateView):
 
         messages.success(self.request, 'Profesional actualizado correctamente.')
         return redirect(self.get_success_url())
+
+
+class AppointmentProcedureCreateView(AccessLogMixin, LoginRequiredMixin, TemplateView):
+    """Registrar lo que se ha hecho en una cita. Es la puerta principal.
+
+    Desde aquí la visita queda **enganchada a la cita** (`Visit.appointment`), que
+    es lo que hace que el listado pueda distinguir las citas que acabaron en algo
+    de las que no. Y no hay que preguntar ni quién atendió ni cuándo: lo dice la
+    propia cita.
+
+    El episodio sí se pregunta, porque la cita no lo sabe — salvo que esta cita
+    ya tenga visita, y entonces su episodio manda y no se ofrece cambiarlo:
+    colgar el procedimiento de otro proceso que el de la visita en la que se hizo
+    sería incoherente.
+
+    La otra puerta es `patients:procedure-create`, para lo que no sale de la
+    agenda. Comparten formulario y `record_procedure()`.
+
+    Sin API REST: formulario de sesión con CSRF, vedado al `Api-Key` del agente
+    como el resto de la capa clínica. La lectura la registra `AccessLogMixin`; la
+    escritura, las señales de auditoría.
+    """
+
+    template_name = 'appointments/procedure_form.html'
+
+    def get_appointment(self):
+        """La cita de la URL, acotada a la clínica de quien mira."""
+        appointment = get_object_or_404(
+            Appointment.objects.select_related('patient', 'service', 'professional__user', 'clinic'),
+            pk=self.kwargs['appointment_id'],
+        )
+        user = self.request.user
+        if (user.clinic_id and appointment.clinic_id != user.clinic_id) or (
+            not user.clinic_id and not user.is_superuser
+        ):
+            raise PermissionDenied('No tienes permiso para gestionar esta cita.')
+        return appointment
+
+    def get_professional(self):
+        return getattr(self.request.user, 'professional_profile', None)
+
+    def get_existing_visit(self):
+        """La visita que ya tenga esta cita, si la hay: fija el episodio."""
+        from clinical.models import Visit
+
+        return Visit.objects.filter(appointment=self.appointment).order_by('id').first()
+
+    def get_form(self, data=None):
+        return PerformedProcedureForm(
+            data,
+            patient=self.appointment.patient,
+            professional=self.get_professional(),
+            episode=self.visit.episode if self.visit else None,
+        )
+
+    def setup_appointment(self):
+        self.appointment = self.get_appointment()
+        self.visit = self.get_existing_visit() if self.appointment.patient_id else None
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        self.setup_appointment()
+        context['appointment'] = self.appointment
+        context['patient'] = self.appointment.patient
+        context['visit'] = self.visit
+        context['section'] = 'appointments'
+        context['cancel_url'] = reverse(
+            'core:dashboard-manage-appointment', args=[self.appointment.pk]
+        )
+        # Una cita sin ficha de paciente no puede llegar a la historia clínica:
+        # las citas del agente nacen con `patient` vacío si no se abrió ficha.
+        if self.appointment.patient_id:
+            context.setdefault('form', self.get_form())
+            # Lo normal es que se haya hecho lo que se reservó.
+            form = context['form']
+            if not form.is_bound and self.appointment.service_id:
+                form.fields['service'].initial = self.appointment.service_id
+                form.fields['performed_on'].initial = timezone.localdate(
+                    self.appointment.scheduled_at
+                )
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.setup_appointment()
+        if not self.appointment.patient_id:
+            raise PermissionDenied('La cita no tiene ficha de paciente asociada.')
+
+        form = self.get_form(data=request.POST)
+        if not form.is_valid():
+            return self.render_to_response(self.get_context_data(form=form))
+
+        procedure = record_procedure(
+            form,
+            patient=self.appointment.patient,
+            professional=self.get_professional(),
+            appointment=self.appointment,
+        )
+        messages.success(
+            request,
+            f'Registrado «{procedure.frozen_service_name}» por {procedure.frozen_price} € '
+            f'en la cita de {procedure.performed_at:%d/%m/%Y}.',
+        )
+        return redirect('core:dashboard-manage-appointment', appointment_id=self.appointment.pk)
