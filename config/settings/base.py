@@ -226,6 +226,10 @@ CELERY_BEAT_SCHEDULE = {
 
 AGENT_MASTER_API_KEY = config('AGENT_MASTER_API_KEY', default='')
 
+# Clave del manejador de errores global de n8n: solo puede hacer POST a
+# /api/agent/platform-errors/. Vacía = endpoint cerrado.
+AGENT_ERRORS_API_KEY = config('AGENT_ERRORS_API_KEY', default='')
+
 # URL del webhook de n8n donde Meta entrega los mensajes entrantes de WhatsApp.
 # Es única y global: n8n resuelve la clínica por el phone_number_id del mensaje.
 WHATSAPP_WEBHOOK_URL = config(

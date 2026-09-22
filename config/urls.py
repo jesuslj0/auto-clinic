@@ -11,6 +11,7 @@ from agent.views import (
     AgentMemoryViewSet,
     ChatMessageViewSet,
     ConversationSessionViewSet,
+    PlatformWorkflowErrorView,
     WorkflowErrorViewSet,
 )
 from appointments.views import AppointmentActionByTokenAPIView, AppointmentViewSet, ProfessionalScheduleViewSet, ProfessionalViewSet
@@ -81,6 +82,12 @@ urlpatterns = [
         'api/clinics/<str:clinic_id>/agent-config/',
         AgentConfigView.as_view(),
         name='clinic-agent-config',
+    ),
+    # Manejador de errores global de n8n: sin clínica, con su propia clave.
+    path(
+        'api/agent/platform-errors/',
+        PlatformWorkflowErrorView.as_view(),
+        name='agent-platform-error',
     ),
     path('api/', include(router.urls)),
 
