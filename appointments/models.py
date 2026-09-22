@@ -28,6 +28,18 @@ class Professional(models.Model):
         D = 'd', 'D.'
         DNA = 'dna', 'Dña.'
 
+    # Formas masculina y femenina de cada tipo, para concordar con el
+    # tratamiento («la Dra. Garrido es podóloga»). La etiqueta del choice no
+    # puede llevar género: es la que ve el panel y la que filtra la API. Un tipo
+    # que no esté aquí es invariable (dentista, fisioterapeuta, nutricionista).
+    TYPE_GENDERED_LABELS = {
+        ProfessionalType.MEDICO: ('Médico', 'Médica'),
+        ProfessionalType.PSICOLOGO: ('Psicólogo', 'Psicóloga'),
+        ProfessionalType.ENFERMERO: ('Enfermero', 'Enfermera'),
+        ProfessionalType.PODOLOGO: ('Podólogo', 'Podóloga'),
+    }
+    FEMININE_TITLES = frozenset({Title.DRA, Title.DNA})
+
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='professional_profile')
     clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name='professionals')
     services = models.ManyToManyField(Service, related_name='professionals', blank=True)
@@ -65,6 +77,19 @@ class Professional(models.Model):
         propósito: lo usan el agente y los avisos, que no deben cambiar por esto."""
         name = str(self)
         return f'{self.get_title_display()} {name}' if self.title else name
+
+    @property
+    def professional_type_label(self):
+        """Tipo concordado con el tratamiento («Podóloga» si es Dra.).
+
+        El género se deduce del tratamiento y de nada más: no hay campo de sexo
+        en la ficha, y no se infiere del nombre. Sin tratamiento no hay nada que
+        deducir, así que se devuelve la etiqueta del choice tal cual."""
+        forms = self.TYPE_GENDERED_LABELS.get(self.professional_type)
+        if not forms or not self.title:
+            return self.get_professional_type_display()
+        masculine, feminine = forms
+        return feminine if self.title in self.FEMININE_TITLES else masculine
 
 
 class ProfessionalSchedule(models.Model):

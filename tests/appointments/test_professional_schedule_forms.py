@@ -244,8 +244,16 @@ class TestUserIsReadOnly:
         assert (prof_sin_horario.title, prof_sin_horario.license_number) == ('dr', '28/1234')
 
 
-def test_new_fields_stay_out_of_the_api():
-    """El serializer lo alcanza el token de n8n: colegiación y presentación no se exponen."""
+def test_licence_fields_stay_out_of_the_api():
+    """El serializer lo alcanza el token de n8n: la colegiación no se expone.
+
+    Tratamiento y presentación sí, porque el agente los necesita para presentar
+    al profesional por WhatsApp, pero SOLO de lectura: `IsAgentClinicKey` admite
+    POST y PATCH, así que exponerlos como escribibles le daría al bot la
+    capacidad de reescribir la ficha.
+    """
     from appointments.serializers import ProfessionalSerializer
     fields = set(ProfessionalSerializer.Meta.fields)
-    assert not fields & {'title', 'bio', 'license_number', 'license_body'}
+    assert not fields & {'license_number', 'license_body'}
+    assert {'title', 'bio'} <= fields
+    assert {'title', 'bio'} <= set(ProfessionalSerializer.Meta.read_only_fields)

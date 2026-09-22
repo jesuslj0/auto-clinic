@@ -70,6 +70,15 @@ class ProfessionalScheduleSerializer(serializers.ModelSerializer):
 class ProfessionalSerializer(ClinicScopedSerializerMixin, serializers.ModelSerializer):
     user_info = UserMinimalSerializer(source='user', read_only=True)
     professional_type_display = serializers.CharField(source='get_professional_type_display', read_only=True)
+    # Etiqueta concordada con el tratamiento; `professional_type_display` sigue
+    # siendo la del choice, que es la que usan panel y filtros.
+    professional_type_label = serializers.ReadOnlyField()
+    # Tratamiento y presentación son de LECTURA. Este serializer lo alcanza el
+    # token de n8n, que admite POST y PATCH: el agente necesita leerlos para
+    # presentar al profesional, pero quien los escribe es el panel
+    # (`ProfessionalForm`). La colegiación no se expone en absoluto.
+    title_display = serializers.CharField(source='get_title_display', read_only=True)
+    display_name = serializers.ReadOnlyField()
     services_detail = ServiceMinimalSerializer(source='services', many=True, read_only=True)
     service_ids = serializers.PrimaryKeyRelatedField(
         many=True,
@@ -106,6 +115,11 @@ class ProfessionalSerializer(ClinicScopedSerializerMixin, serializers.ModelSeria
             'clinic',
             'professional_type',
             'professional_type_display',
+            'professional_type_label',
+            'title',
+            'title_display',
+            'display_name',
+            'bio',
             'services_detail',
             'service_ids',
             'schedules',
@@ -114,7 +128,7 @@ class ProfessionalSerializer(ClinicScopedSerializerMixin, serializers.ModelSeria
             'buffer_minutes',
             'slot_granularity_minutes',
         ]
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'title', 'bio']
 
 
 class AppointmentSerializer(ClinicScopedSerializerMixin, serializers.ModelSerializer):

@@ -55,10 +55,32 @@ El recurso `/api/professionals/` devuelve:
 | `user` | int (FK) | ID del usuario vinculado |
 | `user_info` | objeto | `id, first_name, last_name, email, full_name` (solo lectura) |
 | `clinic` | int (FK) | ID de la clínica |
-| `professional_type` | string | `medico`, `dentista`, `psicologo`, `enfermero`, `fisioterapeuta`, `nutricionista` |
-| `professional_type_display` | string | Etiqueta legible (solo lectura) |
-| `services_detail` | array | Servicios que ofrece: `id, name, duration_minutes, price, is_active` (solo lectura) |
+| `professional_type` | string | `medico`, `dentista`, `psicologo`, `enfermero`, `fisioterapeuta`, `nutricionista`, `podologo` |
+| `professional_type_display` | string | Etiqueta del choice, sin género (solo lectura) |
+| `professional_type_label` | string | Etiqueta concordada con `title` («Podóloga» si es `dra`). Sin tratamiento cae en `professional_type_display` (solo lectura) |
+| `title` | string | Tratamiento: `dr`, `dra`, `d`, `dna`, o vacío (solo lectura) |
+| `title_display` | string | `Dr.`, `Dra.`, `D.`, `Dña.` (solo lectura) |
+| `display_name` | string | Nombre con tratamiento: «Dra. Elena Garrido» (solo lectura) |
+| `bio` | string | Presentación, máx. 500 caracteres (solo lectura) |
+| `services_detail` | array | Servicios que ofrece: `id, name, duration_minutes, duration_display, price, price_display, is_active` (solo lectura) |
 | `service_ids` | array | IDs de servicios para escritura |
+| `schedules` | array | Horario semanal recurrente: `id, day_of_week, day_of_week_display, start_time, end_time, is_active`. Hora **local de la clínica**, no UTC. Un día puede traer varios tramos (jornada partida) (solo lectura) |
+| `is_active` | bool | Profesional dado de alta |
+| `accepts_online_booking` | bool | Admite reserva online |
+| `buffer_minutes` | int | Margen entre citas |
+| `slot_granularity_minutes` | int | Paso de la rejilla de huecos |
+
+> El agente de WhatsApp (`action=list_professionals`) se apoya en `display_name`,
+> `professional_type_label`, `bio` y `schedules`: es de donde saca el horario
+> semanal cuando el paciente pregunta «¿qué horario tiene la podóloga?».
+> `schedules` incluye los tramos desactivados, así que el consumidor debe
+> filtrar por `is_active`.
+>
+> **`title` y `bio` son de solo lectura, y la colegiación (`license_number`,
+> `license_body`) no se expone.** A este endpoint llega el token de n8n, que
+> admite `POST` y `PATCH`: el agente necesita leer el tratamiento y la
+> presentación para presentar al profesional, no para reescribirlos. La ficha se
+> edita desde el panel (`ProfessionalForm`).
 
 #### Campos adicionales del serializer de Cita (AppointmentSerializer)
 
