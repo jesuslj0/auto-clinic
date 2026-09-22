@@ -227,7 +227,7 @@ class ProfessionalViewSet(viewsets.ModelViewSet):
     ordering = ['user__first_name', 'user__last_name']
 
     def get_queryset(self):
-        queryset = Professional.objects.select_related('user', 'clinic').prefetch_related('services')
+        queryset = Professional.objects.select_related('user', 'clinic').prefetch_related('services', 'schedules')
         user = self.request.user
         if isinstance(user, ClinicAgent):
             return queryset.filter(clinic=user.clinic)
