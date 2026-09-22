@@ -483,7 +483,8 @@ Datos exactos que se pueden afirmar sin miedo:
 - Tres orígenes de cita: panel, agente de WhatsApp y reserva pública.
 - Seis pestañas en la ficha del paciente.
 - Cuatro vistas del mapa del pie y los dos pies.
-- Recordatorios automáticos programados a 24 h y a 2 h de la cita.
+- Recordatorios automáticos por WhatsApp a 24 h y a 3 h de la cita; el segundo
+  solo a quien no confirmó el primero.
 - Cuatro métodos de cobro: tarjeta, transferencia, Bizum y efectivo.
 - La ventana de texto libre de WhatsApp es de 24 h.
 

@@ -44,7 +44,7 @@
             {% for appointment in appointments %}
             <a href="{% url 'core:dashboard-manage-appointment' appointment.id %}" class="block px-5 py-4 transition active:bg-muted">
                 <div class="flex items-start justify-between gap-3">
-                    <p class="min-w-0 truncate text-sm font-semibold text-content">{{ appointment.patient }}</p>
+                    <p class="min-w-0 truncate text-sm font-semibold text-content">{{ appointment.patient|default:appointment.patient_name|default:"Sin ficha" }}</p>
                     <span class="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold {{ appointment.status|status_badge }}">
                         {{ appointment.status|status_icon:"h-3.5 w-3.5" }}
                         {{ appointment.get_status_display|default:appointment.status|title }}
@@ -91,7 +91,16 @@
                 <tbody class="divide-y divide-line bg-surface">
                     {% for appointment in appointments %}
                     <tr class="align-top">
-                        <td class="px-6 py-4 font-medium text-content">{{ appointment.patient }}</td>
+                        <td class="px-6 py-4 font-medium text-content">
+                            {% if appointment.patient_id %}
+                            <a href="{% url 'patients:detail' appointment.patient_id %}"
+                               title="Ver ficha de {{ appointment.patient }}"
+                               class="transition hover:text-brand-fg">{{ appointment.patient }}</a>
+                            {% else %}
+                            {# Cita del agente sin ficha abierta: queda el nombre denormalizado, que no lleva a ningún sitio. #}
+                            {{ appointment.patient_name|default:"Sin ficha" }}
+                            {% endif %}
+                        </td>
                         <td class="px-6 py-4 text-content-muted">{{ appointment.service }}</td>
                         <td class="px-6 py-4 text-content-muted">{{ appointment.scheduled_at|date:"j M Y" }}<br><span class="text-xs text-content-subtle">{{ appointment.scheduled_at|date:"g:i A" }} – {{ appointment.end_at|date:"g:i A" }}</span></td>
                         <td class="px-6 py-4">

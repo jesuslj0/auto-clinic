@@ -9,19 +9,21 @@ from rest_framework import status as http_status
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from agent.models import AgentMemory, ChatMessage, ConversationSession, WorkflowError
 from agent.serializers import (
     AgentMemorySerializer,
     ChatMessageSerializer,
     ConversationSessionSerializer,
+    PlatformWorkflowErrorSerializer,
     WorkflowErrorSerializer,
 )
 from agent.services import mark_session_read, send_staff_message
 from agent.whatsapp import WhatsAppError
 from core.authentication import ClinicAgent
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
-from core.permissions import IsAgentClinicKey, IsClinicAdminOrReadOnly, IsStaffOrAdmin
+from core.permissions import IsAgentClinicKey, IsAgentErrorsKey, IsClinicAdminOrReadOnly, IsStaffOrAdmin
 
 
 def scope_to_clinic(queryset, user):
@@ -68,6 +70,26 @@ class WorkflowErrorViewSet(ExportMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         return scope_to_clinic(WorkflowError.objects.all(), self.request.user)
+
+
+class PlatformWorkflowErrorView(APIView):
+    """Registro de errores del manejador global de n8n (Error Trigger).
+
+    Ese manejador no conoce la clínica de la ejecución fallida, así que no puede
+    usar la Api-Key de clínica de `/api/agent/errors/`. Usa AGENT_ERRORS_API_KEY,
+    que solo permite este POST. Sin autenticación de DRF a propósito: la
+    `AgentClinicKeyAuthentication` rechazaría con 401 cualquier `Api-Key` que no
+    sea de una clínica antes de llegar al permiso (igual que `AgentConfigView`).
+    """
+
+    permission_classes = [IsAgentErrorsKey]
+    authentication_classes = []
+
+    def post(self, request):
+        serializer = PlatformWorkflowErrorSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=http_status.HTTP_201_CREATED)
 
 
 class ConversationSessionViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets.ModelViewSet):

@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from agent.models import AgentMemory, ChatMessage, ConversationSession, WorkflowError
 from agent.services import record_message
+from core.models import Clinic
 from core.serializers import ClinicScopedSerializerMixin
 
 
@@ -19,6 +20,48 @@ class WorkflowErrorSerializer(ClinicScopedSerializerMixin, serializers.ModelSeri
         read_only_fields = ('id', 'created_at')
         # La clínica sale de la Api-Key del agente; n8n no la manda.
         extra_kwargs = {'clinic': {'required': False}}
+
+
+class PlatformWorkflowErrorSerializer(serializers.ModelSerializer):
+    """Error enviado por el manejador global de n8n (sin Api-Key de clínica).
+
+    La clínica es opcional y se resuelve aquí, en el servidor, por `clinic_id` o
+    por `phone_number_id` de WhatsApp. Si no llega o no existe, el error se
+    guarda sin clínica: perder el registro sería peor que no poder atribuirlo.
+    Por la misma razón, los textos que excedan su columna se recortan en vez de
+    rechazarse.
+    """
+
+    clinic_id = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    phone_number_id = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
+    class Meta:
+        model = WorkflowError
+        fields = (
+            'id', 'clinic', 'clinic_id', 'phone_number_id', 'workflow', 'workflow_name',
+            'node_name', 'error_message', 'phone', 'payload', 'input_data', 'created_at',
+        )
+        read_only_fields = ('id', 'clinic', 'created_at')
+
+    TRUNCATED_FIELDS = ('workflow', 'workflow_name', 'node_name', 'phone')
+
+    def to_internal_value(self, data):
+        data = data.copy() if hasattr(data, 'copy') else dict(data)
+        for name in self.TRUNCATED_FIELDS:
+            value = data.get(name)
+            if isinstance(value, str):
+                data[name] = value[:WorkflowError._meta.get_field(name).max_length]
+        return super().to_internal_value(data)
+
+    def create(self, validated_data):
+        clinic_id = validated_data.pop('clinic_id', '').strip()
+        phone_number_id = validated_data.pop('phone_number_id', '').strip()
+        clinic = None
+        if clinic_id:
+            clinic = Clinic.objects.filter(clinic_id=clinic_id).first()
+        if clinic is None and phone_number_id:
+            clinic = Clinic.objects.filter(whatsapp_phone_number_id=phone_number_id).first()
+        return WorkflowError.objects.create(clinic=clinic, **validated_data)
 
 
 class ConversationSessionSerializer(ClinicScopedSerializerMixin, serializers.ModelSerializer):
