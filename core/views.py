@@ -558,14 +558,24 @@ class AgentTestMessageView(ClinicAdminRequiredMixin, View):
 
         # n8n puede devolver texto plano o JSON con distintas claves.
         reply = raw
+        debounced = False
         try:
             data = json.loads(raw)
             if isinstance(data, list) and data:
                 data = data[0]
             if isinstance(data, dict):
+                # n8n agrupa los mensajes que llegan seguidos y contesta solo al
+                # último: los descartados cierran su petición sin respuesta.
+                debounced = bool(data.get('debounced'))
                 reply = data.get('reply') or data.get('text') or data.get('message') or data.get('output') or raw
         except (json.JSONDecodeError, TypeError):
             pass
+
+        # Se comprueba antes de mirar `reply`: en un mensaje descartado viene
+        # vacía y, como '' es falsy, el encadenado de arriba habría acabado
+        # devolviendo el JSON crudo como si fuera la respuesta del agente.
+        if debounced:
+            return JsonResponse({'reply': '', 'debounced': True})
 
         reply = (reply or '').strip()
         if reply:
