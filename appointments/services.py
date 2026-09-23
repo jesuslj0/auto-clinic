@@ -40,6 +40,7 @@ __all__ = [
     'register_patient_confirmation',
     'confirm_by_clinic',
     'cancel_appointment',
+    'reschedule_appointment',
     'get_professional_availability',
     'get_clinic_available_slots',
 ]
@@ -509,17 +510,21 @@ def register_patient_confirmation(appointment, *, at=None):
 
 
 def confirm_by_clinic(appointment, *, user=None):
-    """La clínica valida la cita: `pending` → `confirmed`. Y el hold desaparece.
+    """La clínica valida la cita: `pending`/`rescheduled` → `confirmed`. Y el hold desaparece.
 
     Es la ÚNICA vía por la que una cita pasa a `confirmed`. Que el paciente diga
     que vendrá no la confirma (ver `register_patient_confirmation`).
+
+    `rescheduled` entra aquí porque no es un estado terminal: es "el agente la
+    movió y falta que la clínica la mire". Validarla es precisamente el gesto de
+    mirarla, y sin esta puerta una cita movida se quedaría marcada para siempre.
 
     Una cita en firme no caduca, así que se le quita `hold_expires_at`.
     """
     if appointment.status == Appointment.Status.CONFIRMED:
         return appointment  # idempotente: validar dos veces no es un error
 
-    if appointment.status != Appointment.Status.PENDING:
+    if appointment.status not in {Appointment.Status.PENDING, Appointment.Status.RESCHEDULED}:
         raise InvalidTransition(
             f'Una cita en estado "{appointment.get_status_display()}" no puede confirmarse.'
         )
@@ -571,6 +576,90 @@ def cancel_appointment(
     appointment.save(update_fields=['status', 'cancelled_by', 'updated_at'])
 
     _record_transition(appointment, previo, actor=actor, actor_label=actor_label)
+    return appointment
+
+
+def reschedule_appointment(
+    appointment,
+    *,
+    scheduled_at,
+    actor=AppointmentStatusHistory.Actor.SYSTEM,
+    actor_label='',
+    require_online_booking: bool = True,
+):
+    """Mueve una cita viva a otra hora y la deja marcada como `rescheduled`.
+
+    La cita conserva su id y su `confirmation_token`, así que el enlace que el
+    paciente ya tenga en el móvil le sigue valiendo: se mueve la cita, no se
+    sustituye por otra.
+
+    `rescheduled` NO es terminal ni degrada la cita. Sigue en `LIVE_STATUSES` y en
+    `BLOCKING_STATUSES` —ocupa su hueco nuevo, recibe recordatorios y el paciente
+    puede cancelarla— y tampoco se le pone hold, así que una cita que ya estaba en
+    firme no vuelve a caducar por haberla movido. Lo único que cambia es que queda
+    señalada en la agenda hasta que alguien de la clínica la valide
+    (`confirm_by_clinic`), que es la forma de que la clínica se entere de que la
+    hora no es la que acordó.
+
+    Mover una cita es la misma carrera que crearla: se bloquea el recurso por el
+    que se compite (el profesional) y se revalida dentro de la transacción.
+    """
+    if appointment.status not in LIVE_STATUSES:
+        raise InvalidTransition(
+            f'Una cita en estado "{appointment.get_status_display()}" ya no puede reprogramarse.'
+        )
+
+    with transaction.atomic():
+        lock_agenda(
+            clinic=appointment.clinic,
+            service=appointment.service,
+            professional=appointment.professional,
+        )
+
+        cambios = {
+            'scheduled_at': scheduled_at,
+            'status': Appointment.Status.RESCHEDULED,
+        }
+        # Recalcula `end_at` desde la duración del servicio y comprueba
+        # solapamiento, horario del profesional y ausencias. Arrastrar el `end_at`
+        # viejo dejaría un intervalo invertido y la cita ocupando el tramo que no es.
+        cambios.update(
+            validate_appointment_update(
+                appointment, cambios, require_online_booking=require_online_booking
+            )
+        )
+
+        previo = appointment.status
+        for campo, valor in cambios.items():
+            setattr(appointment, campo, valor)
+        # Una cita movida no vuelve a estar a prueba: si venía en firme, sigue sin
+        # caducar; si venía con hold, la reprogramación lo cierra igualmente, que
+        # para eso el paciente acaba de hablar con la clínica.
+        appointment.hold_expires_at = None
+
+        # Todo lo que se sabía de la hora VIEJA deja de valer. Sin esto, una cita
+        # que ya tenía el recordatorio de 24h enviado y se mueve a la semana que
+        # viene se queda con el flag puesto y NUNCA vuelve a avisar al paciente
+        # (`pending-reminders` filtra por `reminder_24h_sent=False`). Y el "sí"
+        # que dio el paciente lo dio para otro día: mantenerlo sería apuntarle una
+        # confirmación que nunca hizo.
+        appointment.reminder_24h_sent = False
+        appointment.reminder_24h_sent_at = None
+        appointment.reminder_3h_sent = False
+        appointment.reminder_3h_sent_at = None
+        appointment.reminder_responded = False
+        appointment.patient_confirmed_at = None
+
+        appointment.save(update_fields=[
+            'scheduled_at', 'end_at', 'status', 'hold_expires_at',
+            'reminder_24h_sent', 'reminder_24h_sent_at',
+            'reminder_3h_sent', 'reminder_3h_sent_at',
+            'reminder_responded', 'patient_confirmed_at',
+            'updated_at',
+        ])
+
+        _record_transition(appointment, previo, actor=actor, actor_label=actor_label)
+
     return appointment
 
 

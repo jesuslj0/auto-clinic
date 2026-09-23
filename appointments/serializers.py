@@ -4,13 +4,20 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
-from appointments.models import Appointment, Professional, ProfessionalSchedule
+from appointments.models import (
+    Appointment,
+    AppointmentStatusHistory,
+    Professional,
+    ProfessionalSchedule,
+)
 from appointments.services import (
     AppointmentDomainError,
     create_appointment,
     lock_agenda,
+    reschedule_appointment,
     validate_appointment_update,
 )
+from core.authentication import ClinicAgent
 from core.models import User
 from core.serializers import ClinicScopedSerializerMixin
 from services.models import Service
@@ -186,6 +193,22 @@ class AppointmentSerializer(ClinicScopedSerializerMixin, serializers.ModelSerial
                 )
             })
 
+        # `rescheduled` tampoco se escribe a mano, por lo mismo: es la consecuencia
+        # de mover la hora, no una etiqueta que se pega. Quien mueve una cita manda
+        # `scheduled_at` y `update()` deriva el estado por `reschedule_appointment()`,
+        # que es lo único que deja entrada en el historial. Marcarla sin moverla
+        # sería mentir en la agenda.
+        if (
+            nuevo_status == Appointment.Status.RESCHEDULED
+            and status_actual != Appointment.Status.RESCHEDULED
+        ):
+            raise serializers.ValidationError({
+                'status': (
+                    'Una cita no se marca como reagendada escribiendo este campo: '
+                    'manda la hora nueva en "scheduled_at" y el estado se pone solo.'
+                )
+            })
+
         # Bug 4: La cita no puede ser en el pasado
         if scheduled_at and scheduled_at < timezone.now():
             raise serializers.ValidationError(
@@ -226,6 +249,39 @@ class AppointmentSerializer(ClinicScopedSerializerMixin, serializers.ModelSerial
         return attrs
 
     def update(self, instance, validated_data):
+        # Que el AGENTE mueva la hora de una cita viva no es un PATCH cualquiera:
+        # es una reprogramación, y tiene su transición con historial y su marca en
+        # la agenda. Se delega en el service, que hace su propio bloqueo y su
+        # revalidación. El staff no pasa por aquí (edita por el panel) y, si
+        # editara por API, mover una cita suya no debe marcarla: ya sabe que la
+        # movió, la marca existe para avisarle de lo que hizo el agente.
+        mueve_la_hora = (
+            'scheduled_at' in validated_data
+            and validated_data['scheduled_at'] != instance.scheduled_at
+        )
+        # `bulk-update` llama a `save()` sin request en el contexto: sin usuario no
+        # hay agente, y el PATCH sigue por la vía normal.
+        usuario = getattr(self.context.get('request'), 'user', None)
+        if mueve_la_hora and isinstance(usuario, ClinicAgent):
+            # `end_at` lo recalcula el service junto con la hora; el que trae
+            # `validated_data` viene de la validación previa y sobra aquí.
+            resto = {
+                k: v for k, v in validated_data.items()
+                if k not in {'scheduled_at', 'end_at'}
+            }
+            try:
+                appointment = reschedule_appointment(
+                    instance,
+                    scheduled_at=validated_data['scheduled_at'],
+                    actor=AppointmentStatusHistory.Actor.AGENT,
+                    require_online_booking=True,
+                )
+            except AppointmentDomainError as error:
+                raise serializers.ValidationError({'scheduled_at': error.detail['message']})
+            # Un PATCH puede traer más campos además de la hora (`notes`, por
+            # ejemplo). Se escriben después, ya sin tocar el hueco.
+            return super().update(appointment, resto) if resto else appointment
+
         # Mover una cita a un hueco libre es una carrera igual que crearla: entre
         # el `validate()` de arriba y esta escritura, otro POST puede haberse
         # llevado el hueco. Se revalida con el recurso bloqueado.

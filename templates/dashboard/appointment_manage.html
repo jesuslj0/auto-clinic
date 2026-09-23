@@ -114,18 +114,20 @@
             </div>
 
             <!-- Acciones positivas -->
-            {% if appointment.status == 'pending' or appointment.status == 'confirmed' %}
+            {% if appointment.status == 'pending' or appointment.status == 'confirmed' or appointment.status == 'rescheduled' %}
             <div class="flex flex-col gap-2 sm:items-end">
                 <p class="text-xs font-semibold uppercase tracking-wide text-content-faint sm:text-right">Avanzar cita</p>
                 <div class="flex flex-wrap gap-2 sm:justify-end">
-                    {% if appointment.status == 'pending' %}
+                    {# Una cita reagendada por el agente se valida igual que una pendiente:
+                       validarla es el gesto con el que la clínica da por buena la hora nueva. #}
+                    {% if appointment.status == 'pending' or appointment.status == 'rescheduled' %}
                     <button
                         type="button"
                         @click="open('confirm')"
                         class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
                     >
                         {{ 'confirmed'|status_icon:"h-4 w-4" }}
-                        Confirmar cita
+                        {% if appointment.status == 'rescheduled' %}Validar hora nueva{% else %}Confirmar cita{% endif %}
                     </button>
                     {% endif %}
                     {% if appointment.status == 'confirmed' %}
