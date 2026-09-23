@@ -37,17 +37,20 @@
            x-data="{
                messages: JSON.parse(document.getElementById('test-messages').textContent),
                input: '',
-               loading: false,
+               {# Contador, no booleano: con el debounce de n8n puede haber varios #}
+               {# mensajes en vuelo a la vez, que es justo lo que hay que poder probar. #}
+               pending: 0,
+               get loading() { return this.pending > 0; },
                init() { this.$nextTick(() => this.scroll()); },
                ahora() {
                    return new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
                },
                async send(preset) {
                    const text = (preset || this.input).trim();
-                   if (!text || this.loading) return;
+                   if (!text) return;
                    this.messages.push({ role: 'user', text: text, time: this.ahora() });
                    this.input = '';
-                   this.loading = true;
+                   this.pending++;
                    this.$nextTick(() => this.scroll());
                    try {
                        const res = await fetch('{% url 'core:clinic-agent-test' %}', {
@@ -56,13 +59,16 @@
                            body: JSON.stringify({ message: text }),
                        });
                        const data = await res.json();
+                       // Mensaje agrupado con los siguientes: contestará el último
+                       // de la ráfaga, así que aquí no hay burbuja que pintar.
+                       if (res.ok && data.debounced) return;
                        this.messages.push(res.ok
                            ? { role: 'agent', text: data.reply, time: this.ahora() }
                            : { role: 'error', text: data.error || 'Error al contactar con el agente.', time: this.ahora() });
                    } catch (e) {
                        this.messages.push({ role: 'error', text: 'No se pudo enviar el mensaje.', time: this.ahora() });
                    } finally {
-                       this.loading = false;
+                       this.pending--;
                        this.$nextTick(() => this.scroll());
                    }
                },
@@ -144,7 +150,7 @@
                               rows="1"
                               placeholder="Escribe lo que quieras…"
                               class="max-h-24 min-h-[2.5rem] flex-1 resize-none rounded-xl border border-line-strong bg-surface px-3.5 py-2 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500 transition"></textarea>
-                    <button type="button" @click="send()" :disabled="loading || !input.trim()"
+                    <button type="button" @click="send()" :disabled="!input.trim()"
                             class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand-gradient text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">
                         <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />

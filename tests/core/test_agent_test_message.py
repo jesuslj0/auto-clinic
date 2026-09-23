@@ -94,6 +94,25 @@ class TestAgentTestMessageHistory:
         session = ConversationSession.objects.get(clinic=clinic_a)
         assert session.messages.count() == 1
 
+    def test_debounced_message_is_not_an_empty_answer(self, client, admin_user, clinic_a):
+        """n8n agrupa las ráfagas: contesta el último mensaje, no este.
+
+        No es lo mismo que una respuesta vacía. Aquí no hay nada que enseñar
+        porque la respuesta llegará por la petición del último mensaje, así que
+        el panel no debe pintar «el agente no devolvió ninguna respuesta».
+        """
+        client.force_login(admin_user)
+        with _n8n_replies(json.dumps({'reply': '', 'debounced': True})):
+            response = _send(client)
+
+        assert response.json() == {'reply': '', 'debounced': True}
+
+        # El entrante sí queda registrado: lo escribió el paciente, aunque la
+        # respuesta la genere la ejecución del último mensaje de la ráfaga.
+        session = ConversationSession.objects.get(clinic=clinic_a)
+        assert session.messages.count() == 1
+        assert session.messages.get().direction == 'inbound'
+
     def test_uses_test_patient_phone_and_links_the_record(
         self, client, admin_user, clinic_a, patient_a
     ):
