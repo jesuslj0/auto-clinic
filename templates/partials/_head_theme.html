@@ -382,13 +382,40 @@ opacidades sobre ellos (bg-surface/90, ring-line/70…).
     .picker-option-hint { @apply block truncate text-xs text-content-faint; }
     .picker-empty { @apply px-4 py-2 text-sm text-content-faint; }
 
+    /* Submenú de un grupo del sidebar («Configuración»): sangrado y una guía
+       vertical, para que se lea como dependiente del grupo y no como cuatro
+       entradas sueltas más. */
+    .sidebar-subnav { @apply ml-3 border-l border-line pl-2; }
+
+    /* Cabecera de un grupo del sidebar, en sus tres estados. Cuál se aplica lo
+       decide Alpine (`partials/_sidebar_nav.html`), porque depende de si el
+       grupo está abierto; aquí está lo que cada uno significa.
+
+       Abierto: el activo de verdad —borde y degradado— se lo queda el hijo
+       seleccionado, que está a la vista, y la cabecera se conforma con un
+       subrayado suave. Cerrado con un hijo seleccionado: la cabecera es lo
+       único que queda de él, así que recupera el activo entero. El color del
+       icono y del texto cuelga de estas clases, y no de utilidades sueltas en
+       la plantilla, porque la cabecera cambia de estado sin recargar. */
+    .sidebar-group-open { @apply border-transparent bg-transparent text-content hover:bg-muted; }
+    .sidebar-group-open .sidebar-group-icon { @apply text-content-muted; }
+    .sidebar-group-open .sidebar-group-label { @apply font-semibold text-content underline decoration-brand-fg/50 decoration-2 underline-offset-4; }
+
+    .sidebar-group-active { @apply border-brand-line bg-brand-soft; }
+    .sidebar-group-active .sidebar-group-icon { @apply text-brand-fg; }
+    .sidebar-group-active .sidebar-group-label { @apply bg-brand-gradient bg-clip-text font-semibold text-transparent; }
+
+    .sidebar-group-idle { @apply border-transparent text-content-muted hover:border-brand-line hover:bg-brand-soft hover:text-brand-fg; }
+    .sidebar-group-idle .sidebar-group-icon { @apply text-content-faint; }
+    .sidebar-group-idle:hover .sidebar-group-icon { @apply text-brand-fg; }
+
     /* Sidebar colapsado a solo iconos.
 
        El estado (la clase `sidebar-collapsed` en el <html>, persistida en
        localStorage) lo lleva `partials/_head_sidebar.html`; aquí está lo que ese
-       estado significa. Es CSS y no expresiones de Alpine a propósito: son once
-       enlaces más el pie, y con la clase en la raíz el panel ya sale estrecho en
-       el primer pintado, sin fogonazo al recargar.
+       estado significa. Es CSS y no expresiones de Alpine a propósito: son nueve
+       entradas —una de ellas un grupo— más el pie, y con la clase en la raíz el
+       panel ya sale estrecho en el primer pintado, sin fogonazo al recargar.
 
        El colapso es cosa del escritorio: en móvil el sidebar es un panel que entra
        y sale, y ahí no hay espacio que ganar estrechándolo. */
@@ -421,6 +448,12 @@ opacidades sobre ellos (bg-surface/90, ring-line/70…).
            nace visible y el otro con `hidden` en la plantilla. */
         .sidebar-collapsed .sidebar-icon-collapse { @apply hidden; }
         .sidebar-collapsed .sidebar-icon-expand { @apply block; }
+
+        /* En 80 px no hay sitio para la flecha del grupo, y sin etiqueta no
+           habría a qué apuntar: el grupo sigue abriéndose al pulsar el icono.
+           El submenú pierde la sangría y la guía, que a solo iconos sobran. */
+        .sidebar-collapsed .sidebar-chevron { @apply hidden; }
+        .sidebar-collapsed .sidebar-subnav { @apply ml-0 border-l-0 pl-0; }
     }
 
     /* Formularios en oscuro. El plugin @tailwindcss/forms fuerza fondo blanco y
