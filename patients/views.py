@@ -12,7 +12,7 @@ from rest_framework import viewsets
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 
-from appointments.models import Appointment
+from appointments.models import LIVE_STATUSES, Appointment
 from audit.mixins import AccessLogMixin, AuditedViewSetMixin
 from clinical.forms import (
     AnamnesisForm,
@@ -127,7 +127,7 @@ class PatientListView(AccessLogMixin, LoginRequiredMixin, ListView):
                 'appointments__scheduled_at',
                 filter=Q(
                     appointments__scheduled_at__gte=now,
-                    appointments__status__in=[Status.PENDING, Status.CONFIRMED],
+                    appointments__status__in=LIVE_STATUSES,
                 ),
             ),
             last_visit=Max(

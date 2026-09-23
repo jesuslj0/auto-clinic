@@ -402,17 +402,37 @@ class Appointment(models.Model):
 # (`hold_expires_at`): si el staff no la valida a tiempo, se cancela y el hueco
 # se libera. Ver `expire_appointment_holds`.
 #
+# `rescheduled` es una cita que el agente movió de hora y que sigue en pie: ocupa
+# su hueco NUEVO igual que cualquier otra. Dejarla fuera de este conjunto sería
+# exactamente el bug que el párrafo de arriba describe, pero peor, porque además
+# `validate_appointment_update()` se salta la comprobación de solapamiento cuando
+# el estado no está vivo: el propio PATCH que la mueve dejaría de mirar si el
+# hueco de destino está libre.
+#
 # Fuente de verdad ÚNICA de la regla de bloqueo: la leen tanto `find_overlap()`
 # como el motor de disponibilidad (`services.py` la reexporta). Vive aquí, y no
 # en services.py, porque models.py no puede importar de services.py sin crear un
 # ciclo. Léela, no la redefinas.
-BLOCKING_STATUSES = frozenset({Appointment.Status.PENDING, Appointment.Status.CONFIRMED})
+BLOCKING_STATUSES = frozenset({
+    Appointment.Status.PENDING,
+    Appointment.Status.CONFIRMED,
+    Appointment.Status.RESCHEDULED,
+})
 
 # Estados en los que una cita sigue VIVA: ni cancelada, ni completada, ni no_show.
 # Es un eje distinto al de bloqueo (hoy una cita viva puede no bloquear), y
 # estaba copiada a mano en media docena de sitios. Se usa para decidir si hay que
 # revalidar su elegibilidad y si sigue teniendo sentido actuar sobre ella.
-LIVE_STATUSES = frozenset({Appointment.Status.PENDING, Appointment.Status.CONFIRMED})
+#
+# `rescheduled` está viva y NO es terminal: significa "el agente la movió, falta
+# que la clínica la mire", no "esta cita ya no va". Se sale de ahí validándola
+# (`confirm_by_clinic`), y mientras tanto la cita se comporta como cualquier otra
+# —recibe recordatorios, el paciente puede cancelarla, cuenta como próxima cita—.
+LIVE_STATUSES = frozenset({
+    Appointment.Status.PENDING,
+    Appointment.Status.CONFIRMED,
+    Appointment.Status.RESCHEDULED,
+})
 
 
 class AppointmentStatusHistory(models.Model):
@@ -421,6 +441,7 @@ class AppointmentStatusHistory(models.Model):
     class Actor(models.TextChoices):
         PATIENT = 'patient', 'Paciente'
         STAFF = 'staff', 'Clínica'
+        AGENT = 'agent', 'Agente WhatsApp'
         SYSTEM = 'system', 'Sistema'
 
     appointment = models.ForeignKey(
