@@ -106,6 +106,18 @@ emite en toda página del panel, aunque no contenga ningún formulario.
         </nav>
 
         <div class="space-y-1 border-t border-line px-4 py-4">
+            {% comment %}«Mi cuenta» vive en el pie, con el nombre y el cierre de
+            sesión, y no en la navegación: no es una sección de la clínica sino lo
+            propio de quien ha entrado, y ahí es donde se busca. Sin condicional a
+            propósito: toda cuenta necesita poder cambiar su contraseña, tenga
+            ficha de profesional o no.{% endcomment %}
+            <a href="{% url 'core:account' %}" @click="sidebarOpen = false"
+               class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition {% if section == 'account' %}bg-brand-soft text-brand-fg{% else %}text-content-subtle hover:bg-muted-strong hover:text-content-muted{% endif %}">
+                <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+                </svg>
+                Mi cuenta
+            </a>
             {% include "partials/_theme_toggle.html" %}
             {# El panel se va antes de que aparezca el modal: si no, quedaría debajo. #}
             <button type="button" @click="sidebarOpen = false; logoutOpen = true"
@@ -200,7 +212,21 @@ emite en toda página del panel, aunque no contenga ningún formulario.
                 {# Nombre y rol solo con el panel abierto: en 80 px no cabe nada. #}
                 <p class="sidebar-label text-sm font-medium text-content">{{ request.user.get_full_name|default:request.user.email }}</p>
                 <p class="sidebar-label mt-1 text-xs text-content-subtle">{{ request.user.get_role_display|default:"Personal" }}</p>
+                {% comment %}«Mi cuenta» va aquí, justo bajo el nombre, y no en la
+                navegación: no es una sección de la clínica sino lo propio de quien
+                ha entrado. Sin condicional a propósito: toda cuenta necesita poder
+                cambiar su contraseña, tenga ficha de profesional o no. Con el panel
+                colapsado se queda en el icono, como el resto del pie.{% endcomment %}
                 <div class="mt-3 -mx-3">
+                    <a href="{% url 'core:account' %}" title="Mi cuenta"
+                       class="sidebar-action flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition {% if section == 'account' %}bg-brand-soft text-brand-fg{% else %}text-content-subtle hover:bg-muted-strong hover:text-content-muted{% endif %}">
+                        <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+                        </svg>
+                        <span class="sidebar-label">Mi cuenta</span>
+                    </a>
+                </div>
+                <div class="mt-1 -mx-3">
                     {% include "partials/_theme_toggle.html" %}
                 </div>
                 {% comment %}Solo abre la confirmación: el POST lo hace el

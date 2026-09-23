@@ -89,11 +89,14 @@ Tengo hongos en las uñas, ¿lo tratáis?
 ¿Tenéis bonos o descuentos?
 
 D. Profesionales y horarios
+-- Responde correctamente (arreglado) --
 ¿Quién atiende?
 ¿Qué horario tiene la podóloga?
 ¿La podóloga trabaja los viernes por la tarde?
 
 E. Pedir cita
+
+-- Responde correctamente --
 Quiero pedir cita
 ¿Tenéis hueco mañana?
 Quiero cita el lunes que viene
@@ -104,16 +107,27 @@ Lo antes posible
 Quiero cita a las 8 de la mañana (probablemente fuera de horario)
 Quiero cita el sábado (fin de semana)
 Quiero cita el día 3 (puede que ya haya pasado)
-Quiero pedir cita para mi madre, no para mí
-Quiero dos citas, una para mí y otra para mi marido
 (Varios turnos) Pide cita → cuando el agente propone una hora, "mejor más tarde" → acepta → cuando pida confirmación, di "sí"
 
+-- NO probado --
+Quiero pedir cita para mi madre, no para mí
+Quiero dos citas, una para mí y otra para mi marido
+
+
 F. Consultar, cambiar y cancelar
+
+-- Responde correctamente --
 ¿Tengo alguna cita?
 ¿A qué hora era mi cita?
+
+-- Cancela correctamente --
 Quiero cancelar mi cita
 (Varios turnos) Quiero cancelar → cuando pida confirmación, di "no, mejor la dejo"
+
+-- No se puede mover una cita --
 Quiero cambiar mi cita al jueves (ojo: no existe una acción de "mover cita". Mira cómo lo resuelve)
+
+-- Advierte con mensaje --
 Voy a llegar 15 minutos tarde
 
 G. Respuestas a un recordatorio

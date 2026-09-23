@@ -1,0 +1,125 @@
+{% comment %}
+Campos del alta de un procedimiento. Lo comparten las dos puertas —desde la cita
+y desde la ficha del paciente—, porque lo que se registra es lo mismo.
+
+Quien lo incluye pone el `<form>`, el `{% csrf_token %}` y los botones: lo que
+cambia entre las dos entradas es el marco, no los campos.
+
+Dos cosas que hace el marcado y conviene no deshacer:
+
+- **El importe se pide en cuanto se elige un servicio de precio variable**, sin
+  esperar al POST. `form.variable_price_service_ids` viaja desde el formulario
+  (mismo sitio que decide la validación), así que el aviso del navegador y el
+  error del servidor no pueden discrepar. Sin JavaScript el campo se ve siempre y
+  el servidor sigue rechazando lo que falte: Alpine solo añade el aviso.
+- **El episodio solo se pregunta cuando hay que elegirlo.** Si la cita ya tiene
+  visita, su episodio manda y el formulario ni siquiera trae los campos.
+{% endcomment %}
+
+{% if form.non_field_errors %}
+<div class="rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line" role="alert">
+    {% for error in form.non_field_errors %}<p class="text-sm text-danger">{{ error }}</p>{% endfor %}
+</div>
+{% endif %}
+
+{# --- Episodio -------------------------------------------------------- #}
+{% if form.fixed_episode %}
+<p class="rounded-xl bg-muted px-4 py-3 text-sm text-content-subtle ring-1 ring-line">
+    Se registra en el episodio de la visita que ya tiene esta cita:
+    <span class="font-medium text-content">{{ form.fixed_episode.reason|default:"sin motivo indicado" }}</span>
+    (abierto el {{ form.fixed_episode.opened_at|date:"d/m/Y" }}).
+</p>
+{% else %}
+    {% if form.has_open_episodes %}
+    <div>
+        <label for="{{ form.episode.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+            {{ form.episode.label }}
+        </label>
+        {{ form.episode }}
+        <p id="{{ form.episode.auto_id }}_helptext" class="mt-1.5 text-xs text-content-faint">{{ form.episode.help_text }}</p>
+        {% if form.episode.errors %}
+        <p id="error-episode" class="mt-1.5 text-xs text-danger">{{ form.episode.errors|join:", " }}</p>
+        {% endif %}
+    </div>
+    {% else %}
+    <p class="rounded-xl bg-brand-soft px-4 py-3 text-sm text-brand-fg ring-1 ring-brand-line">
+        Este paciente no tiene ningún episodio abierto: se abrirá uno con el motivo que indiques.
+    </p>
+    {% endif %}
+
+    <div {% if form.has_open_episodes %}x-show="episodio === ''" x-collapse x-cloak{% endif %}>
+        <label for="{{ form.episode_reason.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+            {{ form.episode_reason.label }}
+        </label>
+        {{ form.episode_reason }}
+        {% if form.episode_reason.errors %}
+        <p id="error-episode_reason" class="mt-1.5 text-xs text-danger">{{ form.episode_reason.errors|join:", " }}</p>
+        {% endif %}
+    </div>
+{% endif %}
+
+{# --- Servicio -------------------------------------------------------- #}
+<div>
+    <label for="{{ form.service.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+        {{ form.service.label }}<span class="ml-0.5 text-danger" title="Campo obligatorio" aria-label="obligatorio">*</span>
+    </label>
+    {{ form.service }}
+    <p id="{{ form.service.auto_id }}_helptext" class="mt-1.5 text-xs text-content-faint">{{ form.service.help_text }}</p>
+    {% if form.service.errors %}
+    <p id="error-service" class="mt-1.5 text-xs text-danger">{{ form.service.errors|join:", " }}</p>
+    {% endif %}
+</div>
+
+{# --- Importe y fecha -------------------------------------------------- #}
+<div class="grid gap-4 sm:grid-cols-2">
+    <div>
+        <label for="{{ form.frozen_price.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+            {{ form.frozen_price.label }}<span x-show="precioObligatorio" x-cloak class="ml-0.5 text-danger" title="Campo obligatorio" aria-label="obligatorio">*</span>
+        </label>
+        {{ form.frozen_price }}
+        <p x-show="precioObligatorio" x-cloak class="mt-1.5 text-xs text-warning">
+            Este servicio tiene precio variable: indica el importe real. Se congela al guardar y después no se corrige.
+        </p>
+        <p id="{{ form.frozen_price.auto_id }}_helptext" class="mt-1.5 text-xs text-content-faint" x-show="!precioObligatorio">{{ form.frozen_price.help_text }}</p>
+        {% if form.frozen_price.errors %}
+        <p id="error-frozen_price" class="mt-1.5 text-xs text-danger">{{ form.frozen_price.errors|join:", " }}</p>
+        {% endif %}
+    </div>
+    <div>
+        <label for="{{ form.performed_on.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+            {{ form.performed_on.label }}<span class="ml-0.5 text-danger" title="Campo obligatorio" aria-label="obligatorio">*</span>
+        </label>
+        {{ form.performed_on }}
+        {% if form.performed_on.errors %}
+        <p id="error-performed_on" class="mt-1.5 text-xs text-danger">{{ form.performed_on.errors|join:", " }}</p>
+        {% endif %}
+    </div>
+</div>
+
+{# --- Pie y zona ------------------------------------------------------- #}
+<div class="grid gap-4 sm:grid-cols-2">
+    <div>
+        <label for="{{ form.laterality.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+            {{ form.laterality.label }}
+        </label>
+        {{ form.laterality }}
+        {% if form.laterality.errors %}
+        <p id="error-laterality" class="mt-1.5 text-xs text-danger">{{ form.laterality.errors|join:", " }}</p>
+        {% endif %}
+    </div>
+    <div>
+        <label for="{{ form.affected_zone.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+            {{ form.affected_zone.label }}
+        </label>
+        {{ form.affected_zone }}
+        {% if form.affected_zone.errors %}
+        <p id="error-affected_zone" class="mt-1.5 text-xs text-danger">{{ form.affected_zone.errors|join:", " }}</p>
+        {% endif %}
+    </div>
+</div>
+
+<p class="text-xs text-content-faint">
+    El nombre del servicio y su importe se <span class="font-semibold text-content-subtle">congelan</span> al
+    guardar: una subida de tarifas no reescribirá lo que costó hoy. Para corregir un importe hay que dar
+    de baja el procedimiento y registrar otro.
+</p>

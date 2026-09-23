@@ -19,6 +19,7 @@ from clinical.forms import (
     LesionForm,
     LesionObservationForm,
     LesionResolveForm,
+    PerformedProcedureForm,
 )
 from clinical.models import (
     ClinicalAlert,
@@ -33,6 +34,7 @@ from clinical.models import (
     SignedConsent,
     Visit,
 )
+from clinical.procedures import record_procedure
 from core.authentication import ClinicAgent
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
 from core.permissions import IsAgentClinicKey, IsStaffOrAdmin
@@ -1429,3 +1431,57 @@ class PatientEditView(LoginRequiredMixin, UpdateView):
     def get_success_url(self):
         return reverse_lazy('patients:detail', kwargs={'id': self.object.pk})
     
+
+
+class PatientProcedureCreateView(
+    ProfessionalAuthorMixin, PatientScopedMixin, AccessLogMixin, LoginRequiredMixin, DetailView
+):
+    """Registrar un procedimiento desde la ficha, sin cita de por medio.
+
+    Es la puerta para lo que no sale de la agenda: una urgencia, un paciente que
+    entra sin avisar, algo que se apunta dos días después. `Visit.appointment` es
+    opcional justamente para esto.
+
+    La otra puerta —la normal— es `appointments:procedure-create`, desde la cita:
+    allí la visita queda enganchada a ella y no hay que preguntar ni quién
+    atendió ni cuándo. Las dos comparten formulario y `record_procedure()`, así
+    que la regla de «qué visita es esta» se decide en un solo sitio.
+
+    Sin API REST y sin `hx-post`: formulario de sesión con CSRF, como el resto de
+    la capa clínica, para que el `Api-Key` del agente no llegue aquí. La escritura
+    la registra el `ChangeLog` por señales (`PerformedProcedure` está en el
+    registro de auditoría); la lectura de esta pantalla, `AccessLogMixin`.
+    """
+
+    model = Patient
+    pk_url_kwarg = 'id'
+    context_object_name = 'patient'
+    template_name = 'patients/procedure_form.html'
+
+    def get_form(self, data=None):
+        return PerformedProcedureForm(
+            data, patient=self.object, professional=self.get_professional()
+        )
+
+    def get_context_data(self, **kwargs):
+        """No se sobrescribe `get()`: eclipsaría el de `AccessLogMixin` y la
+        lectura no quedaría registrada."""
+        context = super().get_context_data(**kwargs)
+        context.setdefault('form', self.get_form())
+        context['cancel_url'] = reverse('patients:tab-procedures', args=[self.object.pk])
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        form = self.get_form(data=request.POST)
+        if not form.is_valid():
+            return self.render_to_response(self.get_context_data(form=form))
+
+        procedure = record_procedure(
+            form, patient=self.object, professional=self.get_professional()
+        )
+        messages.success(
+            request,
+            f'Registrado «{procedure.frozen_service_name}» por {procedure.frozen_price} €.',
+        )
+        return redirect('patients:tab-procedures', id=self.object.pk)

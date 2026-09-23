@@ -145,6 +145,37 @@ log_access(
 
 ---
 
+## Qué cuenta como dato clínico (y qué no)
+
+La regla es «toda vista que exponga datos clínicos instrumenta la lectura», y la
+frontera está en **el contenido, no en la existencia**:
+
+| Qué enseña la pantalla | ¿`AccessLog`? |
+|---|---|
+| Nombre, importe, zona, medidas, texto libre, fechas de un registro clínico | **Sí** |
+| Solo que existe: un «sí/no» o un recuento | No |
+
+Un «esta cita acabó en 2 procedimientos» dice que hubo asistencia —información
+de agenda—, no qué le pasa al paciente. Dos pantallas se apoyan hoy en esa
+distinción y lo dicen en su docstring:
+
+- `AppointmentListView` — filtra por «con / sin procedimiento». Booleano.
+- `DashboardAppointmentManageView` — enseña cuántos hay en esa cita. Recuento.
+
+Las dos llevan a `patients:tab-procedures`, que **sí** registra la lectura. La
+frontera está ahí para que cruzarla sea un clic deliberado, y ese clic quede
+anotado.
+
+**Si una de esas pantallas pasa a enseñar el nombre, el importe o la zona de un
+procedimiento, tiene que instrumentar `AccessLog` en el mismo cambio.** Cada una
+tiene un test que falla si se cruza la frontera sin ponerlo
+(`test_el_listado_no_registra_accesslog`, `test_no_se_filtra_ningun_dato_clinico`).
+
+Ante la duda, instrumentar: un `AccessLog` de más es ruido, uno de menos es un
+acceso a historia clínica del que no queda rastro.
+
+---
+
 ## Limitación importante: operaciones en bloque
 
 **Las operaciones en bloque del ORM no emiten señales y por lo tanto NO quedan

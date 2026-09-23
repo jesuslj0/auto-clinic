@@ -17,12 +17,25 @@ Responsive: tarjetas en móvil, tabla en escritorio con su propio `overflow-x-au
             <h3 class="text-lg font-semibold text-content">Procedimientos</h3>
             <p class="mt-1 text-sm text-content-subtle">Tratamientos realizados en cada visita, con el nombre y el importe congelados en ese momento.</p>
         </div>
-        {% if procedures %}
-        <div class="flex flex-shrink-0 items-center gap-3">
+        <div class="flex flex-shrink-0 flex-wrap items-center gap-3">
+            {% if procedures %}
             <div class="rounded-2xl bg-muted px-4 py-2.5 text-right ring-1 ring-line">
                 <p class="text-xs font-medium uppercase tracking-wide text-content-faint">Total</p>
                 <p class="text-base font-semibold text-content">{{ procedures_total|euros }}</p>
             </div>
+            {% endif %}
+            {% comment %}El alta desde aquí es para lo que no sale de la agenda:
+            una urgencia o algo que se apunta después. Lo que venga de una cita
+            se registra desde ella, y así queda enganchado a su visita.
+            {% endcomment %}
+            <a href="{% url 'patients:procedure-create' patient.id %}"
+               class="btn-secondary max-sm:px-3"
+               title="Registrar un procedimiento sin cita asociada">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                <span class="hidden sm:inline">Nuevo procedimiento</span>
+            </a>
             {% comment %}El alta solo se ofrece si hay algo que cobrar: una
             factura sin procedimientos no se puede emitir. El paciente viaja en la
             query string para llegar al formulario con el destinatario fijado.
@@ -38,7 +51,6 @@ Responsive: tarjetas en móvil, tabla en escritorio con su propio `overflow-x-au
             </a>
             {% endif %}
         </div>
-        {% endif %}
     </div>
 
     {% if procedures %}

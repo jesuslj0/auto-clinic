@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+
+{% comment %}
+Alta de un procedimiento desde la ficha del paciente.
+
+Esta es la puerta para lo que NO sale de la agenda: una urgencia, alguien que
+entra sin cita, algo que se apunta dos días después. La puerta normal es la de la
+cita (`appointments:procedure-create`), donde la visita queda enganchada a ella.
+
+Los campos son los mismos en las dos y viven en un solo sitio
+(`clinical/_procedure_form_fields.html`). Aquí solo está el marco.
+
+POST clásico con CSRF, sin HTMX y sin API: la capa clínica no tiene endpoints a
+propósito, para que el `Api-Key` del agente de n8n no llegue hasta ella.
+{% endcomment %}
+
+{% block title %}Nuevo procedimiento · {{ patient }} · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Nuevo procedimiento{% endblock %}
+{% block page_subheading %}<p class="truncate text-xs text-content-subtle sm:text-sm">{{ patient }}</p>{% endblock %}
+
+{% block page_actions %}
+<a href="{{ cancel_url }}" class="btn-secondary max-sm:px-3" aria-label="Volver a la ficha del paciente">
+    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+    </svg>
+    <span class="hidden sm:inline">Volver a la ficha</span>
+</a>
+{% endblock %}
+
+{% block content %}
+{{ form.variable_price_service_ids|json_script:"variable-price-services" }}
+<div class="mx-auto max-w-3xl space-y-6">
+    <p class="rounded-2xl bg-muted px-4 py-3 text-sm text-content-subtle ring-1 ring-line">
+        Se registrará una visita sin cita asociada. Si el procedimiento sale de una cita de la agenda,
+        regístralo desde ella: así queda enganchado y la cita figura como atendida.
+    </p>
+
+    <form method="post" novalidate class="space-y-5 rounded-3xl bg-surface p-6 shadow-soft ring-1 ring-line"
+          x-data="{
+              servicio: '{{ form.service.value|default_if_none:'' }}',
+              episodio: '{{ form.episode.value|default_if_none:'' }}',
+              variables: JSON.parse(document.getElementById('variable-price-services').textContent),
+              get precioObligatorio() { return this.variables.includes(String(this.servicio)); }
+          }">
+        {% csrf_token %}
+        {% include 'clinical/_procedure_form_fields.html' %}
+
+        <div class="flex items-center justify-between gap-3 border-t border-line pt-5">
+            <a href="{{ cancel_url }}" class="btn-secondary">Cancelar</a>
+            <button type="submit" class="btn-primary">Registrar procedimiento</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
