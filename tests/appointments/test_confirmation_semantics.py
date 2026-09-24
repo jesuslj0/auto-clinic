@@ -314,6 +314,71 @@ class TestPendingReminders:
         response = admin_client.get('/api/appointments/pending-reminders/?type=24h')
         assert response.data['count'] == 0
 
+    def _marcar_movida(self, cita, *, validada_antes):
+        """Deja la cita en `rescheduled`, con o sin paso previo por `confirmed`.
+
+        `rescheduled` colapsa dos situaciones que aquí no son la misma, y el
+        historial es lo único que las distingue.
+        """
+        if validada_antes:
+            AppointmentStatusHistory.objects.create(
+                appointment=cita,
+                from_status=Appointment.Status.PENDING,
+                to_status=Appointment.Status.CONFIRMED,
+                actor=AppointmentStatusHistory.Actor.STAFF,
+            )
+        AppointmentStatusHistory.objects.create(
+            appointment=cita,
+            from_status=(
+                Appointment.Status.CONFIRMED if validada_antes
+                else Appointment.Status.PENDING
+            ),
+            to_status=Appointment.Status.RESCHEDULED,
+            actor=AppointmentStatusHistory.Actor.AGENT,
+        )
+        cita.status = Appointment.Status.RESCHEDULED
+        cita.save(update_fields=['status'])
+        return cita
+
+    def test_a_moved_appointment_that_was_in_firm_is_still_reminded(
+        self, admin_client, cita_manana
+    ):
+        """La clínica la aceptó; que el agente la moviera no deja al paciente sin
+        aviso por un trámite interno pendiente."""
+        self._marcar_movida(cita_manana, validada_antes=True)
+
+        response = admin_client.get('/api/appointments/pending-reminders/?type=24h')
+        assert str(cita_manana.pk) in self._ids(response)
+        assert response.data['count'] == 1
+
+    def test_a_moved_appointment_never_validated_gets_no_reminder(
+        self, admin_client, cita_manana
+    ):
+        """Nació `pending` y se movió antes de que nadie la validara: la clínica
+        todavía no la ha aceptado, así que sigue la regla de siempre."""
+        self._marcar_movida(cita_manana, validada_antes=False)
+
+        response = admin_client.get('/api/appointments/pending-reminders/?type=24h')
+        assert response.data['count'] == 0
+
+    def test_a_twice_validated_appointment_is_reminded_only_once(
+        self, admin_client, cita_manana
+    ):
+        """El JOIN contra el historial repite la cita una vez por `confirmed`.
+        Sin `distinct()`, n8n le manda dos recordatorios al paciente."""
+        self._marcar_movida(cita_manana, validada_antes=True)
+        AppointmentStatusHistory.objects.create(
+            appointment=cita_manana,
+            from_status=Appointment.Status.RESCHEDULED,
+            to_status=Appointment.Status.CONFIRMED,
+            actor=AppointmentStatusHistory.Actor.STAFF,
+        )
+        self._marcar_movida(cita_manana, validada_antes=False)
+
+        response = admin_client.get('/api/appointments/pending-reminders/?type=24h')
+        assert len(response.data['results']) == 1
+        assert response.data['count'] == 1
+
     def test_patient_who_already_answered_is_not_reminded_again(
         self, admin_client, cita_manana
     ):
