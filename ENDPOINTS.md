@@ -265,6 +265,14 @@ Al recibir un aviso de chats, el navegador pide el HTML a dos vistas de sesión 
 |-----|----------|
 | `GET /chats/<session_id>/mensajes/?after=<message_id>` | Burbujas posteriores a ese mensaje, en orden. Sin `after`, las últimas 50. Máximo 200 por petición: `X-Has-More: 1` indica que hay que repetir con el último id. Un `after` de otro hilo → 400 (recargar el hilo). Marca el hilo como leído. |
 | `GET /chats/lista/?q=&unread=&active=<session_id>` | La lista de conversaciones con los filtros de la bandeja. `X-Total-Unread` trae el total sin filtros. |
+| `GET /chats/<session_id>/mensajes/?only=<message_id>` | Una sola burbuja, para repintarla cuando cambia (le llega la foto). |
+| `GET /chats/media/<message_id>/` | Foto o audio del mensaje: solo staff de la clínica del hilo, deja `AccessLog` y redirige a una URL firmada de 5 min que el bucket sirve con `no-store`. |
+
+Subida de adjuntos (solo n8n, `Api-Key` de clínica):
+
+| Método | URL | Descripción |
+|--------|-----|-------------|
+| POST | `/api/agent/messages/<id>/media/` | Multipart `file`. Mensaje entrante de tipo imagen o audio. 201 guardado (sin URL en la respuesta) · 400 fichero rechazado por su contenido · 409 ya tenía adjunto (no se reemplaza) · 404 mensaje de otra clínica. |
 
 ---
 

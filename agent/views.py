@@ -4,7 +4,7 @@ from django.contrib import messages as django_messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.db.models import F, Q, Sum
-from django.http import HttpResponse, HttpResponseBadRequest
+from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
 from django.utils import timezone
@@ -14,10 +14,12 @@ from django.views.generic import TemplateView
 from rest_framework import status as http_status
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from agent.models import AgentMemory, ChatMessage, ConversationSession, WorkflowError
+from agent.media import MediaAlreadyAttached, attach_media, log_media_view, signed_media_url
+from agent.models import AgentMemory, ChatAttachment, ChatMessage, ConversationSession, WorkflowError
 from agent.serializers import (
     AgentMemorySerializer,
     ChatMessageSerializer,
@@ -228,6 +230,53 @@ class ChatMessageViewSet(ExportMixin, viewsets.ModelViewSet):
         queryset = ChatMessage.objects.select_related('session', 'clinic')
         return scope_to_clinic(queryset, self.request.user)
 
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='media',
+        permission_classes=[IsAgentClinicKey],
+        parser_classes=[MultiPartParser],
+    )
+    def media(self, request, pk=None):
+        """Sube la foto o nota de voz de un mensaje entrante. Una sola vez.
+
+        Solo n8n (`Api-Key` de la clínica): descarga el binario de Meta y lo
+        manda aquí en el campo `file`. Un mensaje de otra clínica da 404.
+
+        - 201: guardado. La respuesta describe el fichero, nunca trae una URL.
+        - 400: el mensaje no admite adjunto o el fichero no pasa la validación
+          (se mira el contenido, no la extensión).
+        - 409: el mensaje ya tenía adjunto. No se reemplaza nunca.
+        """
+        message = self.get_object()
+        uploaded = request.FILES.get('file')
+        if uploaded is None:
+            return Response(
+                {'file': 'Falta el fichero (campo multipart `file`).'},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            attachment = attach_media(message, uploaded)
+        except MediaAlreadyAttached:
+            return Response(
+                {'detail': 'Este mensaje ya tiene adjunto y no se puede reemplazar.'},
+                status=http_status.HTTP_409_CONFLICT,
+            )
+        except ValidationError as exc:
+            return Response({'file': exc.messages}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {
+                'id': str(attachment.id),
+                'message': str(message.id),
+                'kind': attachment.kind,
+                'mime_type': attachment.mime_type,
+                'size_bytes': attachment.size_bytes,
+                'checksum': attachment.checksum,
+            },
+            status=http_status.HTTP_201_CREATED,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Panel de chats (vistas de plantilla)
@@ -318,7 +367,10 @@ class ChatInboxView(LoginRequiredMixin, TemplateView):
             has_older_messages = total > message_limit
             # Se cogen los N más recientes y se le da la vuelta para pintarlos
             # en orden cronológico.
-            recent = list(active_session.messages.order_by('-created_at', '-id')[:message_limit])
+            recent = list(
+                active_session.messages.select_related('attachment', 'session__patient')
+                .order_by('-created_at', '-id')[:message_limit]
+            )
             messages_page = mark_day_starts(list(reversed(recent)))
 
             # Abrir el hilo lo marca como leído. Es un efecto en un GET, sí,
@@ -392,7 +444,20 @@ class ChatMessagesFragmentView(ChatSessionActionMixin, View):
 
     def get(self, request, session_id):
         session = self.get_session(session_id)
-        messages_qs = session.messages.all()
+        messages_qs = session.messages.select_related('attachment', 'session__patient')
+
+        # Una burbuja concreta, ya pintada, que ha cambiado (le ha llegado la
+        # foto, o su estado de entrega). Se devuelve sola para reemplazarla.
+        only_id = request.GET.get('only')
+        if only_id:
+            try:
+                message = messages_qs.get(pk=only_id)
+            except (ChatMessage.DoesNotExist, ValidationError):
+                return HttpResponseBadRequest('El mensaje no pertenece a este hilo.')
+            html = render_to_string('agent/_message_bubble.html', {'message': message}, request=request)
+            response = HttpResponse(html)
+            response['Cache-Control'] = 'no-store'
+            return response
 
         previous = None
         has_more = False
@@ -461,6 +526,33 @@ class ChatSessionListFragmentView(LoginRequiredMixin, View):
         response = HttpResponse(html)
         response['X-Total-Unread'] = str(total_unread(request.user))
         response['Cache-Control'] = 'no-store'
+        return response
+
+
+class ChatMediaView(LoginRequiredMixin, View):
+    """Abre la foto o el audio de un mensaje: comprueba, registra y redirige.
+
+    Solo sesión del staff de la clínica del hilo (ver `agent.media`). El orden
+    es el único posible: permiso (403) → `AccessLog` → redirección a una URL
+    firmada de vida corta. Django no sirve el fichero; lo entrega el bucket
+    privado, que además responde con `no-store` para que no quede en caché.
+    """
+
+    raise_exception = True
+
+    def get(self, request, message_id):
+        attachment = get_object_or_404(
+            ChatAttachment.objects.select_related('message__session__patient'),
+            message_id=message_id,
+        )
+        url = signed_media_url(attachment, request.user)
+        log_media_view(attachment, request=request)
+
+        response = HttpResponseRedirect(url)
+        # La redirección lleva una URL firmada: que no la guarde el navegador,
+        # ni un proxy, ni viaje como `Referer` a ninguna parte.
+        response['Cache-Control'] = 'private, no-store, max-age=0'
+        response['Referrer-Policy'] = 'no-referrer'
         return response
 
 

@@ -27,6 +27,9 @@ document.addEventListener('alpine:init', () => {
         fetching: false,
         fetchAgain: false,
         listTimer: null,
+        viewer: { open: false, src: '', who: '', when: '', zoom: 1, loading: false, error: false },
+        viewerBaseWidth: 0,
+        viewerOpener: null,
 
         init() {
             this.scrollToBottom();
@@ -47,7 +50,12 @@ document.addEventListener('alpine:init', () => {
 
             switch (event.type) {
                 case 'message':
-                    if (isActive) this.fetchNewMessages();
+                    if (isActive) {
+                        // Un mensaje que ya está pintado ha cambiado (le ha llegado
+                        // la foto, o su estado): se repinta solo esa burbuja.
+                        if (this.findBubble(event.message_id)) this.refreshBubble(event.message_id);
+                        else this.fetchNewMessages();
+                    }
                     this.scheduleListRefresh();
                     break;
                 case 'session':
@@ -150,6 +158,27 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
+        findBubble(messageId) {
+            if (!this.thread || !messageId) return null;
+            return this.thread.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+        },
+
+        async refreshBubble(messageId) {
+            const url = new URL(config.messagesUrl, window.location.origin);
+            url.searchParams.set('only', messageId);
+            try {
+                const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+                if (!response.ok) return;
+                const template = document.createElement('template');
+                template.innerHTML = (await response.text()).trim();
+                const fresh = template.content.querySelector('[data-message-id]');
+                const current = this.findBubble(messageId);
+                if (fresh && current) current.replaceWith(fresh);
+            } catch (error) {
+                // Se queda la versión anterior; la próxima recarga la corrige.
+            }
+        },
+
         isAtBottom() {
             const thread = this.thread;
             if (!thread) return true;
@@ -201,6 +230,95 @@ document.addEventListener('alpine:init', () => {
             } catch (error) {
                 // Se reintenta con el siguiente aviso o `resync`.
             }
+        },
+
+        // --- Visor de fotos -------------------------------------------------
+
+        onThreadClick(event) {
+            // Delegado: las burbujas que llegan por el socket no existían al
+            // arrancar el componente.
+            const trigger = event.target.closest('[data-media-open]');
+            if (!trigger) return;
+            this.openViewer(trigger);
+        },
+
+        openViewer(trigger) {
+            this.viewerOpener = trigger;
+            this.viewerBaseWidth = 0;
+            this.viewer = {
+                open: true,
+                src: trigger.dataset.src,
+                who: trigger.dataset.who,
+                when: trigger.dataset.when,
+                zoom: 1,
+                loading: true,
+                error: false,
+            };
+            document.body.style.overflow = 'hidden';
+            this.$nextTick(() => this.$refs.viewerClose && this.$refs.viewerClose.focus());
+        },
+
+        closeViewer() {
+            // Se suelta la imagen: no se queda en memoria ni en el DOM.
+            this.viewer = { open: false, src: '', who: '', when: '', zoom: 1, loading: false, error: false };
+            document.body.style.overflow = '';
+            if (this.viewerOpener) this.viewerOpener.focus();
+            this.viewerOpener = null;
+        },
+
+        retryViewer() {
+            // Cada intento pide una URL firmada nueva (y deja su AccessLog).
+            const base = this.viewer.src.split('?')[0];
+            this.viewer.error = false;
+            this.viewer.loading = true;
+            this.viewer.src = `${base}?r=${Date.now()}`;
+        },
+
+        onViewerLoad() {
+            this.viewer.loading = false;
+            if (this.viewer.zoom === 1 && this.$refs.viewerImg) {
+                this.viewerBaseWidth = this.$refs.viewerImg.clientWidth;
+            }
+        },
+
+        viewerImageStyle() {
+            if (this.viewer.zoom <= 1 || !this.viewerBaseWidth) {
+                // Contra la ventana y no contra el contenedor: el escenario es
+                // `w-max` (para poder desplazarse ampliada) y un 100 % crecería
+                // con la propia foto. 2rem = el relleno; 6rem = cabecera + relleno.
+                return 'max-width: calc(100vw - 2rem); max-height: calc(100vh - 6rem);';
+            }
+            return `width: ${Math.round(this.viewerBaseWidth * this.viewer.zoom)}px; max-width: none; max-height: none;`;
+        },
+
+        zoomBy(delta) {
+            this.setZoom(this.viewer.zoom + delta);
+        },
+
+        toggleZoom(event) {
+            if (this.viewer.zoom > 1) {
+                this.setZoom(1);
+                return;
+            }
+            // Amplía hacia el punto pulsado, no hacia la esquina.
+            const rect = event.target.getBoundingClientRect();
+            const fx = (event.clientX - rect.left) / rect.width;
+            const fy = (event.clientY - rect.top) / rect.height;
+            this.setZoom(2.5, fx, fy);
+        },
+
+        setZoom(zoom, fx = 0.5, fy = 0.5) {
+            if (!this.viewerBaseWidth && this.$refs.viewerImg) {
+                this.viewerBaseWidth = this.$refs.viewerImg.clientWidth;
+            }
+            this.viewer.zoom = Math.min(4, Math.max(1, zoom));
+            this.$nextTick(() => {
+                const stage = this.$refs.viewerStage;
+                const image = this.$refs.viewerImg;
+                if (!stage || !image) return;
+                stage.scrollLeft = image.offsetLeft + image.clientWidth * fx - stage.clientWidth / 2;
+                stage.scrollTop = image.offsetTop + image.clientHeight * fy - stage.clientHeight / 2;
+            });
         },
 
         // --- Cambios de estructura -----------------------------------------

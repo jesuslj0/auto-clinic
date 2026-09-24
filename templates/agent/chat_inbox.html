@@ -111,7 +111,7 @@ funcionando como antes, recargando al navegar.
         {% include 'agent/_thread_header.html' with session=active_session query=query %}
 
         <div class="relative flex min-h-0 flex-1 flex-col">
-        <div x-ref="thread" @scroll.passive="onThreadScroll()"
+        <div x-ref="thread" @scroll.passive="onThreadScroll()" @click="onThreadClick($event)"
              class="min-h-0 flex-1 space-y-3 overflow-y-auto bg-brand-gradient-soft px-4 py-5 sm:px-6 max-lg:max-h-[60vh]">
             {% if has_older_messages %}
             <div class="text-center">
@@ -154,6 +154,60 @@ funcionando como antes, recargando al navegar.
         {% endif %}
     </section>
 </section>
+
+{% comment %}
+Visor de fotos del chat. La imagen se pide al abrirlo (`/chats/media/<id>/`:
+permiso → AccessLog → URL firmada de 5 min) y se suelta al cerrarlo. El fondo es
+oscuro y casi opaco en los dos temas a propósito: una foto se mira mejor sobre
+negro, y detrás no debe entreverse la conversación. Color literal por eso mismo:
+es el fondo de un visor, no una superficie del tema.
+{% endcomment %}
+<div x-cloak x-show="viewer.open" x-transition.opacity.duration.150ms
+     @keydown.escape.window="viewer.open && closeViewer()"
+     class="fixed inset-0 z-[70] flex flex-col backdrop-blur-md"
+     style="background-color: rgb(2 6 23 / 0.97)"
+     role="dialog" aria-modal="true" aria-labelledby="media-viewer-title">
+    <header class="flex items-center gap-3 px-4 py-3 text-white sm:px-6">
+        <div class="min-w-0 flex-1">
+            <p id="media-viewer-title" class="truncate text-sm font-semibold" x-text="viewer.who"></p>
+            <p class="text-xs text-white/70" x-text="viewer.when"></p>
+        </div>
+        <div class="flex flex-shrink-0 items-center gap-1">
+            <button type="button" @click="zoomBy(-0.5)" :disabled="viewer.zoom <= 1"
+                    class="rounded-lg p-2 text-white/80 transition hover:bg-white/10 hover:text-white disabled:opacity-30" aria-label="Alejar">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" d="M5 12h14" /></svg>
+            </button>
+            <span class="w-12 text-center text-xs tabular-nums text-white/80" x-text="Math.round(viewer.zoom * 100) + '%'"></span>
+            <button type="button" @click="zoomBy(0.5)" :disabled="viewer.zoom >= 4"
+                    class="rounded-lg p-2 text-white/80 transition hover:bg-white/10 hover:text-white disabled:opacity-30" aria-label="Acercar">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" d="M12 5v14M5 12h14" /></svg>
+            </button>
+            <button type="button" x-ref="viewerClose" @click="closeViewer()"
+                    class="ml-2 rounded-lg p-2 text-white/80 transition hover:bg-white/10 hover:text-white" aria-label="Cerrar">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+        </div>
+    </header>
+    <div x-ref="viewerStage" class="relative min-h-0 flex-1 overflow-auto">
+        {% comment %}`m-auto` y no `justify-center`: centra la foto pequeña y,
+        ampliada, deja llegar con el scroll a todos sus bordes.{% endcomment %}
+        <div class="flex min-h-full min-w-full w-max p-4" @click.self="closeViewer()">
+            <img x-ref="viewerImg" :src="viewer.src || null" alt="" referrerpolicy="no-referrer" draggable="false"
+                 x-show="!viewer.error"
+                 @load="onViewerLoad()" @error="viewer.loading = false; viewer.error = !!viewer.src"
+                 @click="toggleZoom($event)" :style="viewerImageStyle()"
+                 :class="viewer.zoom > 1 ? 'cursor-zoom-out' : 'cursor-zoom-in'"
+                 class="m-auto select-none rounded-lg shadow-2xl">
+        </div>
+        <div x-show="viewer.loading" class="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span class="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-label="Cargando"></span>
+        </div>
+        <div x-show="viewer.error" class="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center text-white">
+            <p class="text-sm">No se ha podido cargar la foto.</p>
+            <button type="button" @click="retryViewer()" class="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/20">Reintentar</button>
+        </div>
+    </div>
+</div>
 </div>
 {% endblock %}
 

@@ -47,7 +47,7 @@ python manage.py runserver    # Uses config.settings.dev by default
 | `notifications` | Celery beat tasks for reminder dispatch |
 | `billing` | `Subscription` (planes de la clínica) y `PatientInvoice`: factura de paciente que agrupa `PerformedProcedure`. Borrador editable; al emitir copia sus líneas (`lines`), congela `total`, toma número de la serie de su clínica (`InvoiceSequence`) y no vuelve a mirar los procedimientos. No se corrige: se anula (`void()`) y se emite otra |
 | `booking` | Template-only public booking flow (no models) |
-| `agent` | WhatsApp bot state: `AgentMemory` (contexto del LLM), `ConversationSession` (hilo), `ChatMessage` (historial append-only), `WorkflowError` |
+| `agent` | WhatsApp bot state: `AgentMemory` (contexto del LLM), `ConversationSession` (hilo), `ChatMessage` (historial append-only, auditado), `ChatAttachment` (foto/nota de voz del paciente, irremplazable), `WorkflowError` |
 | `knowledge` | Clinic knowledge base: `ClinicKnowledgeBase`, `ClinicInfoQuery`, `ClinicInfoCache` |
 | `audit` | Append-only audit trail: `ChangeLog` (writes, via signals) and `AccessLog` (reads, instrumented per view) |
 | `clinical` | Clinical core: `MedicalHistory`, `Episode`, `Visit`, `ClinicalNote` (SOAP), `Addendum`. Immutable after signing; soft-delete only. Also versioned anamnesis: `QuestionnaireTemplate`, `TemplateVersion`, `Question`, `QuestionnaireResponse` (immutable literal snapshot) , `ClinicalAlert` (per-patient, deactivated never deleted), `Lesion` (foot-map, coded zone + normalized coords) and its follow-up: `LesionObservation` (measurements per visit) + `LesionAttachment` (photo in a private R2 bucket, signed URLs only). `PerformedProcedure` links a visit to the service catalogue with the price frozen. Versioned informed consent: `ConsentTemplate`, `ConsentVersion`, `SignedConsent` (literal `text_copy` + signature in the private bucket) |
@@ -150,6 +150,40 @@ touching it — see `clinical/README.md` for the full picture:
 - **Retention is not fixed in code.** `CLINICAL_RETENTION_YEARS` is a setting with
   a conservative default; there is no automatic purge (pending autonomic law).
 
+### WhatsApp attachments (`agent.ChatAttachment`)
+
+A photo a patient sends (a cut, a nail, a wound) is health data. It follows the
+clinical-photo rules, plus a few of its own — see `agent/files.py` and
+`agent/media.py`:
+
+- **Same private bucket** (`clinical_media`), own prefix `chat-media/`, UUID key,
+  object key stored, never a URL.
+- **Validated by content and rewritten without metadata.** Images go through
+  `validate_clinical_image(external=True)` and are then re-encoded from pixels
+  (EXIF/GPS, XMP, PNG text all dropped; EXIF orientation applied first; ICC,
+  transparency and animated frames kept). Audio: allow-list Ogg (Opus/Vorbis)
+  and MP3 by byte signature. Size and checksum describe the *stored* file.
+- **Irreplaceable.** One attachment per message (`OneToOne`), `save()` of an
+  existing row and `delete()` raise, and a PostgreSQL trigger blocks any
+  `UPDATE` (`agent/migrations/0009`). `DELETE` only happens through the cascade
+  of a deleted conversation; the bucket object is kept.
+- **Intake:** `POST /api/agent/messages/<id>/media/` (multipart `file`), agent
+  `Api-Key` only, inbound image/audio messages only, 201/400/409. n8n downloads
+  the binary from Meta in the `WA-Media-Ingest` sub-workflow, which **saves no
+  executions** so the photo never stays in n8n.
+- **Serving:** `GET /chats/media/<message_id>/` — staff session of the thread's
+  **clinic** (not the patient: people without a file yet must be visible),
+  agent denied, `AccessLog` per view, redirect to a signed URL that lives
+  `CHAT_MEDIA_URL_EXPIRE` seconds (300) and makes the bucket answer
+  `Cache-Control: no-store`. The redirect carries `no-store` and
+  `Referrer-Policy: no-referrer`.
+- **Never shown by surprise.** The thread renders a blurred placeholder with no
+  image data ("Toca para ver"); the photo is only requested when opened in the
+  viewer, so each `AccessLog` is a real view. Audio uses `preload="none"`.
+
+`LesionAttachment.Source.PATIENT_WHATSAPP` already exists: promoting a chat photo
+to a lesion is a planned follow-up (same bucket, keep the checksum).
+
 ### Multi-tenancy
 
 All domain models reference `clinic_id`. Staff queries are automatically filtered by `user.clinic`. Superusers see all clinics. This isolation is enforced in DRF viewset `get_queryset()` methods.
@@ -236,7 +270,8 @@ CELERY_RESULT_BACKEND=redis://redis:6379/2
 ```
 
 Clinical photo storage (Cloudflare R2, private bucket — the `clinical_media`
-backend). Without these, uploading a `LesionAttachment` fails; nothing else does:
+backend). **Required in production**: without these, lesion photos, consent
+signatures and WhatsApp attachments (`ChatAttachment`) all fail to upload:
 ```
 R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
@@ -245,7 +280,9 @@ R2_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
 ```
 Keep the bucket **private** (no public access, no custom public domain). Optional
 overrides: `CLINICAL_MEDIA_URL_EXPIRE` (signed-URL seconds, default 600),
-`CLINICAL_ATTACHMENT_MAX_BYTES`, `CLINICAL_ATTACHMENT_MAX_BYTES_EXTERNAL`.
+`CLINICAL_ATTACHMENT_MAX_BYTES`, `CLINICAL_ATTACHMENT_MAX_BYTES_EXTERNAL`,
+`CHAT_MEDIA_URL_EXPIRE` (WhatsApp attachments, default 300),
+`CHAT_AUDIO_MAX_BYTES` (default 16 MB).
 
 ## Key notes
 

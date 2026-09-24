@@ -325,6 +325,64 @@ contenido en el log.
 
 ---
 
+### Decisiones tomadas al implementarla (2026-09-24)
+
+Estado: **hecha en Django y probada en navegador**; falta conectar n8n (ver abajo).
+
+- **Modelo propio `ChatAttachment`** (uno a uno con el mensaje) en vez de un
+  campo en `ChatMessage`: así «irremplazable» lo garantiza la base de datos
+  (restricción única + trigger que bloquea todo `UPDATE`) y el mensaje sigue
+  siendo de solo inserción.
+- **Permiso por clínica del hilo, no por paciente**: las fotos de quien aún no
+  tiene ficha (sin onboarding) se ven igual.
+- **URL firmada de 5 min** (`CHAT_MEDIA_URL_EXPIRE`) y el bucket responde con
+  `Cache-Control: no-store` (va dentro de la firma). Redirección con
+  `no-store` y `Referrer-Policy: no-referrer`.
+- **«Toca para ver»**: la foto no se carga al abrir el hilo (el difuminado es
+  decoración, sin datos de la imagen). Visor modal con quién y cuándo, zoom con
+  botones o pulsando. Cada apertura = un `AccessLog`.
+- **Metadatos fuera en toda imagen**: se reescribe desde los píxeles (JPEG,
+  PNG, WebP, animados incluidos), aplicando antes la orientación del EXIF.
+- **Auditoría**: `ChatMessage` y `ChatAttachment` registrados; `read_at`
+  excluido (lo sella `mark_session_read` en bloque).
+- **n8n**: subflujo `WA-Media-Ingest` (id P5hzbvgK4v6D8yAe) creado **sin
+  guardar ejecuciones**. Pendiente: engancharlo desde el orquestador cuando se
+  conecte la Cloud API (extraer `image.id`/`audio.id` en «Normalizar
+  Mensaje» y llamarlo tras «Registrar Mensaje Entrante»).
+- **Pendiente para más adelante**: pasar una foto del chat a una lesión
+  (`LesionAttachment.Source.PATIENT_WHATSAPP` ya existe); verificar que la
+  nota de voz Ogg/Opus se reproduce en el Safari del iPhone de la clínica.
+
+---
+
+### Pendiente de la fase 2 (apuntado el 2026-09-25)
+
+Nada de esto bloquea seguir con la fase 3; todo se hace al conectar la Cloud API
+o antes de desplegar.
+
+1. **Enganchar `WA-Media-Ingest` desde el orquestador** («WA-Inbound-Orchestrator
+   con buffer», activo). En «Normalizar Mensaje» (rama Meta) sacar
+   `msg.image.id` / `msg.audio.id` (`voice` también es audio); tras
+   «Registrar Mensaje Entrante», si hay media_id, llamar al subflujo con
+   `message_id` (id que devuelve Django), `media_id`, `whatsapp_token` y
+   `django_auth_header` del Config Loader. No tocado todavía porque es el flujo
+   en producción.
+2. **Purga general de n8n** (lo aplica quien gestione el contenedor, requiere
+   reinicio): `EXECUTIONS_DATA_PRUNE=true` y `EXECUTIONS_DATA_MAX_AGE` corto
+   (p. ej. 72 h). El orquestador sí guarda ejecuciones y en ellas va el texto de
+   los mensajes.
+3. **Verificar con R2 real** que la URL firmada devuelve la cabecera
+   `Cache-Control: private, no-store` (`response-cache-control` en la firma).
+4. **Verificar notas de voz Ogg/Opus en el Safari del iPhone** de la clínica. Si
+   no suenan, convertir a AAC/MP3 en el servidor al recibirlas.
+5. **Aplicar migraciones** `agent/0008` y `agent/0009` al desplegar, y tener
+   las variables `R2_*` en el `.env` de producción (ahora obligatorias).
+6. **Futuro**: pasar una foto del chat a una lesión
+   (`LesionAttachment.Source.PATIENT_WHATSAPP`), reutilizando el objeto del
+   bucket y su checksum.
+
+---
+
 ## Fase 3 — Plantillas fuera de la ventana de 24 h
 
 ### Por qué esto es bloqueante ahora

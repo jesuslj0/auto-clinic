@@ -1,9 +1,13 @@
 import uuid
 from datetime import timedelta
 
+from django.core.exceptions import ValidationError
+from django.core.files.base import ContentFile
 from django.db import models
 from django.utils import timezone
 
+from agent.files import chat_media_upload_to
+from clinical.files import clinical_media_storage
 from core.models import Clinic
 
 # WhatsApp solo permite texto libre dentro de las 24 h siguientes al último
@@ -272,3 +276,111 @@ class ChatMessage(models.Model):
 
     def __str__(self):
         return f"{self.get_sender_display()} → {self.body[:40]}"
+
+    @property
+    def media(self):
+        """El adjunto del mensaje, o `None` si no tiene (o aún no ha llegado)."""
+        from django.core.exceptions import ObjectDoesNotExist
+
+        try:
+            return self.attachment
+        except ObjectDoesNotExist:
+            return None
+
+    @property
+    def display_body(self) -> str:
+        """El texto que escribió alguien, sin el marcador que pone n8n.
+
+        Un adjunto sin pie de foto llega con `body` = «[image]», «[audio]»… para
+        que la API no lo rechace por vacío. Eso no es texto del paciente y no se
+        enseña: la burbuja ya muestra el adjunto.
+        """
+        text = self.body.strip()
+        if text == f'[{self.message_type}]':
+            return ''
+        return text
+
+
+class ChatAttachmentImmutable(Exception):
+    """Se ha intentado modificar un adjunto de chat ya guardado."""
+
+
+class ChatAttachment(models.Model):
+    """Foto o nota de voz que mandó un paciente por WhatsApp.
+
+    Es dato de salud y se guarda como tal (ver `agent/files.py`): bucket privado,
+    clave UUID, contenido validado y, si es imagen, reescrita sin metadatos. Se
+    sirve solo con sesión del staff de la clínica, con URL firmada de vida corta
+    y dejando `AccessLog` (`agent.media`).
+
+    **Irremplazable.** Un mensaje tiene como mucho un adjunto (`OneToOne`: la
+    base de datos rechaza el segundo) y el adjunto no se modifica nunca: ni el
+    ORM (`save()` de una fila existente) ni SQL crudo (trigger de la migración
+    0009). Lo que el paciente mandó es lo que queda.
+
+    Vive aparte de `ChatMessage` para que el mensaje siga siendo de solo
+    inserción: el binario llega después que el texto (n8n lo descarga de Meta y
+    lo sube), y añadirlo no tiene que tocar la fila del mensaje.
+    """
+
+    class Kind(models.TextChoices):
+        IMAGE = 'image', 'Imagen'
+        AUDIO = 'audio', 'Audio'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    message = models.OneToOneField(
+        ChatMessage, on_delete=models.CASCADE, related_name='attachment'
+    )
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    file = models.FileField(
+        upload_to=chat_media_upload_to,
+        storage=clinical_media_storage,
+        max_length=255,
+        help_text='Clave del objeto en el bucket privado. Nunca una URL.',
+    )
+    mime_type = models.CharField(
+        max_length=100, help_text='Tipo real del contenido, deducido al validar.'
+    )
+    size_bytes = models.PositiveBigIntegerField()
+    checksum = models.CharField(
+        max_length=71, help_text='sha256:<hexdigest> del fichero guardado.'
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'chat_attachments'
+        verbose_name = 'adjunto de chat'
+        verbose_name_plural = 'adjuntos de chat'
+
+    def __str__(self):
+        return f'{self.get_kind_display()} del mensaje {self.message_id}'
+
+    @property
+    def patient(self):
+        """Paciente del hilo, si ya tiene ficha. Puede ser `None`."""
+        return self.message.session.patient
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ChatAttachmentImmutable(
+                f'El adjunto {self.pk} no se puede modificar: lo que mandó el paciente es lo que queda.'
+            )
+        if not self.file:
+            raise ValidationError({'file': 'El adjunto necesita un fichero.'})
+
+        # La validación vive aquí, no en la vista: cualquier camino de entrada
+        # (API, shell, admin) pasa por el mismo filtro.
+        from agent.files import prepare_chat_audio, prepare_chat_image
+
+        prepare = prepare_chat_image if self.kind == self.Kind.IMAGE else prepare_chat_audio
+        prepared = prepare(self.file)
+        self.mime_type = prepared.mime_type
+        self.size_bytes = prepared.size_bytes
+        self.checksum = prepared.checksum
+        # Se guarda el contenido PREPARADO (imagen sin metadatos), no el subido.
+        # El nombre es irrelevante: `chat_media_upload_to` pone la clave.
+        self.file = ContentFile(prepared.content, name=f'upload{prepared.extension}')
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ChatAttachmentImmutable('Los adjuntos de chat no se borran uno a uno.')
