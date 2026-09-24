@@ -51,7 +51,12 @@
                     {% include 'dashboard/_appointment_field_icon.html' with field='datetime' %}
                     Fecha y hora
                 </dt>
-                <dd class="mt-1.5 text-sm font-semibold text-content">{{ appointment.scheduled_at|date:"l, j \d\e F \d\e Y · H:i" }}</dd>
+                <dd class="mt-1.5">
+                    <p class="text-lg font-semibold leading-tight text-content tabular-nums">
+                        {{ appointment.scheduled_at|date:"H:i" }}{% if appointment.end_at %} <span class="text-content-subtle">–</span> {{ appointment.end_at|date:"H:i" }}{% endif %}
+                    </p>
+                    <p class="mt-0.5 text-sm text-content-muted">{{ appointment.scheduled_at|date:"l, j \d\e F \d\e Y"|capfirst }}</p>
+                </dd>
             </div>
             <div class="rounded-2xl bg-muted p-4">
                 <dt class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-content-subtle">
@@ -60,12 +65,53 @@
                 </dt>
                 <dd class="mt-1.5 text-sm font-semibold text-content">{{ appointment.professional|default:'Sin asignar' }}</dd>
             </div>
-            <div class="rounded-2xl bg-muted p-4 sm:col-span-2">
-                <dt class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-content-subtle">
-                    {% include 'dashboard/_appointment_field_icon.html' with field='notes' %}
-                    Notas
+            <div class="rounded-2xl bg-muted p-4 sm:col-span-2" x-data="{ editando: false }">
+                <dt class="flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-wide text-content-subtle">
+                    <span class="flex items-center gap-1.5">
+                        {% include 'dashboard/_appointment_field_icon.html' with field='notes' %}
+                        Notas
+                    </span>
+                    <button
+                        type="button"
+                        x-show="!editando"
+                        @click="editando = true; $nextTick(() => $refs.campo.focus())"
+                        class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-fg transition hover:bg-brand-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                    >
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                        </svg>
+                        {% if appointment.notes %}Editar{% else %}Añadir{% endif %}
+                    </button>
                 </dt>
-                <dd class="mt-1.5 text-sm text-content-muted">{{ appointment.notes|default:'Sin notas registradas.' }}</dd>
+
+                <dd class="mt-1.5" x-show="!editando">
+                    <p class="whitespace-pre-line text-sm text-content-muted">{{ appointment.notes|default:'Sin notas registradas.' }}</p>
+                </dd>
+
+                <dd class="mt-1.5" x-show="editando" x-cloak>
+                    <form method="post" action="{% url 'core:dashboard-appointment-action' appointment.id %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="save_notes">
+                        <textarea
+                            name="notes"
+                            x-ref="campo"
+                            rows="4"
+                            placeholder="Anota aquí lo que la clínica deba saber de esta cita."
+                            @keydown.escape.stop="editando = false; $refs.campo.value = $refs.campo.defaultValue"
+                            class="block w-full resize-y rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >{{ appointment.notes }}</textarea>
+                        <div class="mt-2 flex justify-end gap-2">
+                            <button
+                                type="button"
+                                @click="editando = false; $refs.campo.value = $refs.campo.defaultValue"
+                                class="rounded-xl px-3 py-2 text-sm font-medium text-content-muted transition hover:bg-muted-strong hover:text-content"
+                            >
+                                Cancelar
+                            </button>
+                            <button type="submit" class="btn-primary px-4 py-2 text-sm">Guardar</button>
+                        </div>
+                    </form>
+                </dd>
             </div>
         </dl>
 
@@ -118,8 +164,6 @@
             <div class="flex flex-col gap-2 sm:items-end">
                 <p class="text-xs font-semibold uppercase tracking-wide text-content-faint sm:text-right">Avanzar cita</p>
                 <div class="flex flex-wrap gap-2 sm:justify-end">
-                    {# Una cita reagendada por el agente se valida igual que una pendiente:
-                       validarla es el gesto con el que la clínica da por buena la hora nueva. #}
                     {% if appointment.status == 'pending' or appointment.status == 'rescheduled' %}
                     <button
                         type="button"

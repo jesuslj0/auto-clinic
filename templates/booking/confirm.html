@@ -8,7 +8,7 @@
     <div class="mb-8">
         <p class="text-sm font-semibold uppercase tracking-wide text-brand-fg">Horario seleccionado</p>
         <h3 class="mt-2 text-2xl font-semibold text-content">{{ selected_datetime|date:"l, j \d\e F \d\e Y" }}</h3>
-        <p class="mt-1 text-sm text-content-subtle">{{ selected_datetime|date:"g:i A" }}{% if service %} · {{ service.name }}{% endif %}</p>
+        <p class="mt-1 text-sm text-content-subtle">{{ selected_datetime|date:"H:i" }}{% if service %} · {{ service.name }}{% endif %}</p>
     </div>
 
     <form method="post" class="space-y-5">

@@ -7,7 +7,7 @@
 <section class="mx-auto max-w-2xl rounded-3xl bg-surface px-6 py-12 text-center shadow-soft ring-1 ring-line sm:px-10">
     <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success-soft text-2xl text-success">✓</div>
     <h3 class="mt-6 text-3xl font-semibold text-content">Cita reservada con éxito</h3>
-    <p class="mt-3 text-sm leading-6 text-content-subtle">Tu cita{% if appointment %} para el {{ appointment.scheduled_at|date:"j \d\e F \d\e Y \a \l\a\s g:i A" }}{% endif %} ha sido registrada. Se puede enviar un mensaje de confirmación al paciente con los siguientes pasos.</p>
+    <p class="mt-3 text-sm leading-6 text-content-subtle">Tu cita{% if appointment %} para el {{ appointment.scheduled_at|date:"j \d\e F \d\e Y \a \l\a\s H:i" }}{% endif %} ha sido registrada. Se puede enviar un mensaje de confirmación al paciente con los siguientes pasos.</p>
     <div class="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
         <a href="{% url 'booking:service_list' %}" class="inline-flex items-center justify-center rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white hover:bg-brand-700">Reservar otra cita</a>
         <a href="{% url 'core:dashboard' %}" class="inline-flex items-center justify-center rounded-2xl border border-line px-5 py-3 text-sm font-semibold text-content-muted hover:bg-muted">Volver al panel</a>

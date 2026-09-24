@@ -79,7 +79,7 @@
                     <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
                     </svg>
-                    <span>{{ appointment.scheduled_at|date:"j M Y" }} · {{ appointment.scheduled_at|date:"g:i A" }} – {{ appointment.end_at|date:"g:i A" }}</span>
+                    <span>{{ appointment.scheduled_at|date:"j M Y" }} · {{ appointment.scheduled_at|date:"H:i" }} – {{ appointment.end_at|date:"H:i" }}</span>
                 </div>
                 <p class="mt-1.5 text-xs text-content-subtle">
                     {% if appointment.professional %}{{ appointment.professional.user.get_full_name|default:appointment.professional.user.email }}{% else %}Sin asignar{% endif %}
@@ -129,7 +129,7 @@
                             {{ appointment.service }}
                             {% if appointment.has_procedure %}<span class="mt-1.5 block"><span class="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success" title="Tiene un procedimiento registrado"><svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>Procedimiento</span></span>{% endif %}
                         </td>
-                        <td class="px-6 py-4 text-content-muted">{{ appointment.scheduled_at|date:"j M Y" }}<br><span class="text-xs text-content-subtle">{{ appointment.scheduled_at|date:"g:i A" }} – {{ appointment.end_at|date:"g:i A" }}</span></td>
+                        <td class="px-6 py-4 text-content-muted">{{ appointment.scheduled_at|date:"j M Y" }}<br><span class="text-xs text-content-subtle">{{ appointment.scheduled_at|date:"H:i" }} – {{ appointment.end_at|date:"H:i" }}</span></td>
                         <td class="px-6 py-4">
                             <a href="?{% appointment_query status=appointment.status page='' %}"
                                title="Filtrar por este estado"

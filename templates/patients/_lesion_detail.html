@@ -28,8 +28,10 @@ es la página de evolución, que se abre desde aquí.
     id="lesion-detalle-panel"
     class="rounded-2xl bg-muted p-5 ring-1 ring-line focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
     tabindex="-1"
-    {# El foco entra en el panel al abrirlo: el marcador que lo abrió sigue
-       existiendo, pero lo que acaba de aparecer es esto. #}
+    {% comment %}
+    El foco entra en el panel al abrirlo: el marcador que lo abrió sigue
+    existiendo, pero lo que acaba de aparecer es esto.
+    {% endcomment %}
     x-init="$nextTick(() => $el.focus())"
 >
     {# --- Cabecera ------------------------------------------------------- #}

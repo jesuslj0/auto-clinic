@@ -23,7 +23,7 @@ incluya.
             <article class="flex flex-col gap-4 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
                 <div class="min-w-0">
                     <p class="text-sm font-semibold text-content">{{ appointment.service }}</p>
-                    <p class="mt-1 text-sm text-content-subtle">{{ appointment.scheduled_at|date:"j M, Y" }} · {{ appointment.scheduled_at|date:"g:i A" }} – {{ appointment.end_at|date:"g:i A" }}</p>
+                    <p class="mt-1 text-sm text-content-subtle">{{ appointment.scheduled_at|date:"j M, Y" }} · {{ appointment.scheduled_at|date:"H:i" }} – {{ appointment.end_at|date:"H:i" }}</p>
                 </div>
                 <span class="inline-flex flex-shrink-0 items-center gap-1.5 self-start rounded-full px-3 py-1 text-xs font-semibold sm:self-auto {{ appointment.status|status_badge }}">{{ appointment.status|status_icon:"h-3.5 w-3.5" }}{{ appointment.get_status_display|default:appointment.status|title }}</span>
             </article>

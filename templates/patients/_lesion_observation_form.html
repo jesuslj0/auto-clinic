@@ -42,8 +42,10 @@ normal contra esa misma URL, que responde con la página completa; por eso el
     hx-swap="innerHTML"
     hx-encoding="multipart/form-data"
     x-data="{ visita: '{{ observation_form.visit.value|default_if_none:'' }}' }"
-    {# El foco entra en el primer control del formulario, no en el panel que lo
-       contiene: Alpine inicializa el padre antes que el hijo, así que este gana. #}
+    {% comment %}
+    El foco entra en el primer control del formulario, no en el panel que lo
+    contiene: Alpine inicializa el padre antes que el hijo, así que este gana.
+    {% endcomment %}
     x-init="$nextTick(() => $el.querySelector('select, input')?.focus())"
 >
     {% csrf_token %}

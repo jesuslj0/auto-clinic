@@ -37,8 +37,10 @@ propósito, para que el `Api-Key` del agente de n8n no llegue hasta ella.
 <div class="mx-auto max-w-3xl space-y-6">
 
     {% if not patient %}
-    {# La historia clínica cuelga del paciente: sin ficha no hay dónde colgarla.
-       Pasa con las citas que abre el agente cuando no se llegó a registrar. #}
+    {% comment %}
+    La historia clínica cuelga del paciente: sin ficha no hay dónde colgarla.
+    Pasa con las citas que abre el agente cuando no se llegó a registrar.
+    {% endcomment %}
     <div class="rounded-3xl bg-warning-soft p-6 text-sm text-warning ring-1 ring-warning-line" role="alert">
         <p class="font-semibold">Esta cita no tiene ficha de paciente.</p>
         <p class="mt-1.5">

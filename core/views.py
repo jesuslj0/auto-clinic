@@ -772,6 +772,23 @@ class DashboardAppointmentActionView(LoginRequiredMixin, View):
                 actor_label=actor_label,
             )
             success_message = 'Cita marcada como no presentada.'
+        elif action == 'save_notes':
+            # Nota de agenda, no de historia clínica: ver el docstring de
+            # `DashboardAppointmentManageView` para dónde está esa frontera. El
+            # campo está registrado como SENSIBLE en la auditoría, así que el log
+            # anota que la nota cambió y nunca lo que pone.
+            #
+            # No toca el estado, así que no hay transición que registrar en
+            # `AppointmentStatusHistory`; y se puede escribir en cualquier estado,
+            # porque anotar por qué una cita se canceló o por qué el paciente no
+            # vino es justo cuando más falta hace.
+            appointment.notes = request.POST.get('notes', '').strip()
+            appointment.save(update_fields=['notes', 'updated_at'])
+            messages.success(request, 'Notas guardadas.')
+            # Vuelve al detalle, que es de donde se edita. A propósito NO usa el
+            # `next` del POST: es un destino fijo y conocido, y así no hay que
+            # fiarse de una URL que llega en el formulario.
+            return redirect('core:dashboard-manage-appointment', appointment_id=appointment.pk)
         else:
             return HttpResponseBadRequest('Acción no soportada.')
 
