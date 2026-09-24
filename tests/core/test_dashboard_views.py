@@ -31,6 +31,74 @@ class TestDashboardAppointmentActions:
         appointment_a.refresh_from_db()
         assert appointment_a.status == Appointment.Status.CANCELLED
 
+    def test_the_detail_offers_the_notes_textarea(self, client, admin_user, appointment_a):
+        """La edición en línea vive en la plantilla: si se rompe, aquí se ve."""
+        appointment_a.notes = 'Alergia al latex.'
+        appointment_a.save(update_fields=['notes'])
+        client.force_login(admin_user)
+
+        html = client.get(
+            reverse('core:dashboard-manage-appointment', args=[appointment_a.pk])
+        ).content.decode()
+
+        assert 'name="notes"' in html
+        assert 'value="save_notes"' in html
+        # El texto actual va dentro del textarea, listo para editar.
+        assert 'Alergia al latex.' in html
+
+    def test_notes_can_be_saved_from_the_detail(self, client, admin_user, appointment_a):
+        client.force_login(admin_user)
+        response = client.post(
+            reverse('core:dashboard-appointment-action', args=[appointment_a.pk]),
+            {'action': 'save_notes', 'notes': '  Viene acompañada de su hija.  '},
+        )
+
+        assert response.status_code == 302
+        # Vuelve al detalle, que es de donde se edita, no al panel.
+        assert response.url == reverse(
+            'core:dashboard-manage-appointment', args=[appointment_a.pk]
+        )
+        appointment_a.refresh_from_db()
+        assert appointment_a.notes == 'Viene acompañada de su hija.'
+
+    def test_saving_notes_does_not_touch_the_status(self, client, admin_user, appointment_a):
+        """Anotar no es una transición: no cambia el estado ni entra al historial."""
+        client.force_login(admin_user)
+        estado_previo = appointment_a.status
+
+        client.post(
+            reverse('core:dashboard-appointment-action', args=[appointment_a.pk]),
+            {'action': 'save_notes', 'notes': 'Llamar antes de la visita.'},
+        )
+
+        appointment_a.refresh_from_db()
+        assert appointment_a.status == estado_previo
+        assert appointment_a.status_history.count() == 0
+
+    def test_notes_can_be_emptied(self, client, admin_user, appointment_a):
+        appointment_a.notes = 'Algo que ya no aplica.'
+        appointment_a.save(update_fields=['notes'])
+        client.force_login(admin_user)
+
+        client.post(
+            reverse('core:dashboard-appointment-action', args=[appointment_a.pk]),
+            {'action': 'save_notes', 'notes': ''},
+        )
+
+        appointment_a.refresh_from_db()
+        assert appointment_a.notes == ''
+
+    def test_notes_of_another_clinic_are_not_writable(self, client, admin_user, appointment_b):
+        client.force_login(admin_user)
+        response = client.post(
+            reverse('core:dashboard-appointment-action', args=[appointment_b.pk]),
+            {'action': 'save_notes', 'notes': 'No deberia escribirse.'},
+        )
+
+        assert response.status_code == 302
+        appointment_b.refresh_from_db()
+        assert appointment_b.notes != 'No deberia escribirse.'
+
     def test_dashboard_actions_are_scoped_by_clinic(self, client, admin_user, appointment_b):
         client.force_login(admin_user)
         response = client.post(

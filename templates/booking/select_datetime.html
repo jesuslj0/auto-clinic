@@ -21,7 +21,7 @@
             >
                 <p class="text-sm font-semibold uppercase tracking-wide text-brand-fg">Disponible</p>
                 <p class="mt-3 text-lg font-semibold text-content">{{ slot|date:"l, j M" }}</p>
-                <p class="mt-1 text-sm text-content-subtle">{{ slot|date:"g:i A" }}</p>
+                <p class="mt-1 text-sm text-content-subtle">{{ slot|date:"H:i" }}</p>
             </button>
         {% empty %}
             <div class="sm:col-span-2 xl:col-span-3 rounded-3xl bg-surface px-6 py-12 text-center shadow-soft ring-1 ring-line">

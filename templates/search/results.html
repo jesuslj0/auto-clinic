@@ -58,7 +58,7 @@
                     <div>
                         <p class="text-base font-semibold text-content">{{ appointment.patient|default:appointment.patient_name|default:"Sin paciente" }}</p>
                         <p class="mt-1 text-sm text-content-subtle">
-                            {{ appointment.service|default:appointment.service_name|default:"Servicio" }} · {{ appointment.scheduled_at|date:"j M Y, g:i A" }}
+                            {{ appointment.service|default:appointment.service_name|default:"Servicio" }} · {{ appointment.scheduled_at|date:"j M Y, H:i" }}
                         </p>
                     </div>
                     <div class="flex items-center gap-3">

@@ -149,7 +149,7 @@ cifra.
                 <article class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-5">
                     <div>
                         <p class="text-base font-semibold text-content">{{ appointment.patient }}</p>
-                        <p class="mt-1 text-sm text-content-subtle">{{ appointment.service }} · {{ appointment.scheduled_at|date:"g:i A" }} – {{ appointment.end_at|date:"g:i A" }}</p>
+                        <p class="mt-1 text-sm text-content-subtle">{{ appointment.service }} · {{ appointment.scheduled_at|date:"H:i" }} – {{ appointment.end_at|date:"H:i" }}</p>
                     </div>
                     <div class="flex items-center gap-3">
                         <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold {{ appointment.status|status_badge }}">
