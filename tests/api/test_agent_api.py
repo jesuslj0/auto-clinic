@@ -338,25 +338,23 @@ class TestConversationSessionViewSetDelete:
 
 
 @pytest.mark.django_db
-class TestConversationSessionBulkCreate:
-    def test_bulk_create(self, admin_client, clinic_a):
-        payload = [
-            {"phone": f"+346{i:08d}", "clinic": clinic_a.pk}
-            for i in range(3)
-        ]
+class TestConversationSessionNoBulk:
+    """Las sesiones no tienen alta ni edición masiva.
+
+    Una sesión es la cabecera de un hilo: su alta pasa por
+    `get_or_create_session()` (normaliza el teléfono, vincula al paciente) y sus
+    cambios avisan a la bandeja en vivo. Un camino masivo se saltaba las dos cosas.
+    """
+
+    def test_bulk_create_is_not_exposed(self, admin_client, clinic_a):
+        payload = [{"phone": "+34600000001", "clinic": clinic_a.pk}]
         response = admin_client.post("/api/agent/sessions/bulk-create/", payload, format="json")
-        assert response.status_code == 201
-        assert len(response.data) == 3
+        assert response.status_code in (404, 405)
 
-
-@pytest.mark.django_db
-class TestConversationSessionBulkUpdate:
-    def test_bulk_update(self, admin_client, session_a):
+    def test_bulk_update_is_not_exposed(self, admin_client, session_a):
         payload = [{"id": str(session_a.pk), "session_data": {"step": "done"}}]
         response = admin_client.patch("/api/agent/sessions/bulk-update/", payload, format="json")
-        assert response.status_code == 200
-        assert len(response.data["updated"]) == 1
-        assert response.data["updated"][0]["session_data"]["step"] == "done"
+        assert response.status_code in (404, 405)
 
 
 @pytest.mark.django_db

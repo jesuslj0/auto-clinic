@@ -1,0 +1,46 @@
+{% comment %}
+Pie del hilo: el compositor o, con la ventana de 24 h cerrada, el aviso de por
+qué no se puede escribir. Recibe `session`.
+{% endcomment %}
+<footer class="border-t border-line bg-surface px-4 py-3 sm:px-6">
+    {% if session.can_send_free_text %}
+    {% comment %}
+    Enviar aparta al agente automáticamente: no hace falta poner antes el
+    hilo en modo humano, basta con escribir.
+    {% endcomment %}
+    <form method="post" action="{% url 'agent:chat-send' session.id %}" class="flex items-end gap-2">
+        {% csrf_token %}
+        <label class="sr-only" for="chat-body">Mensaje</label>
+        <textarea id="chat-body" name="body" rows="1" required maxlength="4096"
+                  placeholder="Escribe un mensaje…"
+                  class="min-h-[2.75rem] flex-1 resize-y rounded-2xl border-line text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"></textarea>
+        <button type="submit" class="btn-primary flex-shrink-0 px-4 py-2.5 text-sm">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+            </svg>
+            <span class="ml-1.5 hidden sm:inline">Enviar</span>
+        </button>
+    </form>
+    <p class="mt-2 text-xs text-content-faint">
+        Al enviar, el agente deja de responder en este chat
+        {% if session.clinic.agent_handoff_timeout_seconds %}
+        y lo retoma tras {{ session.clinic.agent_handoff_timeout_seconds }} segundos sin que escribas.
+        {% else %}
+        hasta que lo reactives.
+        {% endif %}
+    </p>
+    {% else %}
+    <div data-composer-closed class="rounded-2xl bg-muted px-4 py-3 text-center ring-1 ring-line">
+        <p class="text-xs font-medium text-content-muted">No se puede escribir en esta conversación.</p>
+        <p class="mt-1 text-xs text-content-subtle">
+            {% if session.last_interaction %}
+            WhatsApp solo permite responder con texto libre durante las 24 horas siguientes al
+            mensaje del paciente, y ya han pasado. Habrá que esperar a que vuelva a escribir.
+            {% else %}
+            Este paciente todavía no ha escrito, y WhatsApp no permite iniciar una conversación
+            con texto libre.
+            {% endif %}
+        </p>
+    </div>
+    {% endif %}
+</footer>

@@ -10,6 +10,7 @@ from django.db.models import F
 from django.utils import timezone
 
 from agent.models import ChatMessage, ConversationSession
+from agent.realtime import broadcast_message, broadcast_session
 from agent.whatsapp import WhatsAppError, send_text
 from patients.models import Patient
 from patients.services import normalize_phone_safe
@@ -138,6 +139,9 @@ def record_message(
     # Tras un F(), el atributo guarda la expresión y no el número: lo recargamos
     # para que quien reciba el mensaje pueda leer el contador.
     session.refresh_from_db(fields=['unread_count'])
+
+    broadcast_message(message)
+    broadcast_session(session)
     return message
 
 
@@ -167,6 +171,8 @@ def mark_session_read(session: ConversationSession) -> None:
         direction=ChatMessage.Direction.INBOUND, read_at__isnull=True
     ).update(read_at=now)
     ConversationSession.objects.filter(pk=session.pk).update(unread_count=0)
+    session.unread_count = 0
+    broadcast_session(session)
 
 
 def send_staff_message(*, session: ConversationSession, body: str) -> ChatMessage:
@@ -213,6 +219,7 @@ def send_staff_message(*, session: ConversationSession, body: str) -> ChatMessag
         )
         message.status = ChatMessage.Status.FAILED
         message.error_message = str(exc)
+        broadcast_message(message)
         raise
 
     ChatMessage.objects.filter(pk=message.pk).update(
@@ -221,4 +228,5 @@ def send_staff_message(*, session: ConversationSession, body: str) -> ChatMessag
         sent_at=timezone.now(),
     )
     message.refresh_from_db()
+    broadcast_message(message)
     return message

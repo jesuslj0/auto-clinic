@@ -1,0 +1,17 @@
+{% comment %}
+Contenedor de la lista de conversaciones. Recibe `sessions`, `query`,
+`only_unread` y `active_session_id`. El formulario de filtros NO va aquí: esta
+pieza se refresca en caliente y no debe quitarle el foco a quien está buscando.
+{% endcomment %}
+<div data-session-list class="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
+    {% for session in sessions %}
+    {% include 'agent/_session_row.html' with session=session query=query active_session_id=active_session_id %}
+    {% empty %}
+    <div class="px-6 py-12 text-center">
+        <p class="text-sm font-medium text-content">No hay conversaciones.</p>
+        <p class="mt-2 text-sm text-content-subtle">
+            {% if query or only_unread %}Prueba a limpiar los filtros.{% else %}Aparecerán aquí en cuanto un paciente escriba al agente.{% endif %}
+        </p>
+    </div>
+    {% endfor %}
+</div>

@@ -292,6 +292,14 @@ emite en toda página del panel, aunque no contenga ningún formulario.
             </main>
         </div>
     </div>
+    {% comment %}Socket de chats en todas las páginas: el contador del menú tiene
+    que moverse aunque se esté en la Agenda. Solo con clínica: el equipo de
+    plataforma no tiene bandeja y el servidor le cerraría la conexión.{% endcomment %}
+    {% if request.user.is_authenticated and request.user.clinic_id %}
+    <script src="{% static 'js/chat_live.js' %}"
+            data-ws-path="/ws/chats/"
+            data-unread-url="{% url 'agent:chat-list-fragment' %}"></script>
+    {% endif %}
     {% block extra_scripts %}{% endblock %}
 
     {% comment %}

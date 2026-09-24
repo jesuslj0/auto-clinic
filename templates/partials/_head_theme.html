@@ -452,6 +452,9 @@ opacidades sobre ellos (bg-surface/90, ring-line/70…).
         /* En 80 px no hay sitio para la flecha del grupo, y sin etiqueta no
            habría a qué apuntar: el grupo sigue abriéndose al pulsar el icono.
            El submenú pierde la sangría y la guía, que a solo iconos sobran. */
+        /* El contador de chats sin leer no cabe a la derecha: sube al icono. */
+        .sidebar-collapsed .sidebar-badge { @apply absolute right-3 top-1.5 ml-0 h-4 min-w-4 px-1 text-[10px]; }
+
         .sidebar-collapsed .sidebar-chevron { @apply hidden; }
         .sidebar-collapsed .sidebar-subnav { @apply ml-0 border-l-0 pl-0; }
     }

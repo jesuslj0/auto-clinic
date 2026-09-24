@@ -1,0 +1,48 @@
+{% comment %}
+Un mensaje del hilo. Recibe `message`. `data-message-id` es lo que usa el
+cliente para no pintar dos veces un mensaje que llega por el socket.
+{% endcomment %}
+<div data-message-id="{{ message.id }}" data-direction="{{ message.direction }}" class="flex {% if message.direction == 'inbound' %}justify-start{% else %}justify-end{% endif %}">
+    <div class="chat-bubble max-w-[85%] rounded-2xl px-4 py-2.5 shadow-sm sm:max-w-[70%]
+        {% if message.direction == 'inbound' %}chat-bubble-in rounded-tl-sm bg-surface text-content ring-1 ring-line
+        {% elif message.sender == 'staff' %}chat-bubble-out rounded-tr-sm bg-tertiary-600 text-white
+        {% else %}chat-bubble-out rounded-tr-sm bg-brand-600 text-white{% endif %}"
+        {% comment %}Las recibidas van sobre la superficie del tema: su pico lo
+        fija .chat-bubble-in en CSS, no aquí. Las enviadas usan colores de marca,
+        iguales en claro y oscuro.{% endcomment %}
+        {% if message.direction != 'inbound' %}style="--bubble-tail: {% if message.sender == 'staff' %}#4c1d95{% else %}#7c3aed{% endif %}"{% endif %}>
+
+        {% if message.sender == 'staff' or message.sender == 'agent' %}
+        <p class="mb-1 text-xs font-semibold {% if message.sender == 'staff' %}text-accent-100{% else %}text-brand-100{% endif %}">
+            {{ message.get_sender_display }}
+        </p>
+        {% endif %}
+
+        {% if message.media_url %}
+            {% if message.message_type == 'image' %}
+            <a href="{{ message.media_url }}" target="_blank" rel="noopener">
+                <img src="{{ message.media_url }}" alt="Imagen enviada" class="mb-1.5 max-h-64 max-w-full rounded-xl">
+            </a>
+            {% else %}
+            <a href="{{ message.media_url }}" target="_blank" rel="noopener"
+               class="mb-1.5 inline-flex items-center gap-1.5 text-sm underline underline-offset-2">
+                <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                </svg>
+                {{ message.get_message_type_display }}
+            </a>
+            {% endif %}
+        {% endif %}
+
+        {% if message.body %}
+        <p class="whitespace-pre-line break-words text-sm">{{ message.body }}</p>
+        {% endif %}
+
+        <p class="mt-1 flex items-center justify-end gap-1.5 text-[11px] {% if message.direction == 'inbound' %}text-content-faint{% else %}text-white/70{% endif %}">
+            {{ message.sent_at|default:message.created_at|date:"H:i" }}
+            {% if message.direction == 'outbound' and message.status %}
+                · {{ message.get_status_display|lower }}
+            {% endif %}
+        </p>
+    </div>
+</div>

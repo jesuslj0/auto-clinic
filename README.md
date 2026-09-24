@@ -90,7 +90,7 @@ ocurrir desde cualquier estado vivo.
 1. Copia `.env.example` a `.env`.
 2. Ejecuta `docker compose up --build`.
 3. Abre `http://localhost:8000/admin/` o `http://localhost:8000/api/`.
-4. Conecta un cliente WebSocket a `ws://localhost:8000/ws/appointments/<clinic_id>/`.
+4. Con una sesión iniciada, conecta un cliente WebSocket a `ws://localhost:8000/ws/appointments/` o `ws://localhost:8000/ws/chats/` (la clínica sale del usuario, no de la URL).
 
 ## Tareas de recordatorio
 - `dispatch_24h_reminders`

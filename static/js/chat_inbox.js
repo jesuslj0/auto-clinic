@@ -1,0 +1,219 @@
+/*
+ * Bandeja de chats en tiempo real (componente Alpine `chatInbox`).
+ *
+ * Escucha los avisos de `chat_live.js` y pide a Django el HTML ya renderizado:
+ *   - burbujas nuevas del hilo abierto: `mensajes/?after=<último id del DOM>`;
+ *   - la lista de conversaciones: `lista/` con los filtros aplicados.
+ *
+ * Siempre se pide «lo que hay después del último mensaje que tengo», así que un
+ * aviso perdido se recupera solo en la siguiente petición. Un mismo mensaje no
+ * se pinta dos veces: se descarta si su `data-message-id` ya está en el DOM.
+ *
+ * Lo que cambia la estructura del hilo (modo del agente, interruptor general,
+ * ventana de 24 h que se reabre) no se parchea: se recarga la página, pero
+ * nunca por sorpresa si hay un mensaje a medio escribir.
+ */
+document.addEventListener('alpine:init', () => {
+    const LIST_DEBOUNCE_MS = 400;
+    const BOTTOM_THRESHOLD_PX = 80;
+
+    Alpine.data('chatInbox', (config) => ({
+        sessionId: config.sessionId || null,
+        agentPaused: config.agentPaused,
+        agentEnabled: config.agentEnabled,
+        connection: window.acChats ? window.acChats.state : 'stopped',
+        unseen: 0,
+        stale: false,
+        fetching: false,
+        fetchAgain: false,
+        listTimer: null,
+
+        init() {
+            this.scrollToBottom();
+            if (!window.acChats) return;
+
+            this.unsubscribe = window.acChats.subscribe((event) => this.onEvent(event));
+            this.onState = (event) => { this.connection = event.detail.state; };
+            document.addEventListener('ac-chats:state', this.onState);
+        },
+
+        destroy() {
+            if (this.unsubscribe) this.unsubscribe();
+            document.removeEventListener('ac-chats:state', this.onState);
+        },
+
+        onEvent(event) {
+            const isActive = this.sessionId && event.session_id === this.sessionId;
+
+            switch (event.type) {
+                case 'message':
+                    if (isActive) this.fetchNewMessages();
+                    this.scheduleListRefresh();
+                    break;
+                case 'session':
+                    if (isActive && event.agent_paused !== this.agentPaused) this.markStale();
+                    this.scheduleListRefresh();
+                    break;
+                case 'clinic':
+                    if (event.agent_enabled !== this.agentEnabled) this.markStale();
+                    break;
+                case 'resync':
+                    this.fetchNewMessages();
+                    this.scheduleListRefresh();
+                    break;
+            }
+        },
+
+        // --- Hilo -----------------------------------------------------------
+
+        get thread() {
+            return this.$refs.thread;
+        },
+
+        lastMessageId() {
+            const bubbles = this.thread ? this.thread.querySelectorAll('[data-message-id]') : [];
+            return bubbles.length ? bubbles[bubbles.length - 1].dataset.messageId : null;
+        },
+
+        async fetchNewMessages() {
+            if (!this.sessionId || !config.messagesUrl) return;
+            // Una sola petición a la vez: si llega otro aviso mientras tanto, se
+            // repite al terminar con el último id ya actualizado.
+            if (this.fetching) {
+                this.fetchAgain = true;
+                return;
+            }
+            this.fetching = true;
+            try {
+                let hasMore = true;
+                while (hasMore) {
+                    const url = new URL(config.messagesUrl, window.location.origin);
+                    const lastId = this.lastMessageId();
+                    if (lastId) url.searchParams.set('after', lastId);
+
+                    const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+                    if (response.status === 400) {
+                        // El último mensaje que tenemos ya no sirve de referencia.
+                        this.markStale();
+                        return;
+                    }
+                    if (!response.ok) return;
+
+                    this.appendMessages(await response.text());
+                    hasMore = response.headers.get('X-Has-More') === '1';
+                }
+            } catch (error) {
+                // Red caída: lo recuperará el siguiente `resync`.
+            } finally {
+                this.fetching = false;
+                if (this.fetchAgain) {
+                    this.fetchAgain = false;
+                    this.fetchNewMessages();
+                }
+            }
+        },
+
+        appendMessages(html) {
+            const thread = this.thread;
+            if (!thread) return;
+            const wasAtBottom = this.isAtBottom();
+
+            const template = document.createElement('template');
+            template.innerHTML = html;
+            let added = 0;
+            let reopensWindow = false;
+
+            [...template.content.children].forEach((node) => {
+                const messageId = node.dataset.messageId;
+                const day = node.dataset.day;
+                if (messageId && thread.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`)) return;
+                if (day && thread.querySelector(`[data-day="${CSS.escape(day)}"]`)) return;
+
+                thread.appendChild(node);
+                if (messageId) {
+                    added += 1;
+                    if (node.dataset.direction === 'inbound') reopensWindow = true;
+                }
+            });
+
+            if (!added) return;
+            thread.querySelectorAll('[data-thread-empty]').forEach((node) => node.remove());
+
+            // Un mensaje del paciente con el compositor cerrado reabre la ventana
+            // de 24 h: hay que pintar el compositor, y eso es de la página.
+            if (reopensWindow && this.$root.querySelector('[data-composer-closed]')) this.markStale();
+
+            if (wasAtBottom) {
+                this.scrollToBottom();
+            } else {
+                this.unseen += added;
+            }
+        },
+
+        isAtBottom() {
+            const thread = this.thread;
+            if (!thread) return true;
+            return thread.scrollHeight - thread.scrollTop - thread.clientHeight < BOTTOM_THRESHOLD_PX;
+        },
+
+        scrollToBottom() {
+            const thread = this.thread;
+            if (thread) thread.scrollTop = thread.scrollHeight;
+            this.unseen = 0;
+        },
+
+        onThreadScroll() {
+            if (this.unseen && this.isAtBottom()) this.unseen = 0;
+        },
+
+        // --- Lista ----------------------------------------------------------
+
+        scheduleListRefresh() {
+            // Un mensaje trae dos avisos (mensaje y sesión) y abrir el hilo un
+            // tercero: se agrupan en una sola petición.
+            clearTimeout(this.listTimer);
+            this.listTimer = setTimeout(() => this.refreshList(), LIST_DEBOUNCE_MS);
+        },
+
+        async refreshList() {
+            const current = this.$root.querySelector('[data-session-list]');
+            if (!current) return;
+
+            // Los filtros aplicados (los de la URL), no lo que esté a medio
+            // escribir en el buscador.
+            const url = new URL(config.listUrl, window.location.origin);
+            const params = new URLSearchParams(window.location.search);
+            ['q', 'unread'].forEach((key) => {
+                if (params.get(key)) url.searchParams.set(key, params.get(key));
+            });
+            if (this.sessionId) url.searchParams.set('active', this.sessionId);
+
+            try {
+                const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+                if (!response.ok) return;
+                const template = document.createElement('template');
+                template.innerHTML = (await response.text()).trim();
+                const fresh = template.content.querySelector('[data-session-list]');
+                if (!fresh) return;
+                const scroll = current.scrollTop;
+                current.replaceWith(fresh);
+                fresh.scrollTop = scroll;
+            } catch (error) {
+                // Se reintenta con el siguiente aviso o `resync`.
+            }
+        },
+
+        // --- Cambios de estructura -----------------------------------------
+
+        markStale() {
+            const composer = this.$root.querySelector('#chat-body');
+            const writing = composer && composer.value.trim() !== '';
+            if (writing) {
+                // No se tira lo que está escribiendo: se avisa y decide ella.
+                this.stale = true;
+            } else {
+                window.location.reload();
+            }
+        },
+    }));
+});

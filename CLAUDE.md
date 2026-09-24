@@ -16,7 +16,7 @@ Services started:
 - Web (Django/Daphne ASGI): http://localhost:8000
 - Admin: http://localhost:8000/admin/
 - REST API: http://localhost:8000/api/
-- WebSocket: ws://localhost:8000/ws/appointments/<clinic_id>/
+- WebSocket: ws://localhost:8000/ws/appointments/ and ws://localhost:8000/ws/chats/ (session auth; clinic comes from the user)
 - PostgreSQL: port 5432
 - Redis: port 6379
 - Celery worker (background tasks)
@@ -202,7 +202,9 @@ listener, so the partial can be included any number of times.
 
 ### Real-time (WebSockets)
 
-`Django Channels 4.1` + `channels-redis` + `Daphne` ASGI server. The `AppointmentConsumer` (`appointments/consumers.py`) is an `AsyncWebsocketConsumer` that joins a clinic-scoped group. Appointment changes broadcast via a `post_save` signal in `appointments/signals.py`.
+`Django Channels 4.1` + `channels-redis` + `Daphne` ASGI server. Both consumers (`AppointmentConsumer`, `agent.consumers.ChatConsumer`) extend `core.consumers.ClinicScopedConsumer`: the clinic is taken from `scope['user']`, **never from the URL**, and the group name comes from `core.realtime.clinic_group_name()` (hashed — `clinic_id` is free text). Consumers are read-only; writes stay as HTTP POSTs. Appointment changes broadcast via a `post_save` signal in `appointments/signals.py`. Chat events are emitted from the services in `agent/realtime.py` (not signals), with `transaction.on_commit`, and carry no message content — the browser fetches the rendered fragment. Every event carries the clinic's `total_unread`.
+
+Browser side: `static/js/chat_live.js` (loaded by `base.html` for users with a clinic) keeps **one** socket per page, reconnects with exponential backoff (1 s → 30 s), treats close codes 4401/4403 as final, falls back to polling every 15 s after 3 failures, and emits `resync` to subscribers whenever events may have been missed. It keeps the sidebar unread badge (`[data-chat-unread]`) and the tab title up to date on every page. `static/js/chat_inbox.js` (Alpine `chatInbox`) fetches `GET /chats/<id>/mensajes/?after=<last id in DOM>` and `GET /chats/lista/`; dedup is by `data-message-id`. Structural changes (agent mode, clinic switch, 24 h window reopening) reload the page — never while a message is being typed.
 
 ### Background tasks (Celery)
 
