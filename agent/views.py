@@ -1,17 +1,25 @@
+import uuid
+
 from django.contrib import messages as django_messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import ValidationError
 from django.db.models import F, Q, Sum
+from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
+from django.template.loader import render_to_string
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.generic import TemplateView
 from rest_framework import status as http_status
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from agent.models import AgentMemory, ChatMessage, ConversationSession, WorkflowError
+from agent.media import MediaAlreadyAttached, attach_media, log_media_view, signed_media_url
+from agent.models import AgentMemory, ChatAttachment, ChatMessage, ConversationSession, WorkflowError
 from agent.serializers import (
     AgentMemorySerializer,
     ChatMessageSerializer,
@@ -19,10 +27,11 @@ from agent.serializers import (
     PlatformWorkflowErrorSerializer,
     WorkflowErrorSerializer,
 )
+from agent.realtime import broadcast_clinic, broadcast_session, clinic_unread_total
 from agent.services import mark_session_read, send_staff_message
 from agent.whatsapp import WhatsAppError
 from core.authentication import ClinicAgent
-from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
+from core.mixins import ExportMixin
 from core.permissions import IsAgentClinicKey, IsAgentErrorsKey, IsClinicAdminOrReadOnly, IsStaffOrAdmin
 
 
@@ -92,7 +101,7 @@ class PlatformWorkflowErrorView(APIView):
         return Response(serializer.data, status=http_status.HTTP_201_CREATED)
 
 
-class ConversationSessionViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets.ModelViewSet):
+class ConversationSessionViewSet(ExportMixin, viewsets.ModelViewSet):
     serializer_class = ConversationSessionSerializer
     permission_classes = [IsStaffOrAdmin | IsAgentClinicKey]
     filterset_fields = ['clinic', 'phone', 'agent_paused']
@@ -103,6 +112,17 @@ class ConversationSessionViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, 
     def get_queryset(self):
         queryset = ConversationSession.objects.select_related('clinic', 'patient')
         return scope_to_clinic(queryset, self.request.user)
+
+    # Campos editables por la API que cambian lo que pinta la bandeja. No está
+    # `last_interaction`: n8n lo reescribe dos veces por mensaje y el aviso de ese
+    # mensaje ya lo ha emitido `record_message()`.
+    broadcast_fields = {'agent_paused', 'patient', 'phone', 'last_staff_message_at'}
+
+    def perform_update(self, serializer):
+        super().perform_update(serializer)
+        # n8n puede pausar un hilo por aquí; la bandeja tiene que enterarse.
+        if self.broadcast_fields & serializer.validated_data.keys():
+            broadcast_session(serializer.instance)
 
     @action(detail=True, methods=['get'], url_path='status')
     def get_status(self, request, pk=None):
@@ -190,7 +210,7 @@ class ConversationSessionViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, 
         })
 
 
-class ChatMessageViewSet(ExportMixin, BulkCreateMixin, viewsets.ModelViewSet):
+class ChatMessageViewSet(ExportMixin, viewsets.ModelViewSet):
     """Historial de WhatsApp que alimenta el panel de chats.
 
     Append-only: n8n publica cada mensaje (entrante y saliente) con POST y el
@@ -210,16 +230,117 @@ class ChatMessageViewSet(ExportMixin, BulkCreateMixin, viewsets.ModelViewSet):
         queryset = ChatMessage.objects.select_related('session', 'clinic')
         return scope_to_clinic(queryset, self.request.user)
 
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='media',
+        permission_classes=[IsAgentClinicKey],
+        parser_classes=[MultiPartParser],
+    )
+    def media(self, request, pk=None):
+        """Sube la foto o nota de voz de un mensaje entrante. Una sola vez.
+
+        Solo n8n (`Api-Key` de la clínica): descarga el binario de Meta y lo
+        manda aquí en el campo `file`. Un mensaje de otra clínica da 404.
+
+        - 201: guardado. La respuesta describe el fichero, nunca trae una URL.
+        - 400: el mensaje no admite adjunto o el fichero no pasa la validación
+          (se mira el contenido, no la extensión).
+        - 409: el mensaje ya tenía adjunto. No se reemplaza nunca.
+        """
+        message = self.get_object()
+        uploaded = request.FILES.get('file')
+        if uploaded is None:
+            return Response(
+                {'file': 'Falta el fichero (campo multipart `file`).'},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            attachment = attach_media(message, uploaded)
+        except MediaAlreadyAttached:
+            return Response(
+                {'detail': 'Este mensaje ya tiene adjunto y no se puede reemplazar.'},
+                status=http_status.HTTP_409_CONFLICT,
+            )
+        except ValidationError as exc:
+            return Response({'file': exc.messages}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {
+                'id': str(attachment.id),
+                'message': str(message.id),
+                'kind': attachment.kind,
+                'mime_type': attachment.mime_type,
+                'size_bytes': attachment.size_bytes,
+                'checksum': attachment.checksum,
+            },
+            status=http_status.HTTP_201_CREATED,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Panel de chats (vistas de plantilla)
 # ---------------------------------------------------------------------------
 
+def read_inbox_filters(request):
+    """Filtros de la lista de conversaciones: (texto buscado, solo sin leer)."""
+    return request.GET.get('q', '').strip(), request.GET.get('unread') == '1'
+
+
+def inbox_sessions(user, *, query='', only_unread=False):
+    """Conversaciones de la bandeja, filtradas y en el orden en que se pintan.
+
+    La usan la página entera y el fragmento que se refresca en vivo, para que
+    los dos enseñen exactamente la misma lista.
+    """
+    # El hilo del cliente de prueba vive en la configuración del agente:
+    # sus mensajes se guardan igual, pero no son conversaciones reales y
+    # ensucian la bandeja (y el contador de no leídos) de la clínica.
+    sessions = scope_to_clinic(
+        ConversationSession.objects.select_related('patient', 'clinic'), user
+    ).exclude(is_test=True)
+    if query:
+        sessions = sessions.filter(
+            Q(phone__icontains=query)
+            | Q(patient__first_name__icontains=query)
+            | Q(patient__last_name__icontains=query)
+            | Q(last_message_preview__icontains=query)
+        )
+    if only_unread:
+        sessions = sessions.filter(unread_count__gt=0)
+
+    # Las conversaciones sin mensajes (creadas por el bot pero aún mudas)
+    # van al final en vez de encabezar la lista.
+    return sessions.order_by(F('last_message_at').desc(nulls_last=True), '-updated_at')
+
+
+def total_unread(user):
+    """No leídos de todas las conversaciones de la bandeja, sin filtros."""
+    if user.clinic_id:
+        return clinic_unread_total(user.clinic_id)
+    return inbox_sessions(user).aggregate(total=Sum('unread_count'))['total'] or 0
+
+
+def mark_day_starts(messages, previous=None):
+    """Marca `starts_day` en los mensajes que abren un día nuevo en el hilo.
+
+    `previous` es el último mensaje que ya está pintado: si la tanda sigue en
+    su mismo día, el primero no lleva separador.
+    """
+    last_day = timezone.localtime(previous.created_at).date() if previous else None
+    for message in messages:
+        day = timezone.localtime(message.created_at).date()
+        message.starts_day = day != last_day
+        last_day = day
+    return messages
+
+
 class ChatInboxView(LoginRequiredMixin, TemplateView):
     """Bandeja de conversaciones de WhatsApp: lista a la izquierda, hilo a la derecha.
 
-    De momento es solo lectura. El tiempo real llegará con un consumer de
-    Channels; hasta entonces la página se refresca al navegar.
+    Se actualiza en vivo: `static/js/chat_inbox.js` escucha el socket de chats y
+    pide los fragmentos (`ChatMessagesFragmentView`, `ChatSessionListFragmentView`).
+    Sin JavaScript sigue funcionando, recargando al navegar.
     """
 
     template_name = 'agent/chat_inbox.html'
@@ -233,28 +354,8 @@ class ChatInboxView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         user = self.request.user
 
-        query = self.request.GET.get('q', '').strip()
-        only_unread = self.request.GET.get('unread') == '1'
-
-        # El hilo del cliente de prueba vive en la configuración del agente:
-        # sus mensajes se guardan igual, pero no son conversaciones reales y
-        # ensucian la bandeja (y el contador de no leídos) de la clínica.
-        sessions = scope_to_clinic(
-            ConversationSession.objects.select_related('patient'), user
-        ).exclude(is_test=True)
-        if query:
-            sessions = sessions.filter(
-                Q(phone__icontains=query)
-                | Q(patient__first_name__icontains=query)
-                | Q(patient__last_name__icontains=query)
-                | Q(last_message_preview__icontains=query)
-            )
-        if only_unread:
-            sessions = sessions.filter(unread_count__gt=0)
-
-        # Las conversaciones sin mensajes (creadas por el bot pero aún mudas)
-        # van al final en vez de encabezar la lista.
-        sessions = sessions.order_by(F('last_message_at').desc(nulls_last=True), '-updated_at')
+        query, only_unread = read_inbox_filters(self.request)
+        sessions = inbox_sessions(user, query=query, only_unread=only_unread)
 
         active_session = self._get_active_session(sessions)
         messages_page = []
@@ -266,8 +367,11 @@ class ChatInboxView(LoginRequiredMixin, TemplateView):
             has_older_messages = total > message_limit
             # Se cogen los N más recientes y se le da la vuelta para pintarlos
             # en orden cronológico.
-            recent = list(active_session.messages.order_by('-created_at')[:message_limit])
-            messages_page = list(reversed(recent))
+            recent = list(
+                active_session.messages.select_related('attachment', 'session__patient')
+                .order_by('-created_at', '-id')[:message_limit]
+            )
+            messages_page = mark_day_starts(list(reversed(recent)))
 
             # Abrir el hilo lo marca como leído. Es un efecto en un GET, sí,
             # pero es lo que espera cualquiera que use un cliente de chat.
@@ -285,8 +389,8 @@ class ChatInboxView(LoginRequiredMixin, TemplateView):
                 'query': query,
                 'only_unread': only_unread,
                 # Se calcula al final, ya descontada la conversación que se
-                # acaba de abrir.
-                'total_unread': sessions.aggregate(total=Sum('unread_count'))['total'] or 0,
+                # acaba de abrir. Sin filtros: buscar no cambia cuántos hay.
+                'total_unread': total_unread(user),
                 'section': 'chats',
             }
         )
@@ -316,6 +420,140 @@ class ChatSessionActionMixin(LoginRequiredMixin):
             ConversationSession.objects.select_related('clinic'), self.request.user
         ).exclude(is_test=True)
         return get_object_or_404(sessions, pk=session_id)
+
+
+class ChatMessagesFragmentView(ChatSessionActionMixin, View):
+    """Burbujas de un hilo en HTML, para añadirlas sin recargar la página.
+
+    `?after=<message_id>` devuelve lo posterior a ese mensaje en orden
+    cronológico; sin él, los últimos mensajes. El cliente pide siempre «lo que
+    hay después del último que tengo», así que un aviso perdido por el socket
+    (wifi caída, móvil suspendido, Daphne reiniciado) se recupera en la
+    siguiente petición y no deja huecos en la conversación.
+
+    Si hay más de `max_batch` pendientes, `X-Has-More: 1` pide al cliente que
+    repita con el último id recibido. Un `after` que no es de este hilo da 400:
+    el cliente debe recargar el hilo entero, no adivinar dónde estaba.
+    """
+
+    # Un fetch no debe recibir la página de login como si fueran burbujas.
+    raise_exception = True
+
+    initial_limit = ChatInboxView.default_message_limit
+    max_batch = 200
+
+    def get(self, request, session_id):
+        session = self.get_session(session_id)
+        messages_qs = session.messages.select_related('attachment', 'session__patient')
+
+        # Una burbuja concreta, ya pintada, que ha cambiado (le ha llegado la
+        # foto, o su estado de entrega). Se devuelve sola para reemplazarla.
+        only_id = request.GET.get('only')
+        if only_id:
+            try:
+                message = messages_qs.get(pk=only_id)
+            except (ChatMessage.DoesNotExist, ValidationError):
+                return HttpResponseBadRequest('El mensaje no pertenece a este hilo.')
+            html = render_to_string('agent/_message_bubble.html', {'message': message}, request=request)
+            response = HttpResponse(html)
+            response['Cache-Control'] = 'no-store'
+            return response
+
+        previous = None
+        has_more = False
+        after_id = request.GET.get('after')
+        if after_id:
+            try:
+                previous = messages_qs.get(pk=after_id)
+            except (ChatMessage.DoesNotExist, ValidationError):
+                return HttpResponseBadRequest('El mensaje de referencia no pertenece a este hilo.')
+            # created_at + id como desempate: dos mensajes en el mismo
+            # microsegundo no deben perderse ni repetirse.
+            batch = list(
+                messages_qs.filter(
+                    Q(created_at__gt=previous.created_at)
+                    | Q(created_at=previous.created_at, id__gt=previous.id)
+                ).order_by('created_at', 'id')[: self.max_batch + 1]
+            )
+            has_more = len(batch) > self.max_batch
+            batch = batch[: self.max_batch]
+        else:
+            recent = list(messages_qs.order_by('-created_at', '-id')[: self.initial_limit])
+            batch = list(reversed(recent))
+
+        mark_day_starts(batch, previous)
+
+        # Quien pide las burbujas tiene el hilo abierto delante: lo que llega
+        # está leído, igual que al abrirlo.
+        if session.unread_count:
+            mark_session_read(session)
+
+        html = render_to_string('agent/_message_run.html', {'messages': batch}, request=request)
+        response = HttpResponse(html)
+        response['X-Has-More'] = '1' if has_more else '0'
+        response['Cache-Control'] = 'no-store'
+        return response
+
+
+class ChatSessionListFragmentView(LoginRequiredMixin, View):
+    """Lista de conversaciones en HTML, con los mismos filtros que la bandeja.
+
+    `?active=<session_id>` marca la fila del hilo abierto. `X-Total-Unread`
+    lleva el total de no leídos de la clínica, sin filtros, para el contador.
+    """
+
+    raise_exception = True
+
+    def get(self, request):
+        query, only_unread = read_inbox_filters(request)
+        sessions = inbox_sessions(request.user, query=query, only_unread=only_unread)
+
+        try:
+            active_session_id = uuid.UUID(request.GET.get('active', ''))
+        except ValueError:
+            active_session_id = None
+
+        html = render_to_string(
+            'agent/_session_list.html',
+            {
+                'sessions': sessions,
+                'query': query,
+                'only_unread': only_unread,
+                'active_session_id': active_session_id,
+            },
+            request=request,
+        )
+        response = HttpResponse(html)
+        response['X-Total-Unread'] = str(total_unread(request.user))
+        response['Cache-Control'] = 'no-store'
+        return response
+
+
+class ChatMediaView(LoginRequiredMixin, View):
+    """Abre la foto o el audio de un mensaje: comprueba, registra y redirige.
+
+    Solo sesión del staff de la clínica del hilo (ver `agent.media`). El orden
+    es el único posible: permiso (403) → `AccessLog` → redirección a una URL
+    firmada de vida corta. Django no sirve el fichero; lo entrega el bucket
+    privado, que además responde con `no-store` para que no quede en caché.
+    """
+
+    raise_exception = True
+
+    def get(self, request, message_id):
+        attachment = get_object_or_404(
+            ChatAttachment.objects.select_related('message__session__patient'),
+            message_id=message_id,
+        )
+        url = signed_media_url(attachment, request.user)
+        log_media_view(attachment, request=request)
+
+        response = HttpResponseRedirect(url)
+        # La redirección lleva una URL firmada: que no la guarde el navegador,
+        # ni un proxy, ni viaje como `Referer` a ninguna parte.
+        response['Cache-Control'] = 'private, no-store, max-age=0'
+        response['Referrer-Policy'] = 'no-referrer'
+        return response
 
 
 class ChatSendMessageView(ChatSessionActionMixin, View):
@@ -351,6 +589,7 @@ class ChatToggleAgentView(ChatSessionActionMixin, View):
         else:
             django_messages.success(request, 'El agente vuelve a atender este chat.')
         session.save(update_fields=['agent_paused', 'last_staff_message_at', 'updated_at'])
+        broadcast_session(session)
 
         return redirect('agent:chat-thread', session_id=session.id)
 
@@ -366,6 +605,7 @@ class ClinicAgentSwitchView(LoginRequiredMixin, View):
 
         clinic.agent_enabled = not clinic.agent_enabled
         clinic.save(update_fields=['agent_enabled'])
+        broadcast_clinic(clinic)
 
         if clinic.agent_enabled:
             django_messages.success(request, 'Agente activado. Volverá a responder los chats de la clínica.')

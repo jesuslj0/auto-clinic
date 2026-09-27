@@ -1,0 +1,16 @@
+{% comment %}
+Una tanda de mensajes seguidos del hilo: la carga inicial o lo que llega después
+del último que tiene el navegador. Recibe `messages`. El separador de día lo
+decide la vista (`starts_day`), no un `ifchanged`: una tanda puede empezar a
+mitad de un día que ya está pintado.
+{% endcomment %}
+{% for message in messages %}
+    {% if message.starts_day %}
+    <div class="flex justify-center py-1" data-day="{{ message.created_at|date:'Y-m-d' }}">
+        <span class="rounded-full bg-surface px-3 py-1 text-xs font-medium text-content-subtle shadow-sm ring-1 ring-line">
+            {{ message.created_at|date:"j F Y" }}
+        </span>
+    </div>
+    {% endif %}
+    {% include 'agent/_message_bubble.html' with message=message %}
+{% endfor %}

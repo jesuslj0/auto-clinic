@@ -1,0 +1,61 @@
+{% comment %}
+Cabecera del hilo abierto con el conmutador de modo y los avisos de estado.
+Recibe `session` y `query`.
+{% endcomment %}
+<header class="flex items-center gap-3 border-b border-line px-4 py-3 sm:px-5">
+    <a href="{% url 'agent:chat-inbox' %}{% if query %}?q={{ query }}{% endif %}"
+       class="rounded-xl p-2 text-content-subtle transition hover:bg-muted-strong lg:hidden" aria-label="Volver a la lista">
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+        </svg>
+    </a>
+    <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-soft-strong text-sm font-semibold text-brand-fg">
+        {% if session.patient %}{{ session.patient.first_name|first|upper }}{{ session.patient.last_name|first|upper }}{% else %}?{% endif %}
+    </span>
+    <div class="min-w-0 flex-1">
+        <p class="truncate text-sm font-semibold text-content">{{ session.patient|default:session.phone }}</p>
+        <p class="truncate text-xs text-content-subtle">
+            {{ session.phone }}
+            {% if session.last_interaction %} · último mensaje {{ session.last_interaction|timesince }} atrás{% endif %}
+        </p>
+    </div>
+    <div class="flex flex-shrink-0 items-center gap-2">
+        {% comment %}
+        Conmutador por hilo. Pulsar el lado inactivo cambia el modo; el
+        activo es solo una etiqueta, no un botón.
+        {% endcomment %}
+        <form method="post" action="{% url 'agent:chat-toggle-agent' session.id %}"
+              class="flex items-center gap-0.5 rounded-full bg-muted-strong p-0.5 ring-1 ring-line">
+            {% csrf_token %}
+            {% if session.agent_paused %}
+            <button type="submit" class="rounded-full px-3 py-1 text-xs font-semibold text-content-subtle transition hover:text-brand-fg">
+                Agente IA
+            </button>
+            <span class="rounded-full bg-tertiary-600 px-3 py-1 text-xs font-semibold text-white">Modo humano</span>
+            {% else %}
+            <span class="rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white">Agente IA</span>
+            <button type="submit" class="rounded-full px-3 py-1 text-xs font-semibold text-content-subtle transition hover:text-tertiary-600">
+                Modo humano
+            </button>
+            {% endif %}
+        </form>
+        {% if session.patient %}
+        <a href="{% url 'patients:detail' session.patient.id %}" class="btn-outlined px-3 py-1.5 text-xs">Ver ficha</a>
+        {% endif %}
+    </div>
+</header>
+
+{% comment %}
+Avisos de estado. Sólo se pinta el que manda: el interruptor general
+gana sobre el modo del hilo, porque apagado no responde en ningún caso.
+{% endcomment %}
+{% if not session.clinic.agent_enabled %}
+<p class="border-b border-line bg-muted-strong px-4 py-2 text-xs text-content-muted sm:px-5">
+    El agente está apagado en toda la clínica. Ningún chat recibe respuestas automáticas.
+</p>
+{% elif session.is_handoff_active %}
+<p class="border-b border-accent-line bg-accent-soft px-4 py-2 text-xs text-accent-fg sm:px-5">
+    Has intervenido en la conversación. El agente la retoma en
+    {{ session.handoff_expires_at|timeuntil }} si no vuelves a escribir.
+</p>
+{% endif %}

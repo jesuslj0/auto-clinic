@@ -10,6 +10,7 @@ from django.db.models import F
 from django.utils import timezone
 
 from agent.models import ChatMessage, ConversationSession
+from agent.realtime import broadcast_message, broadcast_session
 from agent.whatsapp import WhatsAppError, send_text
 from patients.models import Patient
 from patients.services import normalize_phone_safe
@@ -28,8 +29,8 @@ _NON_TEXT_PREVIEW = {
 
 def build_preview(message: ChatMessage) -> str:
     """Resumen de una línea del mensaje para la lista de conversaciones."""
-    if message.body.strip():
-        return message.body.strip()[:PREVIEW_MAX_LENGTH]
+    if message.display_body:
+        return message.display_body[:PREVIEW_MAX_LENGTH]
     return _NON_TEXT_PREVIEW.get(message.message_type, '')
 
 
@@ -138,6 +139,9 @@ def record_message(
     # Tras un F(), el atributo guarda la expresión y no el número: lo recargamos
     # para que quien reciba el mensaje pueda leer el contador.
     session.refresh_from_db(fields=['unread_count'])
+
+    broadcast_message(message)
+    broadcast_session(session)
     return message
 
 
@@ -163,10 +167,14 @@ def get_test_session(clinic) -> ConversationSession | None:
 def mark_session_read(session: ConversationSession) -> None:
     """Pone a cero los no leídos y sella los mensajes entrantes pendientes."""
     now = timezone.now()
+    # En bloque a propósito: `read_at` está excluido de la auditoría (ver
+    # `AgentConfig.ready`), así que este `update()` no se salta nada.
     session.messages.filter(
         direction=ChatMessage.Direction.INBOUND, read_at__isnull=True
     ).update(read_at=now)
     ConversationSession.objects.filter(pk=session.pk).update(unread_count=0)
+    session.unread_count = 0
+    broadcast_session(session)
 
 
 def send_staff_message(*, session: ConversationSession, body: str) -> ChatMessage:
@@ -208,17 +216,17 @@ def send_staff_message(*, session: ConversationSession, body: str) -> ChatMessag
     try:
         wa_message_id = send_text(session.clinic, session.phone, body)
     except WhatsAppError as exc:
-        ChatMessage.objects.filter(pk=message.pk).update(
-            status=ChatMessage.Status.FAILED, error_message=str(exc)
-        )
+        # `save()` y no `queryset.update()`: el mensaje está en la auditoría y un
+        # `update()` se saltaría las señales que la alimentan.
         message.status = ChatMessage.Status.FAILED
         message.error_message = str(exc)
+        message.save(update_fields=['status', 'error_message'])
+        broadcast_message(message)
         raise
 
-    ChatMessage.objects.filter(pk=message.pk).update(
-        status=ChatMessage.Status.SENT,
-        wa_message_id=wa_message_id or None,
-        sent_at=timezone.now(),
-    )
-    message.refresh_from_db()
+    message.status = ChatMessage.Status.SENT
+    message.wa_message_id = wa_message_id or None
+    message.sent_at = timezone.now()
+    message.save(update_fields=['status', 'wa_message_id', 'sent_at'])
+    broadcast_message(message)
     return message

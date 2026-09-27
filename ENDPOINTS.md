@@ -248,9 +248,31 @@ La conversación se resuelve por `phone` (se crea si no existe) o se indica con 
 
 | URL | Consumer | Autenticación |
 |-----|----------|---------------|
-| `ws://host/ws/appointments/<clinic_id>/` | `AppointmentConsumer` | `AuthMiddlewareStack` |
+| `ws://host/ws/appointments/` | `AppointmentConsumer` | Sesión de Django (`AuthMiddlewareStack`) |
+| `ws://host/ws/chats/` | `ChatConsumer` | Sesión de Django (`AuthMiddlewareStack`) |
 
-El consumer une al cliente al grupo `clinic_{clinic_id}_appointments` y retransmite eventos `appointment_update` a todos los clientes conectados de esa clínica.
+La clínica **no va en la URL**: se toma de `scope['user'].clinic_id`, así que nadie puede suscribirse a otra clínica. Ambos heredan de `core.consumers.ClinicScopedConsumer`:
+
+- Sin sesión (o usuario inactivo) → acepta y cierra con código `4401`.
+- Usuario sin clínica (equipo de plataforma) → cierra con `4403`.
+- Son de solo lectura: lo que mande el cliente se ignora.
+
+El grupo se deriva con `core.realtime.clinic_group_name(stream, clinic_id)` (hash del id, porque `clinic_id` es texto libre). `AppointmentConsumer` retransmite `appointment_update`; `ChatConsumer` retransmite avisos sin contenido (`message`, `session`, `clinic`) emitidos desde `agent/realtime.py` tras el commit.
+
+Al recibir un aviso de chats, el navegador pide el HTML a dos vistas de sesión (no API, sin acceso para el agente, 403 sin sesión):
+
+| URL | Devuelve |
+|-----|----------|
+| `GET /chats/<session_id>/mensajes/?after=<message_id>` | Burbujas posteriores a ese mensaje, en orden. Sin `after`, las últimas 50. Máximo 200 por petición: `X-Has-More: 1` indica que hay que repetir con el último id. Un `after` de otro hilo → 400 (recargar el hilo). Marca el hilo como leído. |
+| `GET /chats/lista/?q=&unread=&active=<session_id>` | La lista de conversaciones con los filtros de la bandeja. `X-Total-Unread` trae el total sin filtros. |
+| `GET /chats/<session_id>/mensajes/?only=<message_id>` | Una sola burbuja, para repintarla cuando cambia (le llega la foto). |
+| `GET /chats/media/<message_id>/` | Foto o audio del mensaje: solo staff de la clínica del hilo, deja `AccessLog` y redirige a una URL firmada de 5 min que el bucket sirve con `no-store`. |
+
+Subida de adjuntos (solo n8n, `Api-Key` de clínica):
+
+| Método | URL | Descripción |
+|--------|-----|-------------|
+| POST | `/api/agent/messages/<id>/media/` | Multipart `file`. Mensaje entrante de tipo imagen o audio. 201 guardado (sin URL en la respuesta) · 400 fichero rechazado por su contenido · 409 ya tenía adjunto (no se reemplaza) · 404 mensaje de otra clínica. |
 
 ---
 

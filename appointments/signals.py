@@ -3,15 +3,17 @@ from channels.layers import get_channel_layer
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
+from appointments.consumers import APPOINTMENTS_STREAM
 from appointments.models import Appointment, Professional
 from core.models import User
+from core.realtime import clinic_group_name
 
 
 @receiver(post_save, sender=Appointment)
 def broadcast_appointment_update(sender, instance, created, **kwargs):
     channel_layer = get_channel_layer()
     async_to_sync(channel_layer.group_send)(
-        f'clinic_{instance.clinic_id}_appointments',
+        clinic_group_name(APPOINTMENTS_STREAM, instance.clinic_id),
         {
             'type': 'appointment_update',
             'payload': {

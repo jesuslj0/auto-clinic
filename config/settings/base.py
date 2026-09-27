@@ -68,6 +68,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'agent.context_processors.chat_unread',
             ],
         },
     }
@@ -125,6 +126,12 @@ R2_ACCESS_KEY_ID = config('R2_ACCESS_KEY_ID', default='')
 R2_SECRET_ACCESS_KEY = config('R2_SECRET_ACCESS_KEY', default='')
 R2_BUCKET_NAME = config('R2_BUCKET_NAME', default='')
 R2_ENDPOINT_URL = config('R2_ENDPOINT_URL', default='')
+
+# Fotos y notas de voz de WhatsApp (`agent.ChatAttachment`): mismo bucket
+# privado, pero su URL firmada vive menos que la de una foto clínica — se pide
+# al abrirla y se usa en el acto. 5 minutos dan margen a una nota de voz larga
+# (el navegador pide trozos del audio mientras suena).
+CHAT_MEDIA_URL_EXPIRE = config('CHAT_MEDIA_URL_EXPIRE', default=300, cast=int)
 
 STORAGES = {
     'default': {
