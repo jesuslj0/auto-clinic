@@ -273,6 +273,7 @@ Subida de adjuntos (solo n8n, `Api-Key` de clínica):
 | Método | URL | Descripción |
 |--------|-----|-------------|
 | POST | `/api/agent/messages/<id>/media/` | Multipart `file`. Mensaje entrante de tipo imagen o audio. 201 guardado (sin URL en la respuesta) · 400 fichero rechazado por su contenido · 409 ya tenía adjunto (no se reemplaza) · 404 mensaje de otra clínica. |
+| POST | `/api/agent/messages/status/` | Acuses de WhatsApp de los salientes (webhook `statuses` de Meta). Un objeto o una lista: `{wa_message_id, status: sent\|delivered\|read\|failed, timestamp?: segundos Unix o ISO, error?}`. El estado solo avanza (un acuse atrasado no lo devuelve atrás) y es idempotente. Un `wa_message_id` desconocido o de otra clínica responde 200 con `matched: false`. |
 
 ---
 

@@ -1,7 +1,11 @@
+from datetime import datetime
+from datetime import timezone as dt_timezone
+
+from django.utils.dateparse import parse_datetime
 from rest_framework import serializers
 
 from agent.models import AgentMemory, ChatMessage, ConversationSession, WorkflowError
-from agent.services import record_message
+from agent.services import DELIVERY_STATUSES, record_message
 from core.models import Clinic
 from core.serializers import ClinicScopedSerializerMixin
 
@@ -159,3 +163,23 @@ class ChatMessageSerializer(ClinicScopedSerializerMixin, serializers.ModelSerial
             )
 
         return record_message(clinic=clinic, phone=phone, session=session, **validated_data)
+
+
+class DeliveryStatusSerializer(serializers.Serializer):
+    """Un acuse de WhatsApp tal y como lo reenvía n8n desde el webhook de Meta."""
+
+    wa_message_id = serializers.CharField(max_length=128)
+    status = serializers.ChoiceField(choices=[s.value for s in DELIVERY_STATUSES])
+    # Meta manda segundos Unix como texto; se admite también ISO 8601.
+    timestamp = serializers.CharField(required=False, allow_blank=True)
+    error = serializers.CharField(required=False, allow_blank=True, max_length=1000)
+
+    def validate_timestamp(self, value):
+        if not value:
+            return None
+        if value.isdigit():
+            return datetime.fromtimestamp(int(value), tz=dt_timezone.utc)
+        parsed = parse_datetime(value)
+        if parsed is None:
+            raise serializers.ValidationError('Usa segundos Unix o una fecha ISO 8601.')
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt_timezone.utc)

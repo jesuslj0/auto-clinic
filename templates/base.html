@@ -262,7 +262,7 @@ emite en toda página del panel, aunque no contenga ningún formulario.
                         <button
                             @click="sidebarOpen = true"
                             type="button"
-                            class="rounded-xl p-2 text-content-subtle hover:bg-muted-strong hover:text-content-muted transition lg:hidden"
+                            class="relative rounded-xl p-2 text-content-subtle hover:bg-muted-strong hover:text-content-muted transition lg:hidden"
                             aria-label="Abrir menú"
                             aria-expanded="false"
                             :aria-expanded="sidebarOpen"
@@ -270,6 +270,13 @@ emite en toda página del panel, aunque no contenga ningún formulario.
                             <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
                             </svg>
+                            {% comment %}En móvil el menú está recogido: sin esto, un chat
+                            sin leer no se ve hasta abrirlo. Lo mueve `chat_live.js`.{% endcomment %}
+                            {% if request.user.clinic_id %}
+                            <span data-chat-unread class="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-semibold text-white ring-2 ring-surface{% if not chat_unread_total %} hidden{% endif %}">
+                                <span data-chat-unread-count>{{ chat_unread_total|default:0 }}</span><span class="sr-only"> chats sin leer</span>
+                            </span>
+                            {% endif %}
                         </button>
                         {% endif %}
                         {% include 'partials/_section_icon.html' %}

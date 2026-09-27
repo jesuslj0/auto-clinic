@@ -240,6 +240,8 @@ listener, so the partial can be included any number of times.
 
 Browser side: `static/js/chat_live.js` (loaded by `base.html` for users with a clinic) keeps **one** socket per page, reconnects with exponential backoff (1 s → 30 s), treats close codes 4401/4403 as final, falls back to polling every 15 s after 3 failures, and emits `resync` to subscribers whenever events may have been missed. It keeps the sidebar unread badge (`[data-chat-unread]`) and the tab title up to date on every page. `static/js/chat_inbox.js` (Alpine `chatInbox`) fetches `GET /chats/<id>/mensajes/?after=<last id in DOM>` and `GET /chats/lista/`; dedup is by `data-message-id`. Structural changes (agent mode, clinic switch, 24 h window reopening) reload the page — never while a message is being typed.
 
+Delivery receipts (✓ / ✓✓ / blue ✓✓ / failed): n8n forwards Meta's `statuses` to `POST /api/agent/messages/status/` → `agent.services.apply_delivery_status()`, which only moves a status **forward** (Meta does not guarantee order), fills `delivered_at`/`seen_at` once (`read_at` is the *clinic* reading an inbound message, not the patient), saves with `save()` (audited) and emits `chat_message`; the client re-renders that bubble with `?only=<id>`. The mobile menu button carries the same unread badge as the sidebar.
+
 ### Background tasks (Celery)
 
 Configured in `config/celery.py`. Beat schedule runs:

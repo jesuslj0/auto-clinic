@@ -262,7 +262,17 @@ class ChatMessage(models.Model):
         null=True, blank=True, help_text="Marca de tiempo original de WhatsApp."
     )
     created_at = models.DateTimeField(auto_now_add=True)
-    read_at = models.DateTimeField(null=True, blank=True)
+    read_at = models.DateTimeField(
+        null=True, blank=True, help_text="Cuándo lo leyó la clínica en el panel (entrantes)."
+    )
+    # Acuses de WhatsApp de los salientes (webhook `statuses` de Meta). Van aparte
+    # de `read_at`, que es la lectura del staff, no la del paciente.
+    delivered_at = models.DateTimeField(
+        null=True, blank=True, help_text="Cuándo llegó al móvil del paciente (✓✓)."
+    )
+    seen_at = models.DateTimeField(
+        null=True, blank=True, help_text="Cuándo lo leyó el paciente (✓✓ azul)."
+    )
 
     class Meta:
         db_table = "chat_messages"

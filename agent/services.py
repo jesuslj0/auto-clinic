@@ -230,3 +230,78 @@ def send_staff_message(*, session: ConversationSession, body: str) -> ChatMessag
     message.save(update_fields=['status', 'wa_message_id', 'sent_at'])
     broadcast_message(message)
     return message
+
+
+# ---------------------------------------------------------------------------
+# Acuses de entrega (webhook `statuses` de Meta)
+# ---------------------------------------------------------------------------
+
+#: Orden de los estados de un saliente. Meta no garantiza el orden de llegada
+#: (un «read» puede adelantarse a su «delivered») y reintenta sus webhooks, así
+#: que un estado solo se aplica si AVANZA: nunca se vuelve de leído a entregado.
+_STATUS_RANK = {
+    '': 0,
+    ChatMessage.Status.QUEUED: 1,
+    ChatMessage.Status.SENT: 2,
+    ChatMessage.Status.DELIVERED: 3,
+    ChatMessage.Status.READ: 4,
+}
+
+DELIVERY_STATUSES = (
+    ChatMessage.Status.SENT,
+    ChatMessage.Status.DELIVERED,
+    ChatMessage.Status.READ,
+    ChatMessage.Status.FAILED,
+)
+
+
+def apply_delivery_status(*, clinic, wa_message_id: str, status: str, timestamp=None, error: str = ''):
+    """Aplica un acuse de WhatsApp a un mensaje saliente de la clínica.
+
+    Devuelve el mensaje, o `None` si no hay ningún saliente de esa clínica con
+    ese `wa_message_id` (un acuse de otra clínica cae aquí: no se distingue de
+    uno desconocido). Idempotente: repetir el mismo acuse no cambia nada.
+
+    - Las marcas de tiempo se rellenan una sola vez y con la hora de Meta. Un
+      «read» implica también «delivered»: si llega primero, sella las dos.
+    - «failed» solo se aplica si el mensaje aún no consta como entregado: un
+      mensaje que ya llegó no puede dejar de haber llegado.
+    """
+    when = timestamp or timezone.now()
+
+    with transaction.atomic():
+        message = (
+            ChatMessage.objects.select_for_update()
+            .filter(clinic=clinic, wa_message_id=wa_message_id, direction=ChatMessage.Direction.OUTBOUND)
+            .first()
+        )
+        if message is None:
+            return None
+
+        fields = []
+        current_rank = _STATUS_RANK.get(message.status, 0)
+
+        if status == ChatMessage.Status.FAILED:
+            if message.status != ChatMessage.Status.FAILED and current_rank < _STATUS_RANK[ChatMessage.Status.DELIVERED]:
+                message.status = ChatMessage.Status.FAILED
+                message.error_message = (error or 'WhatsApp no pudo entregar el mensaje.')[:1000]
+                fields += ['status', 'error_message']
+        else:
+            if message.status != ChatMessage.Status.FAILED and _STATUS_RANK[status] > current_rank:
+                message.status = status
+                fields.append('status')
+            if status == ChatMessage.Status.SENT and message.sent_at is None:
+                message.sent_at = when
+                fields.append('sent_at')
+            if status in (ChatMessage.Status.DELIVERED, ChatMessage.Status.READ) and message.delivered_at is None:
+                message.delivered_at = when
+                fields.append('delivered_at')
+            if status == ChatMessage.Status.READ and message.seen_at is None:
+                message.seen_at = when
+                fields.append('seen_at')
+
+        if fields:
+            # `save()` y no `update()`: el mensaje está en la auditoría.
+            message.save(update_fields=fields)
+            broadcast_message(message)
+    return message

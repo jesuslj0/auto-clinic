@@ -68,11 +68,33 @@ cliente para no pintar dos veces un mensaje que llega por el socket.
         <p class="whitespace-pre-line break-words text-sm">{{ message.display_body }}</p>
         {% endif %}
 
-        <p class="mt-1 flex items-center justify-end gap-1.5 text-[11px] {% if message.direction == 'inbound' %}text-content-faint{% else %}text-white/70{% endif %}">
+        <p class="mt-1 flex items-center justify-end gap-1 text-[11px] {% if message.direction == 'inbound' %}text-content-faint{% else %}text-white/70{% endif %}">
             {{ message.sent_at|default:message.created_at|date:"H:i" }}
             {% if message.direction == 'outbound' and message.status %}
-                · {{ message.get_status_display|lower }}
+            {% comment %}
+            Acuse de WhatsApp, como en la app: reloj, ✓, ✓✓ y ✓✓ en azul. Se
+            repinta solo cuando llega un acuse nuevo (`chat_inbox.js` pide
+            `?only=<id>`). Los colores son literales porque van sobre la burbuja
+            de marca, que es igual en claro y en oscuro.
+            {% endcomment %}
+            <span data-status="{{ message.status }}" class="inline-flex items-center gap-0.5 {% if message.status == 'read' %}text-sky-300{% elif message.status == 'failed' %}text-red-200{% endif %}"
+                  title="{{ message.get_status_display }}{% if message.delivered_at %} · entregado {{ message.delivered_at|date:'j M H:i' }}{% endif %}{% if message.seen_at %} · leído {{ message.seen_at|date:'j M H:i' }}{% endif %}">
+                {% if message.status == 'queued' %}
+                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                {% elif message.status == 'sent' %}
+                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2.25" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                {% elif message.status == 'delivered' or message.status == 'read' %}
+                <svg class="h-3.5 w-4" fill="none" viewBox="0 0 28 24" stroke-width="2.25" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2 12.75l5.5 5.5 9-13.5M11.5 16.5l1.75 1.75 9-13.5" /></svg>
+                {% elif message.status == 'failed' %}
+                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
+                <span>No enviado</span>
+                {% endif %}
+                <span class="sr-only">{{ message.get_status_display }}</span>
+            </span>
             {% endif %}
         </p>
+        {% if message.direction == 'outbound' and message.status == 'failed' and message.error_message %}
+        <p class="mt-1 text-[11px] text-white/80">{{ message.error_message }}</p>
+        {% endif %}
     </div>
 </div>
