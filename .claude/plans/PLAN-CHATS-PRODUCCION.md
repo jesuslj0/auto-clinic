@@ -367,12 +367,16 @@ o antes de desplegar.
    `message_id` (id que devuelve Django), `media_id`, `whatsapp_token` y
    `django_auth_header` del Config Loader. No tocado todavía porque es el flujo
    en producción.
-2. **Purga general de n8n** (lo aplica quien gestione el contenedor, requiere
-   reinicio): `EXECUTIONS_DATA_PRUNE=true` y `EXECUTIONS_DATA_MAX_AGE` corto
-   (p. ej. 72 h). El orquestador sí guarda ejecuciones y en ellas va el texto de
-   los mensajes.
-3. **Verificar con R2 real** que la URL firmada devuelve la cabecera
-   `Cache-Control: private, no-store` (`response-cache-control` en la firma).
+2. ~~**Purga general de n8n**~~ — hecho el 2026-09-27: variables de purga
+   puestas en `n8n.alt4ir.online` (ojo: ESE es el n8n en uso, no el contenedor
+   local de `/home/jesuslj/n8n`). Queda comprobar que las ejecuciones antiguas
+   del orquestador (con textos de pacientes) han desaparecido pasadas 72 h.
+3. ~~**Verificar con R2 real**~~ — hecho el 2026-09-27 en el bucket dev: con la
+   firma del panel R2 responde `Cache-Control: private, no-store, max-age=0`
+   (sin el parámetro no manda ninguno); la URL caduca (403 pasado el plazo);
+   sin firma, 400. Bucket revisado: sin reglas de ciclo de vida que borren
+   objetos (solo la de abortar multipart). Los adjuntos de chat van al mismo
+   bucket que lesiones y consentimientos, prefijo `chat-media/`.
 4. **Verificar notas de voz Ogg/Opus en el Safari del iPhone** de la clínica. Si
    no suenan, convertir a AAC/MP3 en el servidor al recibirlas.
 5. **Aplicar migraciones** `agent/0008` y `agent/0009` al desplegar, y tener
