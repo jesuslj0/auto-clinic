@@ -3,7 +3,7 @@
 Entrada (`attach_media`): n8n descarga el binario de Meta y lo sube a
 `POST /api/agent/messages/<id>/media/`. Una sola vez por mensaje.
 
-Salida (`signed_media_url`): el panel lo pide a `GET /chats/media/<id>/`, que
+Salida (`signed_media_url`): el panel lo pide a `GET /chats/adjuntos/<id>/`, que
 comprueba el permiso, deja `AccessLog` y redirige a una URL firmada del bucket
 privado. Mismo principio que `clinical/attachments.py`: comprobar y firmar
 viven en la misma función, para que no exista un camino que firme sin mirar.

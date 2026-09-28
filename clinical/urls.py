@@ -12,12 +12,12 @@ app_name = 'clinical'
 
 urlpatterns = [
     path(
-        'attachments/<uuid:public_id>/',
+        'adjuntos/<uuid:public_id>/',
         LesionAttachmentDownloadView.as_view(),
         name='lesion-attachment',
     ),
     path(
-        'consents/<uuid:public_id>/signature/',
+        'consentimientos/<uuid:public_id>/firma/',
         SignedConsentSignatureView.as_view(),
         name='consent-signature',
     ),

@@ -14,7 +14,7 @@ administración (`can_manage`, que responde lo mismo que comprueba después
 <section class="space-y-6">
     {% if can_manage %}
     <div class="flex items-center justify-end">
-        <a href="{% url 'appointments:professionals-create' %}" class="btn-primary">
+        <a href="{% url 'professionals:create' %}" class="btn-primary">
             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
@@ -72,7 +72,7 @@ administración (`can_manage`, que responde lo mismo que comprueba después
                         <td class="whitespace-nowrap px-6 py-4 text-content-muted" title="{{ professional.user.date_joined|date:'d/m/Y H:i' }}">{{ professional.user.date_joined|date:"d/m/Y" }}</td>
                         {% if can_manage %}
                         <td class="px-6 py-4">
-                            <a href="{% url 'appointments:professionals-edit' professional.pk %}" class="btn-outlined px-3 py-1.5 text-xs">Editar</a>
+                            <a href="{% url 'professionals:edit' professional.pk %}" class="btn-outlined px-3 py-1.5 text-xs">Editar</a>
                         </td>
                         {% endif %}
                     </tr>

@@ -6,9 +6,6 @@ from appointments.views import (
     AppointmentCreateView,
     AppointmentListView,
     AppointmentProcedureCreateView,
-    ProfessionalCreateView,
-    ProfessionalListView,
-    ProfessionalUpdateView,
 )
 
 app_name = 'appointments'
@@ -16,7 +13,7 @@ app_name = 'appointments'
 urlpatterns = [
     path('', AppointmentCalendarView.as_view(), name='calendar'),
     path('crear/', AppointmentCreateView.as_view(), name='create'),
-    path('list/', AppointmentListView.as_view(), name='list'),
+    path('listado/', AppointmentListView.as_view(), name='list'),
     # Puerta principal del alta de procedimientos: aquí la visita queda
     # enganchada a la cita, que es lo que hace visible en el listado qué
     # citas acabaron en algo. Sesión y CSRF, nunca API (capa clínica).
@@ -33,7 +30,4 @@ urlpatterns = [
         RedirectView.as_view(pattern_name='core:account-profile', permanent=False),
         name='profile',
     ),
-    path('professionals/', ProfessionalListView.as_view(), name='professionals-list'),
-    path('professionals/crear/', ProfessionalCreateView.as_view(), name='professionals-create'),
-    path('professionals/<int:pk>/editar/', ProfessionalUpdateView.as_view(), name='professionals-edit'),
 ]

@@ -18,7 +18,7 @@ CURRENT = 'testpass123'
 NEW = 'Roble-Marino42'
 
 ACCOUNT_URL = '/cuenta/'
-CHANGE_URL = '/cuenta/password/'
+CHANGE_URL = '/cuenta/contrasena/'
 
 
 def post_change(client, *, old=CURRENT, new1=NEW, new2=None, htmx=False):

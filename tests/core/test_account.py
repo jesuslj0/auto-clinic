@@ -353,7 +353,7 @@ def test_an_invalid_row_saves_nothing(client, staff_user):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
-@pytest.mark.parametrize('url_name', ['appointments:professionals-create'])
+@pytest.mark.parametrize('url_name', ['professionals:create'])
 def test_staff_cannot_reach_professional_management(client, staff_user, url_name):
     client.force_login(staff_user)
     assert client.get(reverse(url_name)).status_code == 403
@@ -362,7 +362,7 @@ def test_staff_cannot_reach_professional_management(client, staff_user, url_name
 @pytest.mark.django_db
 def test_staff_cannot_edit_another_professional(client, staff_user, professional_a):
     client.force_login(staff_user)
-    url = reverse('appointments:professionals-edit', args=[professional_a.pk])
+    url = reverse('professionals:edit', args=[professional_a.pk])
 
     assert client.get(url).status_code == 403
     assert client.post(url, {}).status_code == 403
@@ -371,7 +371,7 @@ def test_staff_cannot_edit_another_professional(client, staff_user, professional
 @pytest.mark.django_db
 def test_admin_still_manages_professionals(client, admin_user, professional_a):
     client.force_login(admin_user)
-    url = reverse('appointments:professionals-edit', args=[professional_a.pk])
+    url = reverse('professionals:edit', args=[professional_a.pk])
 
     assert client.get(url).status_code == 200
 
@@ -380,7 +380,7 @@ def test_admin_still_manages_professionals(client, admin_user, professional_a):
 def test_the_professional_list_hides_management_from_staff(client, staff_user, admin_user):
     """Recepción sigue viendo quién atiende; un botón prohibido sería una trampa."""
     client.force_login(staff_user)
-    response = client.get(reverse('appointments:professionals-list'))
+    response = client.get(reverse('professionals:list'))
     html = response.content.decode()
 
     assert response.status_code == 200
@@ -392,7 +392,7 @@ def test_the_professional_list_hides_management_from_staff(client, staff_user, a
 @pytest.mark.django_db
 def test_the_professional_list_shows_management_to_admin(client, admin_user):
     client.force_login(admin_user)
-    response = client.get(reverse('appointments:professionals-list'))
+    response = client.get(reverse('professionals:list'))
 
     assert response.context['can_manage'] is True
     assert '/editar/' in response.content.decode()
@@ -401,7 +401,7 @@ def test_the_professional_list_shows_management_to_admin(client, admin_user):
 @pytest.mark.django_db
 def test_the_professional_list_shows_role_and_join_date(client, admin_user):
     client.force_login(admin_user)
-    html = client.get(reverse('appointments:professionals-list')).content.decode()
+    html = client.get(reverse('professionals:list')).content.decode()
 
     assert '>Rol<' in html and '>Alta<' in html
     assert admin_user.get_role_display() in html
@@ -411,7 +411,7 @@ def test_the_professional_list_shows_role_and_join_date(client, admin_user):
 @pytest.mark.django_db
 def test_the_professional_list_marks_the_current_user(client, admin_user, staff_user):
     client.force_login(admin_user)
-    html = client.get(reverse('appointments:professionals-list')).content.decode()
+    html = client.get(reverse('professionals:list')).content.decode()
 
     assert html.count('Eres tú') == 1
 
@@ -465,7 +465,7 @@ def test_the_professional_list_shows_title_and_license(client, admin_user):
     professional.save()
 
     client.force_login(admin_user)
-    html = client.get(reverse('appointments:professionals-list')).content.decode()
+    html = client.get(reverse('professionals:list')).content.decode()
 
     assert f'Dr. {admin_user.get_full_name()}' in html
     assert 'Nº col. 28/9999' in html

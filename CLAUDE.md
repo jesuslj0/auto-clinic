@@ -118,8 +118,8 @@ touching it — see `clinical/README.md` for the full picture:
   which checks permission and signs in the same function — there is no
   sign-without-checking path. It works for anything exposing `.file` and
   `.patient` (lesion photos, consent signatures). `GET
-  /clinical/attachments/<public_id>/` and `GET
-  /clinical/consents/<public_id>/signature/` share one base view
+  /clinico/adjuntos/<public_id>/` and `GET
+  /clinico/consentimientos/<public_id>/firma/` share one base view
   (`ProtectedFileRedirectView`), log an `AccessLog` `download_attachment` and
   redirect; the agent is denied explicitly.
 - **A performed procedure freezes the catalogue, it does not read it.**
@@ -171,7 +171,7 @@ clinical-photo rules, plus a few of its own — see `agent/files.py` and
   `Api-Key` only, inbound image/audio messages only, 201/400/409. n8n downloads
   the binary from Meta in the `WA-Media-Ingest` sub-workflow, which **saves no
   executions** so the photo never stays in n8n.
-- **Serving:** `GET /chats/media/<message_id>/` — staff session of the thread's
+- **Serving:** `GET /chats/adjuntos/<message_id>/` — staff session of the thread's
   **clinic** (not the patient: people without a file yet must be visible),
   agent denied, `AccessLog` per view, redirect to a signed URL that lives
   `CHAT_MEDIA_URL_EXPIRE` seconds (300) and makes the bucket answer
@@ -191,6 +191,33 @@ All domain models reference `clinic_id`. Staff queries are automatically filtere
 ### Custom user model
 
 `core.User` extends `AbstractUser` with email as the login field (`username` is set equal to email). Users have a `clinic` FK and a `role` field (`ADMIN`/`STAFF`). Set `AUTH_USER_MODEL = 'core.User'` is already configured.
+
+### URLs
+
+Two conventions, on purpose:
+
+- **Web panel (session, HTML) → Spanish.** Only exceptions: `/login/` and
+  `/logout/`. Always link with `{% url %}` / `reverse()` by `name` (names stay in
+  English), never with literal paths.
+- **API, admin, WebSockets, healthz → English**, untouched: `/api/…`
+  (router, `@action`s, `api/public/appointments/<token>/<action>/`),
+  `/admin/`, `/ws/…`, `/healthz/`. They are the contract with n8n and the
+  links already sent to patients; renaming them breaks both.
+
+Panel map (namespace in brackets):
+
+| Prefix | Routes |
+|---|---|
+| `/` (`core`) | `buscar/`, `login/`, `logout/`, `cuenta/` (`perfil/`, `horario/`, `contrasena/`), `clinica/` (`editar/`, `integraciones/`, `integraciones/probar/`), `panel/citas/<uuid>/` (`gestionar/`, `accion/`, `resumen/`) |
+| `/citas/` (`appointments`) | `crear/`, `listado/`, `<uuid>/procedimiento/`, `mi-perfil/` (redirect) |
+| `/profesionales/` (`professionals`) | `crear/`, `<pk>/editar/` — top-level, views live in `appointments` (`appointments/professional_urls.py`) |
+| `/pacientes/` (`patients`) | `crear/`, `<id>/` + tabs `anamnesis/`, `alertas/`, `lesiones/`, `consentimientos/`, `procedimientos/`, `editar/` |
+| `/servicios/` (`services`) | `crear/`, `<pk>/editar/`, `<pk>/eliminar/` |
+| `/conocimiento/` (`knowledge`) | `crear/`, `<uuid>/editar/`, `<uuid>/eliminar/` |
+| `/chats/` (`agent`) | `agente/`, `lista/`, `adjuntos/<uuid>/`, `<uuid>/` (`mensajes/`, `enviar/`, `modo/`) |
+| `/facturacion/` (`billing`) | `nueva/`, `pendientes/`, `<pk>/` (`emitir/`, `anular/`, `cobrar/`, `procedimientos/`, `eliminar/`) |
+| `/clinico/` (`clinical`) | `adjuntos/<uuid>/`, `consentimientos/<uuid>/firma/` |
+| `/reservar/` (`booking`, public) | `fecha/`, `confirmar/`, `confirmada/` |
 
 ### REST API
 

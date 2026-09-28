@@ -205,34 +205,39 @@ La conversación se resuelve por `phone` (se crea si no existe) o se indica con 
 
 | Método | URL | Vista | Acceso |
 |--------|-----|-------|--------|
-| GET | `/appointments/` | `AppointmentCalendarView` | Autenticado |
-| GET | `/appointments/list/` | `AppointmentListView` | Autenticado |
-| GET | `/appointments/professionals/` | `ProfessionalListView` | Autenticado |
-| GET/POST | `/appointments/professionals/crear/` | `ProfessionalCreateView` | Autenticado |
-| GET/POST | `/appointments/professionals/{id}/editar/` | `ProfessionalUpdateView` | Autenticado |
+| GET | `/citas/` | `AppointmentCalendarView` | Autenticado |
+| GET | `/citas/listado/` | `AppointmentListView` | Autenticado |
+
+### Profesionales — `appointments/professional_urls.py`
+
+| Método | URL | Vista | Acceso |
+|--------|-----|-------|--------|
+| GET | `/profesionales/` | `ProfessionalListView` | Autenticado |
+| GET/POST | `/profesionales/crear/` | `ProfessionalCreateView` | Autenticado |
+| GET/POST | `/profesionales/{id}/editar/` | `ProfessionalUpdateView` | Autenticado |
 
 ### Pacientes — `patients/urls.py`
 
 | Método | URL | Vista | Acceso |
 |--------|-----|-------|--------|
-| GET | `/patients/` | `PatientListView` | Autenticado |
-| GET | `/patients/<id>/` | `PatientDetailView` | Autenticado |
+| GET | `/pacientes/` | `PatientListView` | Autenticado |
+| GET | `/pacientes/<id>/` | `PatientDetailView` | Autenticado |
 
 ### Servicios — `services/urls.py`
 
 | Método | URL | Vista | Acceso |
 |--------|-----|-------|--------|
-| GET | `/services/` | `ServiceListView` | Autenticado |
-| GET/POST | `/services/crear/` | `ServiceCreateView` | Autenticado |
+| GET | `/servicios/` | `ServiceListView` | Autenticado |
+| GET/POST | `/servicios/crear/` | `ServiceCreateView` | Autenticado |
 
 ### Reserva pública — `booking/urls.py`
 
 | Método | URL | Vista | Acceso |
 |--------|-----|-------|--------|
-| GET | `/booking/` | `BookingServiceListView` | Público |
-| GET/POST | `/booking/datetime/` | `BookingDateTimeView` | Público |
-| GET/POST | `/booking/confirm/` | `BookingConfirmView` | Público |
-| GET | `/booking/success/` | `BookingSuccessView` | Público |
+| GET | `/reservar/` | `BookingServiceListView` | Público |
+| GET/POST | `/reservar/fecha/` | `BookingDateTimeView` | Público |
+| GET/POST | `/reservar/confirmar/` | `BookingConfirmView` | Público |
+| GET | `/reservar/confirmada/` | `BookingSuccessView` | Público |
 
 ### Portal de pacientes — `portal/urls.py`
 
@@ -266,7 +271,7 @@ Al recibir un aviso de chats, el navegador pide el HTML a dos vistas de sesión 
 | `GET /chats/<session_id>/mensajes/?after=<message_id>` | Burbujas posteriores a ese mensaje, en orden. Sin `after`, las últimas 50. Máximo 200 por petición: `X-Has-More: 1` indica que hay que repetir con el último id. Un `after` de otro hilo → 400 (recargar el hilo). Marca el hilo como leído. |
 | `GET /chats/lista/?q=&unread=&active=<session_id>` | La lista de conversaciones con los filtros de la bandeja. `X-Total-Unread` trae el total sin filtros. |
 | `GET /chats/<session_id>/mensajes/?only=<message_id>` | Una sola burbuja, para repintarla cuando cambia (le llega la foto). |
-| `GET /chats/media/<message_id>/` | Foto o audio del mensaje: solo staff de la clínica del hilo, deja `AccessLog` y redirige a una URL firmada de 5 min que el bucket sirve con `no-store`. |
+| `GET /chats/adjuntos/<message_id>/` | Foto o audio del mensaje: solo staff de la clínica del hilo, deja `AccessLog` y redirige a una URL firmada de 5 min que el bucket sirve con `no-store`. |
 
 Subida de adjuntos (solo n8n, `Api-Key` de clínica):
 
