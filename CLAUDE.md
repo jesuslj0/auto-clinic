@@ -47,7 +47,7 @@ python manage.py runserver    # Uses config.settings.dev by default
 | `notifications` | Celery beat tasks for reminder dispatch |
 | `billing` | `Subscription` (planes de la clínica) y `PatientInvoice`: factura de paciente que agrupa `PerformedProcedure`. Borrador editable; al emitir copia sus líneas (`lines`), congela `total`, toma número de la serie de su clínica (`InvoiceSequence`) y no vuelve a mirar los procedimientos. No se corrige: se anula (`void()`) y se emite otra |
 | `booking` | Template-only public booking flow (no models) |
-| `agent` | WhatsApp bot state: `AgentMemory` (contexto del LLM), `ConversationSession` (hilo), `ChatMessage` (historial append-only, auditado), `ChatAttachment` (foto/nota de voz del paciente, irremplazable), `WorkflowError` |
+| `agent` | WhatsApp bot state: `AgentMemory` (contexto del LLM), `ConversationSession` (hilo), `ChatMessage` (historial append-only, auditado), `ChatAttachment` (foto/nota de voz del paciente, irremplazable), `WorkflowError`, `AgentProfile` (personalidad del agente por clínica) |
 | `knowledge` | Clinic knowledge base: `ClinicKnowledgeBase`, `ClinicInfoQuery`, `ClinicInfoCache` |
 | `audit` | Append-only audit trail: `ChangeLog` (writes, via signals) and `AccessLog` (reads, instrumented per view) |
 | `clinical` | Clinical core: `MedicalHistory`, `Episode`, `Visit`, `ClinicalNote` (SOAP), `Addendum`. Immutable after signing; soft-delete only. Also versioned anamnesis: `QuestionnaireTemplate`, `TemplateVersion`, `Question`, `QuestionnaireResponse` (immutable literal snapshot) , `ClinicalAlert` (per-patient, deactivated never deleted), `Lesion` (foot-map, coded zone + normalized coords) and its follow-up: `LesionObservation` (measurements per visit) + `LesionAttachment` (photo in a private R2 bucket, signed URLs only). `PerformedProcedure` links a visit to the service catalogue with the price frozen. Versioned informed consent: `ConsentTemplate`, `ConsentVersion`, `SignedConsent` (literal `text_copy` + signature in the private bucket) |
@@ -118,8 +118,8 @@ touching it — see `clinical/README.md` for the full picture:
   which checks permission and signs in the same function — there is no
   sign-without-checking path. It works for anything exposing `.file` and
   `.patient` (lesion photos, consent signatures). `GET
-  /clinical/attachments/<public_id>/` and `GET
-  /clinical/consents/<public_id>/signature/` share one base view
+  /clinico/adjuntos/<public_id>/` and `GET
+  /clinico/consentimientos/<public_id>/firma/` share one base view
   (`ProtectedFileRedirectView`), log an `AccessLog` `download_attachment` and
   redirect; the agent is denied explicitly.
 - **A performed procedure freezes the catalogue, it does not read it.**
@@ -171,7 +171,7 @@ clinical-photo rules, plus a few of its own — see `agent/files.py` and
   `Api-Key` only, inbound image/audio messages only, 201/400/409. n8n downloads
   the binary from Meta in the `WA-Media-Ingest` sub-workflow, which **saves no
   executions** so the photo never stays in n8n.
-- **Serving:** `GET /chats/media/<message_id>/` — staff session of the thread's
+- **Serving:** `GET /chats/adjuntos/<message_id>/` — staff session of the thread's
   **clinic** (not the patient: people without a file yet must be visible),
   agent denied, `AccessLog` per view, redirect to a signed URL that lives
   `CHAT_MEDIA_URL_EXPIRE` seconds (300) and makes the bucket answer
@@ -191,6 +191,49 @@ All domain models reference `clinic_id`. Staff queries are automatically filtere
 ### Custom user model
 
 `core.User` extends `AbstractUser` with email as the login field (`username` is set equal to email). Users have a `clinic` FK and a `role` field (`ADMIN`/`STAFF`). Set `AUTH_USER_MODEL = 'core.User'` is already configured.
+
+### URLs
+
+Two conventions, on purpose:
+
+- **Web panel (session, HTML) → Spanish.** Only exceptions: `/login/` and
+  `/logout/`. Always link with `{% url %}` / `reverse()` by `name` (names stay in
+  English), never with literal paths.
+- **API, admin, WebSockets, healthz → English**, untouched: `/api/…`
+  (router, `@action`s, `api/public/appointments/<token>/<action>/`),
+  `/admin/`, `/ws/…`, `/healthz/`. They are the contract with n8n and the
+  links already sent to patients; renaming them breaks both.
+
+Panel map (namespace in brackets):
+
+| Prefix | Routes |
+|---|---|
+| `/` (`core`) | `buscar/`, `login/`, `logout/`, `cuenta/` (`perfil/`, `horario/`, `contrasena/`), `clinica/` (`editar/`, `integraciones/` → redirect to `/agente/`), `panel/citas/<uuid>/` (`gestionar/`, `accion/`, `resumen/`) |
+| `/citas/` (`appointments`) | `crear/`, `listado/`, `<uuid>/procedimiento/`, `mi-perfil/` (redirect) |
+| `/profesionales/` (`professionals`) | `crear/`, `<pk>/editar/` — top-level, views live in `appointments` (`appointments/professional_urls.py`) |
+| `/pacientes/` (`patients`) | `crear/`, `<id>/` + tabs `anamnesis/`, `alertas/`, `lesiones/`, `consentimientos/`, `procedimientos/`, `editar/` |
+| `/servicios/` (`services`) | `crear/`, `<pk>/editar/`, `<pk>/eliminar/` |
+| `/conocimiento/` (`knowledge`) | `crear/`, `<uuid>/editar/`, `<uuid>/eliminar/` |
+| `/chats/` (`agent`) | `agente/`, `lista/`, `adjuntos/<uuid>/`, `<uuid>/` (`mensajes/`, `enviar/`, `modo/`) |
+| `/agente/` (`agent_settings`, admins only) | test chat at the root, `probar/enviar/`, `personalidad/`, `meta/`, `webhook/` — views in `agent/settings_views.py` |
+| `/facturacion/` (`billing`) | `nueva/`, `pendientes/`, `<pk>/` (`emitir/`, `anular/`, `cobrar/`, `procedimientos/`, `eliminar/`) |
+| `/clinico/` (`clinical`) | `adjuntos/<uuid>/`, `consentimientos/<uuid>/firma/` |
+| `/reservar/` (`booking`, public) | `fecha/`, `confirmar/`, `confirmada/` |
+
+### Agent personality (`agent.AgentProfile`)
+
+One per clinic (`AgentProfile.for_clinic()` returns an unsaved default when
+missing, so a clinic without one keeps the old tone). It only changes *style*:
+name, tone, tú/usted, emojis (all coded choices), a welcome text for new
+contacts and capped free `style_notes`. The prompt block is written in Django
+(`agent/persona.py`, pure) and served ready-made at `GET /api/agent/profile/`
+(clinic `Api-Key` only; the clinic comes from the key). n8n
+(`WA-Inbound-Orchestrator con buffer`) calls it on every execution — both the
+WhatsApp and the panel-test path — in the `Cargar Perfil Agente` node, and pastes
+`persona_prompt` at the top of the system message; on failure it falls back to
+the default tone. The fixed rules come *after* the block and it says it cannot
+override them. Free text is flattened to one quoted line, so it cannot open a
+new prompt section. Audited via `audit.registry`.
 
 ### REST API
 
@@ -239,6 +282,8 @@ listener, so the partial can be included any number of times.
 `Django Channels 4.1` + `channels-redis` + `Daphne` ASGI server. Both consumers (`AppointmentConsumer`, `agent.consumers.ChatConsumer`) extend `core.consumers.ClinicScopedConsumer`: the clinic is taken from `scope['user']`, **never from the URL**, and the group name comes from `core.realtime.clinic_group_name()` (hashed — `clinic_id` is free text). Consumers are read-only; writes stay as HTTP POSTs. Appointment changes broadcast via a `post_save` signal in `appointments/signals.py`. Chat events are emitted from the services in `agent/realtime.py` (not signals), with `transaction.on_commit`, and carry no message content — the browser fetches the rendered fragment. Every event carries the clinic's `total_unread`.
 
 Browser side: `static/js/chat_live.js` (loaded by `base.html` for users with a clinic) keeps **one** socket per page, reconnects with exponential backoff (1 s → 30 s), treats close codes 4401/4403 as final, falls back to polling every 15 s after 3 failures, and emits `resync` to subscribers whenever events may have been missed. It keeps the sidebar unread badge (`[data-chat-unread]`) and the tab title up to date on every page. `static/js/chat_inbox.js` (Alpine `chatInbox`) fetches `GET /chats/<id>/mensajes/?after=<last id in DOM>` and `GET /chats/lista/`; dedup is by `data-message-id`. Structural changes (agent mode, clinic switch, 24 h window reopening) reload the page — never while a message is being typed.
+
+Delivery receipts (✓ / ✓✓ / blue ✓✓ / failed): n8n forwards Meta's `statuses` to `POST /api/agent/messages/status/` → `agent.services.apply_delivery_status()`, which only moves a status **forward** (Meta does not guarantee order), fills `delivered_at`/`seen_at` once (`read_at` is the *clinic* reading an inbound message, not the patient), saves with `save()` (audited) and emits `chat_message`; the client re-renders that bubble with `?only=<id>`. The mobile menu button carries the same unread badge as the sidebar.
 
 ### Background tasks (Celery)
 

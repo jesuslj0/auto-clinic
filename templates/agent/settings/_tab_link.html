@@ -1,0 +1,11 @@
+{# Un apartado de la navegación del agente. `done`: el apartado ya está completo (marca verde). #}
+<a href="{{ url }}"
+   {% if agent_tab == key %}aria-current="page"{% endif %}
+   class="inline-flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-1.5 py-2 text-[13px] font-medium transition sm:gap-2 sm:px-4 sm:text-sm {% if agent_tab == key %}bg-surface text-brand-fg shadow-sm ring-1 ring-line{% else %}text-content-muted hover:bg-surface/60 hover:text-content{% endif %}">
+    {{ label }}
+    {% if done %}
+    <svg class="h-4 w-4 flex-shrink-0 text-success" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-label="completado">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+    </svg>
+    {% endif %}
+</a>

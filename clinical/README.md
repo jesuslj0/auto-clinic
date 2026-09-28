@@ -470,7 +470,7 @@ from clinical.attachments import signed_url_for
 signed_url_for(attachment, request.user)   # URL firmada, o PermissionDenied
 ```
 
-`GET /clinical/attachments/<public_id>/` comprueba el permiso, deja el acceso en
+`GET /clinico/adjuntos/<public_id>/` comprueba el permiso, deja el acceso en
 `AccessLog` (`download_attachment`) y **redirige** a la URL firmada; Django nunca
 sirve el fichero. Detalles que no son casualidad:
 
@@ -527,7 +527,7 @@ opaca (UUID bajo `consent-signatures/`), validación **por contenido**, se guard
 la clave y jamás una URL.
 
 ```python
-GET /clinical/consents/<public_id>/signature/
+GET /clinico/consentimientos/<public_id>/firma/
 ```
 
 Comprueba el permiso, deja el acceso en `AccessLog` (`download_attachment`) y

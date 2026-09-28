@@ -1044,12 +1044,12 @@ class ProfessionalCreateView(ClinicAdminRequiredMixin, CreateView):
     model = Professional
     form_class = ProfessionalForm
     template_name = 'appointments/professional_form.html'
-    success_url = reverse_lazy('appointments:professionals-list')
+    success_url = reverse_lazy('professionals:list')
 
     def dispatch(self, request, *args, **kwargs):
         if request.user.is_authenticated and not request.user.is_superuser and not request.user.clinic_id:
             messages.error(request, 'Tu usuario no tiene una clínica asignada.')
-            return redirect('appointments:professionals-list')
+            return redirect('professionals:list')
         return super().dispatch(request, *args, **kwargs)
 
     def get_form_kwargs(self):
@@ -1070,7 +1070,7 @@ class ProfessionalUpdateView(ClinicAdminRequiredMixin, UpdateView):
     model = Professional
     form_class = ProfessionalForm
     template_name = 'appointments/professional_form.html'
-    success_url = reverse_lazy('appointments:professionals-list')
+    success_url = reverse_lazy('professionals:list')
 
     def get_queryset(self):
         queryset = Professional.objects.select_related('user', 'clinic').prefetch_related('services')

@@ -32,7 +32,7 @@ def edit_client(client, prof_sin_horario):
 
 
 def _url(professional):
-    return reverse('appointments:professionals-edit', args=[professional.pk])
+    return reverse('professionals:edit', args=[professional.pk])
 
 
 def _base_post(professional, **overrides):
@@ -68,7 +68,7 @@ class TestRender:
 
     def test_create_view_does_not_show_formsets(self, edit_client):
         """Los formsets viven solo en el edit: en el alta aún no hay clínica fijada."""
-        resp = edit_client.get(reverse('appointments:professionals-create'))
+        resp = edit_client.get(reverse('professionals:create'))
         assert resp.status_code == 200
         assert 'schedule_formset' not in resp.context
 

@@ -37,7 +37,7 @@ def _n8n_fails():
 
 def _send(client, message="¿Tenéis hueco mañana?"):
     return client.post(
-        reverse('core:clinic-agent-test'),
+        reverse('agent_settings:test-send'),
         data=json.dumps({'message': message}),
         content_type='application/json',
     )
@@ -186,7 +186,7 @@ class TestTestThreadIsSeparateFromTheInbox:
         with _n8n_replies(json.dumps({'reply': 'Sí, a las 10:00'})):
             _send(client)
 
-        history = client.get(reverse('core:clinic-integrations')).context['test_messages']
+        history = client.get(reverse('agent_settings:test')).context['test_messages']
 
         assert [(entry['role'], entry['text']) for entry in history] == [
             ('user', '¿Tenéis hueco mañana?'),
@@ -198,5 +198,5 @@ class TestTestThreadIsSeparateFromTheInbox:
 
     def test_settings_chat_starts_empty_without_history(self, client, admin_user):
         client.force_login(admin_user)
-        response = client.get(reverse('core:clinic-integrations'))
+        response = client.get(reverse('agent_settings:test'))
         assert response.context['test_messages'] == []

@@ -460,6 +460,28 @@ solo en la bandeja, y pintar el contador en `partials/_sidebar_nav.html`.
 
 ---
 
+### Hecha (2026-09-27)
+
+- `POST /api/agent/messages/status/` (un acuse o una lista) →
+  `apply_delivery_status()`: el estado solo avanza, es idempotente, rellena
+  `delivered_at`/`seen_at` con la hora de Meta, se audita y emite
+  `chat_message`. Desconocido u otra clínica → 200 con `matched: false`.
+- Burbuja: reloj, ✓, ✓✓, ✓✓ azul y «No enviado» con el motivo; se repinta en
+  vivo (`?only=<id>`). Horas de entrega y lectura al pasar el ratón.
+- Badge: el del sidebar ya estaba (fase 1); se añade al botón del menú móvil.
+
+**Pendiente en n8n (al conectar la Cloud API):**
+
+1. En el orquestador, los webhooks con `value.statuses` (hoy «Normalizar
+   Mensaje» los descarta con `skip`) → reenviarlos a
+   `POST /api/agent/messages/status/` con `id` → `wa_message_id`,
+   `status`, `timestamp` y `errors[0].title` → `error`.
+2. «Registrar Mensaje Saliente» / «Registrar Respuesta Solo Texto» no leen el id
+   de la respuesta de la Cloud API (`messages[0].id`): sin él, las respuestas
+   del agente no recibirán acuses. Los del staff sí (Django guarda el wamid).
+
+---
+
 ## Trabajo transversal
 
 - **Configuración:** las variables de R2 (`R2_ACCESS_KEY_ID`, etc.) pasan a ser

@@ -1,7 +1,12 @@
+from datetime import datetime
+from datetime import timezone as dt_timezone
+
+from django.utils.dateparse import parse_datetime
 from rest_framework import serializers
 
-from agent.models import AgentMemory, ChatMessage, ConversationSession, WorkflowError
-from agent.services import record_message
+from agent.models import AgentMemory, AgentProfile, ChatMessage, ConversationSession, WorkflowError
+from agent.persona import build_persona_prompt
+from agent.services import DELIVERY_STATUSES, record_message
 from core.models import Clinic
 from core.serializers import ClinicScopedSerializerMixin
 
@@ -159,3 +164,53 @@ class ChatMessageSerializer(ClinicScopedSerializerMixin, serializers.ModelSerial
             )
 
         return record_message(clinic=clinic, phone=phone, session=session, **validated_data)
+
+
+class DeliveryStatusSerializer(serializers.Serializer):
+    """Un acuse de WhatsApp tal y como lo reenvía n8n desde el webhook de Meta."""
+
+    wa_message_id = serializers.CharField(max_length=128)
+    status = serializers.ChoiceField(choices=[s.value for s in DELIVERY_STATUSES])
+    # Meta manda segundos Unix como texto; se admite también ISO 8601.
+    timestamp = serializers.CharField(required=False, allow_blank=True)
+    error = serializers.CharField(required=False, allow_blank=True, max_length=1000)
+
+    def validate_timestamp(self, value):
+        if not value:
+            return None
+        if value.isdigit():
+            return datetime.fromtimestamp(int(value), tz=dt_timezone.utc)
+        parsed = parse_datetime(value)
+        if parsed is None:
+            raise serializers.ValidationError('Usa segundos Unix o una fecha ISO 8601.')
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt_timezone.utc)
+
+
+class AgentProfileSerializer(serializers.ModelSerializer):
+    """Lo que n8n necesita para que el agente hable como la clínica quiere.
+
+    `prompt` es el bloque ya redactado (`agent.persona`): el workflow solo lo
+    pega. Los campos sueltos van también por si algún nodo los necesita.
+    """
+
+    clinic_id = serializers.CharField(source='clinic.clinic_id', read_only=True)
+    clinic_name = serializers.CharField(source='clinic.name', read_only=True)
+    prompt = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AgentProfile
+        fields = (
+            'clinic_id',
+            'clinic_name',
+            'agent_name',
+            'tone',
+            'address_form',
+            'emoji_usage',
+            'welcome_message',
+            'style_notes',
+            'prompt',
+        )
+        read_only_fields = fields
+
+    def get_prompt(self, profile):
+        return build_persona_prompt(profile)

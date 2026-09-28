@@ -19,16 +19,25 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from agent.media import MediaAlreadyAttached, attach_media, log_media_view, signed_media_url
-from agent.models import AgentMemory, ChatAttachment, ChatMessage, ConversationSession, WorkflowError
+from agent.models import (
+    AgentMemory,
+    AgentProfile,
+    ChatAttachment,
+    ChatMessage,
+    ConversationSession,
+    WorkflowError,
+)
 from agent.serializers import (
     AgentMemorySerializer,
+    AgentProfileSerializer,
     ChatMessageSerializer,
     ConversationSessionSerializer,
+    DeliveryStatusSerializer,
     PlatformWorkflowErrorSerializer,
     WorkflowErrorSerializer,
 )
 from agent.realtime import broadcast_clinic, broadcast_session, clinic_unread_total
-from agent.services import mark_session_read, send_staff_message
+from agent.services import apply_delivery_status, mark_session_read, send_staff_message
 from agent.whatsapp import WhatsAppError
 from core.authentication import ClinicAgent
 from core.mixins import ExportMixin
@@ -99,6 +108,21 @@ class PlatformWorkflowErrorView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data, status=http_status.HTTP_201_CREATED)
+
+
+class AgentProfileView(APIView):
+    """Identidad y estilo del agente de la clínica de la clave (`Api-Key`).
+
+    n8n lo pide en cada ejecución, tanto por la ruta de WhatsApp como por la
+    del chat de prueba del panel, que no pasa por `agent-config`. Solo la
+    clave de clínica: la clínica sale de la clave, nunca de un parámetro.
+    """
+
+    permission_classes = [IsAgentClinicKey]
+
+    def get(self, request):
+        profile = AgentProfile.for_clinic(request.user.clinic)
+        return Response(AgentProfileSerializer(profile).data)
 
 
 class ConversationSessionViewSet(ExportMixin, viewsets.ModelViewSet):
@@ -229,6 +253,44 @@ class ChatMessageViewSet(ExportMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = ChatMessage.objects.select_related('session', 'clinic')
         return scope_to_clinic(queryset, self.request.user)
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='status',
+        permission_classes=[IsAgentClinicKey],
+    )
+    def delivery_status(self, request):
+        """Acuses de entrega de WhatsApp (✓, ✓✓, leído, fallido). Solo n8n.
+
+        Acepta un acuse o una lista: `{wa_message_id, status, timestamp?, error?}`.
+        Un acuse de un mensaje que no es de la clínica de la `Api-Key` (o que no
+        existe) no es un error: n8n reenvía todos los de Meta, incluidos los de
+        mensajes que no pasaron por aquí. Se responde `matched: false`.
+
+        Es un endpoint propio y no un `PATCH` sobre el mensaje a propósito: el
+        hilo es de solo inserción y esto solo toca los campos del acuse.
+        """
+        many = isinstance(request.data, list)
+        serializer = DeliveryStatusSerializer(data=request.data, many=many)
+        serializer.is_valid(raise_exception=True)
+        items = serializer.validated_data if many else [serializer.validated_data]
+
+        results = []
+        for item in items:
+            message = apply_delivery_status(
+                clinic=request.user.clinic,
+                wa_message_id=item['wa_message_id'],
+                status=item['status'],
+                timestamp=item.get('timestamp'),
+                error=item.get('error', ''),
+            )
+            results.append({
+                'wa_message_id': item['wa_message_id'],
+                'matched': message is not None,
+                'status': message.status if message is not None else None,
+            })
+        return Response(results if many else results[0])
 
     @action(
         detail=True,

@@ -1,10 +1,10 @@
 from django.urls import path
+from django.views.generic import RedirectView
 
 from core.views import (
     AccountProfileView,
     AccountScheduleView,
     AccountView,
-    AgentTestMessageView,
     AppointmentQuickDetailView,
     ClinicEditView,
     ClinicInfoView,
@@ -15,7 +15,6 @@ from core.views import (
     DashboardView,
     PasswordChangeSectionView,
     SearchView,
-    WhatsAppIntegrationView,
 )
 
 app_name = 'core'
@@ -32,12 +31,17 @@ urlpatterns = [
     path('cuenta/', AccountView.as_view(), name='account'),
     path('cuenta/perfil/', AccountProfileView.as_view(), name='account-profile'),
     path('cuenta/horario/', AccountScheduleView.as_view(), name='account-schedule'),
-    path('cuenta/password/', PasswordChangeSectionView.as_view(), name='password-change'),
-    path('clinic/info/', ClinicInfoView.as_view(), name='clinic-info'),
-    path('clinic/edit/', ClinicEditView.as_view(), name='clinic-edit'),
-    path('clinic/integraciones/', WhatsAppIntegrationView.as_view(), name='clinic-integrations'),
-    path('clinic/integraciones/probar/', AgentTestMessageView.as_view(), name='clinic-agent-test'),
-    path('dashboard/appointments/<uuid:appointment_id>/gestionar/', DashboardAppointmentManageView.as_view(), name='dashboard-manage-appointment'),
-    path('dashboard/appointments/<uuid:appointment_id>/action/', DashboardAppointmentActionView.as_view(), name='dashboard-appointment-action'),
-    path('dashboard/appointments/<uuid:appointment_id>/quick/', AppointmentQuickDetailView.as_view(), name='appointment-quick-detail'),
+    path('cuenta/contrasena/', PasswordChangeSectionView.as_view(), name='password-change'),
+    path('clinica/', ClinicInfoView.as_view(), name='clinic-info'),
+    path('clinica/editar/', ClinicEditView.as_view(), name='clinic-edit'),
+    # El agente de WhatsApp tiene sección propia (`/agente/`). La ruta vieja
+    # redirige: puede estar en un marcador.
+    path(
+        'clinica/integraciones/',
+        RedirectView.as_view(pattern_name='agent_settings:test', permanent=False),
+        name='clinic-integrations',
+    ),
+    path('panel/citas/<uuid:appointment_id>/gestionar/', DashboardAppointmentManageView.as_view(), name='dashboard-manage-appointment'),
+    path('panel/citas/<uuid:appointment_id>/accion/', DashboardAppointmentActionView.as_view(), name='dashboard-appointment-action'),
+    path('panel/citas/<uuid:appointment_id>/resumen/', AppointmentQuickDetailView.as_view(), name='appointment-quick-detail'),
 ]

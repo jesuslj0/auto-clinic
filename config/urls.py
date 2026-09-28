@@ -9,6 +9,7 @@ from rest_framework.routers import DefaultRouter
 
 from agent.views import (
     AgentMemoryViewSet,
+    AgentProfileView,
     ChatMessageViewSet,
     ConversationSessionViewSet,
     PlatformWorkflowErrorView,
@@ -61,16 +62,18 @@ urlpatterns = [
 
     # Template views
     path('', include('core.urls')),
-    path('appointments/', include('appointments.urls')),
-    path('patients/', include('patients.urls')),
-    path('booking/', include('booking.urls')),
-    path('services/', include('services.urls')),
-    path('knowledge/', include('knowledge.urls')),
+    path('citas/', include('appointments.urls')),
+    path('profesionales/', include('appointments.professional_urls')),
+    path('pacientes/', include('patients.urls')),
+    path('reservar/', include('booking.urls')),
+    path('servicios/', include('services.urls')),
+    path('conocimiento/', include('knowledge.urls')),
     path('chats/', include('agent.urls')),
+    path('agente/', include('agent.settings_urls')),
     path('facturacion/', include('billing.urls')),
     # Capa clínica: NO es API. Solo el servido protegido de adjuntos, bajo
     # sesión y con AccessLog. Ver `clinical/README.md`.
-    path('clinical/', include('clinical.urls')),
+    path('clinico/', include('clinical.urls')),
 
     # REST API
     path(
@@ -89,6 +92,7 @@ urlpatterns = [
         PlatformWorkflowErrorView.as_view(),
         name='agent-platform-error',
     ),
+    path('api/agent/profile/', AgentProfileView.as_view(), name='agent-profile'),
     path('api/', include(router.urls)),
 
     # Token auth for n8n (POST with username + password → returns token)

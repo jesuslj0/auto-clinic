@@ -1,0 +1,231 @@
+{% extends 'agent/settings/_layout.html' %}
+
+{% block tab_heading %}Prueba tu agente{% endblock %}
+{% block tab_subheading %}Escríbele como lo haría un paciente y comprueba qué contesta antes de abrirlo al público.{% endblock %}
+
+{% block tab_content %}
+{{ test_messages|json_script:"test-messages" }}
+<div class="grid gap-6 [&>*]:min-w-0 lg:grid-cols-3 lg:items-start">
+
+    {# ── Chat de prueba: el protagonista ── #}
+    <section class="lg:col-span-2"
+             aria-label="Chat de prueba"
+             x-data="{
+                 messages: JSON.parse(document.getElementById('test-messages').textContent),
+                 input: '',
+                 {# Contador, no booleano: con el debounce de n8n puede haber varios #}
+                 {# mensajes en vuelo a la vez, que es justo lo que hay que poder probar. #}
+                 pending: 0,
+                 get loading() { return this.pending > 0; },
+                 init() { this.$nextTick(() => this.scroll()); },
+                 ahora() {
+                     return new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                 },
+                 async send(preset) {
+                     const text = (preset || this.input).trim();
+                     if (!text) return;
+                     this.messages.push({ role: 'user', text: text, time: this.ahora() });
+                     this.input = '';
+                     this.pending++;
+                     this.$nextTick(() => { this.scroll(); this.$refs.input.focus(); });
+                     try {
+                         const res = await fetch('{% url 'agent_settings:test-send' %}', {
+                             method: 'POST',
+                             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+                             body: JSON.stringify({ message: text }),
+                         });
+                         const data = await res.json();
+                         // Mensaje agrupado con los siguientes: contestará el último
+                         // de la ráfaga, así que aquí no hay burbuja que pintar.
+                         if (res.ok && data.debounced) return;
+                         this.messages.push(res.ok
+                             ? { role: 'agent', text: data.reply, time: this.ahora() }
+                             : { role: 'error', text: data.error || 'Error al contactar con el agente.', time: this.ahora() });
+                     } catch (e) {
+                         this.messages.push({ role: 'error', text: 'No se pudo enviar el mensaje.', time: this.ahora() });
+                     } finally {
+                         this.pending--;
+                         this.$nextTick(() => this.scroll());
+                     }
+                 },
+                 scroll() { const el = this.$refs.thread; if (el) el.scrollTop = el.scrollHeight; }
+             }">
+        <div class="flex h-[36rem] flex-col overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line lg:h-[calc(100vh-23rem)] lg:min-h-[30rem]">
+            {# Cabecera del chat: quién contesta y como quién escribes #}
+            <div class="flex items-center gap-3 border-b border-line px-5 py-4">
+                <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-gradient text-white shadow-sm">
+                    {% include 'agent/settings/_whatsapp_icon.html' with size='h-5 w-5' %}
+                </span>
+                <div class="min-w-0 flex-1">
+                    <p class="truncate text-sm font-semibold text-content">{{ profile.agent_name|default:clinic_obj.name }}</p>
+                    <p class="truncate text-xs text-content-subtle">
+                        <span x-show="!loading">Escribes como {% if clinic_obj.test_patient %}{{ clinic_obj.test_patient }}, el paciente de prueba{% else %}un contacto nuevo{% endif %}</span>
+                        <span x-show="loading" x-cloak class="font-medium text-brand-fg">escribiendo…</span>
+                    </p>
+                </div>
+                <span class="hidden flex-shrink-0 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-content-subtle ring-1 ring-line sm:inline">Simulacro</span>
+            </div>
+
+            {# Hilo de mensajes #}
+            <div x-ref="thread" class="flex-1 space-y-3 overflow-y-auto bg-brand-gradient-soft px-4 py-5 sm:px-6">
+                {# Estado vacío #}
+                <template x-if="messages.length === 0 && !loading">
+                    <div class="flex h-full flex-col items-center justify-center px-4 text-center">
+                        <span class="flex h-14 w-14 items-center justify-center rounded-2xl bg-surface text-brand-fg shadow-sm ring-1 ring-line">
+                            <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" /></svg>
+                        </span>
+                        <p class="mt-4 text-base font-semibold text-content">Ponte en la piel de un paciente</p>
+                        <p class="mt-1 max-w-sm text-sm text-content-subtle">
+                            Pregunta lo que te preguntarían por WhatsApp —una cita, los horarios, los precios— y comprueba qué contesta.
+                        </p>
+                    </div>
+                </template>
+
+                <template x-for="(m, i) in messages" :key="i">
+                    <div :class="m.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
+                        <div :class="{
+                                 'bg-brand-gradient text-white chat-bubble-out rounded-tr-sm': m.role === 'user',
+                                 'bg-surface text-content-muted ring-1 ring-line chat-bubble-in rounded-tl-sm': m.role === 'agent',
+                                 'bg-danger-soft text-danger ring-1 ring-danger-line chat-bubble-in chat-bubble-danger rounded-tl-sm': m.role === 'error'
+                             }"
+                             {% comment %}Solo la enviada fija el pico aquí: el degradado no se hereda,
+                             así que toma el tono del gradiente a la altura de la esquina —y es el mismo
+                             en claro y en oscuro—. Las recibidas lo sacan de sus clases, que usan
+                             tokens; un hexadecimal aquí las dejaría blancas también en oscuro.{% endcomment %}
+                             :style="m.role === 'user' ? '--bubble-tail: #b25aca' : ''"
+                             class="chat-bubble max-w-[85%] rounded-2xl px-3.5 py-2 text-sm shadow-sm sm:max-w-[70%]">
+                            <p class="whitespace-pre-line" x-text="m.text"></p>
+                            <p class="mt-1 text-right text-[11px]"
+                               :class="m.role === 'user' ? 'text-white/70' : 'text-content-faint'"
+                               x-text="m.time"></p>
+                        </div>
+                    </div>
+                </template>
+
+                {# Indicador de escritura #}
+                <template x-if="loading">
+                    <div class="flex justify-start">
+                        <div class="flex items-center gap-1 rounded-2xl bg-surface px-3.5 py-3 shadow-sm ring-1 ring-line">
+                            <span class="h-1.5 w-1.5 animate-bounce rounded-full bg-content-faint" style="animation-delay:0ms"></span>
+                            <span class="h-1.5 w-1.5 animate-bounce rounded-full bg-content-faint" style="animation-delay:150ms"></span>
+                            <span class="h-1.5 w-1.5 animate-bounce rounded-full bg-content-faint" style="animation-delay:300ms"></span>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            {# Sugerencias + barra de entrada #}
+            <div class="border-t border-line p-3">
+                <div class="-mx-1 mb-2.5 flex gap-2 overflow-x-auto px-1 pb-0.5">
+                    <template x-for="s in ['¡Hola!', '¿Qué servicios tenéis?', 'Quiero pedir cita', '¿Qué horario tenéis?', '¿Tengo alguna cita?']" :key="s">
+                        <button type="button" @click="send(s)"
+                                class="flex-shrink-0 rounded-full bg-surface px-3 py-1 text-xs font-medium text-content-muted ring-1 ring-line transition hover:text-brand-fg hover:ring-brand-line"
+                                x-text="s"></button>
+                    </template>
+                </div>
+                <div class="flex items-end gap-2">
+                    <label for="agent-test-input" class="sr-only">Mensaje para el agente</label>
+                    <textarea id="agent-test-input"
+                              x-ref="input"
+                              x-model="input"
+                              @keydown.enter.prevent="send()"
+                              rows="1"
+                              placeholder="Escribe lo que quieras…"
+                              class="max-h-24 min-h-[2.75rem] flex-1 resize-none rounded-xl border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500 transition"></textarea>
+                    <button type="button" @click="send()" :disabled="!input.trim()" aria-label="Enviar"
+                            class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-brand-gradient text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                        </svg>
+                    </button>
+                </div>
+                <p class="mt-2 px-1 text-xs text-content-faint">
+                    Es un simulacro: no se envía ningún WhatsApp real. La conversación se guarda aquí y no aparece en la bandeja de chats.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    {# ── Columna lateral: estado y personalidad ── #}
+    <aside class="space-y-6">
+
+        {# Personalidad actual #}
+        <div class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line">
+            <div class="flex items-center justify-between gap-3">
+                <h3 class="text-sm font-semibold text-content">Personalidad</h3>
+                <a href="{% url 'agent_settings:persona' %}" class="text-sm font-medium text-brand-fg hover:underline">Editar</a>
+            </div>
+            <dl class="mt-4 space-y-2.5 text-sm">
+                <div class="flex justify-between gap-3">
+                    <dt class="text-content-subtle">Nombre</dt>
+                    <dd class="truncate font-medium text-content">{{ profile.agent_name|default:"Sin nombre propio" }}</dd>
+                </div>
+                <div class="flex justify-between gap-3">
+                    <dt class="text-content-subtle">Tono</dt>
+                    <dd class="font-medium text-content">{{ profile.get_tone_display }}</dd>
+                </div>
+                <div class="flex justify-between gap-3">
+                    <dt class="text-content-subtle">Trato</dt>
+                    <dd class="font-medium text-content">{{ profile.get_address_form_display }}</dd>
+                </div>
+                <div class="flex justify-between gap-3">
+                    <dt class="text-content-subtle">Emojis</dt>
+                    <dd class="font-medium text-content">{{ profile.get_emoji_usage_display }}</dd>
+                </div>
+            </dl>
+            {% if not profile.pk %}
+            <p class="mt-4 rounded-xl bg-brand-soft px-3.5 py-2.5 text-xs text-brand-fg ring-1 ring-brand-line">
+                Aún usa la personalidad por defecto. Dale un nombre y una presentación para que suene a tu clínica.
+            </p>
+            {% endif %}
+        </div>
+
+        {# Estado de la conexión #}
+        <div class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line">
+            <h3 class="text-sm font-semibold text-content">Estado</h3>
+            <ul class="mt-4 space-y-3 text-sm">
+                <li class="flex items-center justify-between gap-3">
+                    <span class="flex items-center gap-2.5 text-content-muted">
+                        <span class="h-2 w-2 rounded-full {% if has_credentials %}bg-success{% else %}bg-warning{% endif %}"></span>
+                        Credenciales de Meta
+                    </span>
+                    {% if has_credentials %}
+                    <span class="text-xs font-medium text-success">Listas</span>
+                    {% else %}
+                    <a href="{% url 'agent_settings:meta' %}" class="text-xs font-medium text-brand-fg hover:underline">Configurar</a>
+                    {% endif %}
+                </li>
+                <li class="flex items-center justify-between gap-3">
+                    <span class="flex items-center gap-2.5 text-content-muted">
+                        <span class="h-2 w-2 rounded-full {% if clinic_obj.whatsapp_verify_token %}bg-success{% else %}bg-warning{% endif %}"></span>
+                        Webhook
+                    </span>
+                    {% if clinic_obj.whatsapp_verify_token %}
+                    <span class="text-xs font-medium text-success">Listo</span>
+                    {% else %}
+                    <a href="{% url 'agent_settings:webhook' %}" class="text-xs font-medium text-brand-fg hover:underline">Configurar</a>
+                    {% endif %}
+                </li>
+                <li class="flex items-center justify-between gap-3">
+                    <span class="flex items-center gap-2.5 text-content-muted">
+                        <span class="h-2 w-2 rounded-full {% if clinic_obj.agent_enabled %}bg-success{% else %}bg-content-faint{% endif %}"></span>
+                        Respuestas automáticas
+                    </span>
+                    <form method="post" action="{% url 'agent:agent-switch' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <button type="submit" class="text-xs font-medium text-brand-fg hover:underline">
+                            {% if clinic_obj.agent_enabled %}Pausar{% else %}Activar{% endif %}
+                        </button>
+                    </form>
+                </li>
+            </ul>
+            {% if not is_connected %}
+            <p class="mt-4 text-xs text-content-subtle">
+                El chat de prueba funciona aunque WhatsApp no esté conectado: ajusta la personalidad y prueba antes de dar el número a tus pacientes.
+            </p>
+            {% endif %}
+        </div>
+    </aside>
+</div>
+{% endblock %}

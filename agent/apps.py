@@ -9,7 +9,7 @@ class AgentConfig(AppConfig):
     def ready(self):
         from audit import registry
 
-        from agent.models import ChatAttachment, ChatMessage
+        from agent.models import AgentProfile, ChatAttachment, ChatMessage
 
         # Con conversaciones reales, el hilo contiene texto de salud de
         # pacientes: se audita como dato clínico. `body` y `raw` son sensibles,
@@ -29,3 +29,6 @@ class AgentConfig(AppConfig):
             ChatAttachment,
             patient_resolver=lambda attachment: attachment.message.session.patient,
         )
+        # No es dato clínico, pero cambia lo que el bot dice a los pacientes:
+        # «¿quién cambió el tono el martes?» tiene que tener respuesta.
+        registry.register(AgentProfile)
