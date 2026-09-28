@@ -10,9 +10,15 @@ from django.urls import reverse
 
 @pytest.mark.django_db
 class TestPanelDoesNotExposeTheKey:
-    def test_key_is_not_rendered_in_the_panel(self, client, admin_user, clinic_a):
+    @pytest.mark.parametrize('url_name', [
+        'agent_settings:test',
+        'agent_settings:persona',
+        'agent_settings:meta',
+        'agent_settings:webhook',
+    ])
+    def test_key_is_not_rendered_in_the_panel(self, client, admin_user, clinic_a, url_name):
         client.force_login(admin_user)
-        response = client.get(reverse('core:clinic-integrations'))
+        response = client.get(reverse(url_name))
         assert str(clinic_a.agent_api_key) not in response.content.decode()
 
     def test_legacy_rotate_action_no_longer_rotates(self, client, admin_user, clinic_a):
@@ -20,7 +26,7 @@ class TestPanelDoesNotExposeTheKey:
         client.force_login(admin_user)
         before = clinic_a.agent_api_key
 
-        client.post(reverse('core:clinic-integrations'), data={'action': 'rotate_api_key'})
+        client.post(reverse('agent_settings:meta'), data={'action': 'rotate_api_key'})
 
         clinic_a.refresh_from_db()
         assert clinic_a.agent_api_key == before

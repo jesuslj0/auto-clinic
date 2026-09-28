@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from agent.models import AgentMemory, ChatMessage, ConversationSession, WorkflowError
+from agent.models import AgentMemory, AgentProfile, ChatMessage, ConversationSession, WorkflowError
 
 
 @admin.register(AgentMemory)
@@ -34,3 +34,9 @@ class ChatMessageAdmin(admin.ModelAdmin):
     search_fields = ('body', 'wa_message_id', 'session__phone')
     readonly_fields = ('created_at',)
     date_hierarchy = 'created_at'
+
+
+@admin.register(AgentProfile)
+class AgentProfileAdmin(admin.ModelAdmin):
+    list_display = ('clinic', 'agent_name', 'tone', 'address_form', 'updated_at')
+    readonly_fields = ('updated_at', 'updated_by')

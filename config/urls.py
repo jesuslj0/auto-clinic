@@ -9,6 +9,7 @@ from rest_framework.routers import DefaultRouter
 
 from agent.views import (
     AgentMemoryViewSet,
+    AgentProfileView,
     ChatMessageViewSet,
     ConversationSessionViewSet,
     PlatformWorkflowErrorView,
@@ -68,6 +69,7 @@ urlpatterns = [
     path('servicios/', include('services.urls')),
     path('conocimiento/', include('knowledge.urls')),
     path('chats/', include('agent.urls')),
+    path('agente/', include('agent.settings_urls')),
     path('facturacion/', include('billing.urls')),
     # Capa clínica: NO es API. Solo el servido protegido de adjuntos, bajo
     # sesión y con AccessLog. Ver `clinical/README.md`.
@@ -90,6 +92,7 @@ urlpatterns = [
         PlatformWorkflowErrorView.as_view(),
         name='agent-platform-error',
     ),
+    path('api/agent/profile/', AgentProfileView.as_view(), name='agent-profile'),
     path('api/', include(router.urls)),
 
     # Token auth for n8n (POST with username + password → returns token)

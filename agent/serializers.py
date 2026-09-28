@@ -4,7 +4,8 @@ from datetime import timezone as dt_timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import serializers
 
-from agent.models import AgentMemory, ChatMessage, ConversationSession, WorkflowError
+from agent.models import AgentMemory, AgentProfile, ChatMessage, ConversationSession, WorkflowError
+from agent.persona import build_persona_prompt
 from agent.services import DELIVERY_STATUSES, record_message
 from core.models import Clinic
 from core.serializers import ClinicScopedSerializerMixin
@@ -183,3 +184,33 @@ class DeliveryStatusSerializer(serializers.Serializer):
         if parsed is None:
             raise serializers.ValidationError('Usa segundos Unix o una fecha ISO 8601.')
         return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt_timezone.utc)
+
+
+class AgentProfileSerializer(serializers.ModelSerializer):
+    """Lo que n8n necesita para que el agente hable como la clínica quiere.
+
+    `prompt` es el bloque ya redactado (`agent.persona`): el workflow solo lo
+    pega. Los campos sueltos van también por si algún nodo los necesita.
+    """
+
+    clinic_id = serializers.CharField(source='clinic.clinic_id', read_only=True)
+    clinic_name = serializers.CharField(source='clinic.name', read_only=True)
+    prompt = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AgentProfile
+        fields = (
+            'clinic_id',
+            'clinic_name',
+            'agent_name',
+            'tone',
+            'address_form',
+            'emoji_usage',
+            'welcome_message',
+            'style_notes',
+            'prompt',
+        )
+        read_only_fields = fields
+
+    def get_prompt(self, profile):
+        return build_persona_prompt(profile)

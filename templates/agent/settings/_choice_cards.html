@@ -1,0 +1,19 @@
+{# Un campo de opciones cerradas (RadioSelect) pintado como tarjetas. `field`: el BoundField. #}
+<fieldset>
+    <legend class="mb-2 block text-sm font-medium text-content-muted">{{ field.label|capfirst }}</legend>
+    <div class="grid gap-2 sm:grid-cols-{{ columns|default:'3' }}">
+        {% for choice in field %}
+        <label for="{{ choice.id_for_label }}"
+               class="relative flex cursor-pointer items-center gap-3 rounded-xl border border-line-strong bg-surface px-4 py-3 text-sm text-content-muted transition hover:border-brand-line has-[:checked]:border-brand-line has-[:checked]:bg-brand-soft has-[:checked]:text-brand-fg has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500">
+            <input type="radio"
+                   name="{{ choice.data.name }}"
+                   id="{{ choice.id_for_label }}"
+                   value="{{ choice.data.value }}"
+                   {% if choice.data.selected %}checked{% endif %}
+                   class="h-4 w-4 border-line-strong text-brand-600 focus:ring-0">
+            <span class="font-medium">{{ choice.choice_label }}</span>
+        </label>
+        {% endfor %}
+    </div>
+    {% if field.errors %}<p class="mt-1.5 text-xs text-danger">{{ field.errors|join:", " }}</p>{% endif %}
+</fieldset>

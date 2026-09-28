@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% comment %}
+Marco común de la sección «Agente WhatsApp»: cabecera con el estado y la
+navegación entre apartados. Cada apartado es una URL propia (`agent_settings:*`)
+con su formulario; aquí solo se pinta, cada vista marca el suyo con `agent_tab`.
+{% endcomment %}
+
+{% block title %}Agente de WhatsApp · {{ clinic_obj.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Agente de WhatsApp{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-6xl space-y-6">
+
+    {# ── Cabecera + estado ── #}
+    <div class="flex flex-col gap-4 rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div class="flex items-start gap-4">
+            <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-success-soft text-success ring-1 ring-success-line">
+                {% include 'agent/settings/_whatsapp_icon.html' with size='h-6 w-6' %}
+            </span>
+            <div>
+                <h2 class="text-lg font-semibold text-content">{% block tab_heading %}Agente de WhatsApp{% endblock %}</h2>
+                <p class="mt-0.5 text-sm text-content-subtle">{% block tab_subheading %}{% endblock %}</p>
+            </div>
+        </div>
+        <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+            {% if clinic_obj.agent_enabled %}
+            <span class="inline-flex items-center gap-2 rounded-full bg-success-soft px-3 py-1.5 text-sm font-semibold text-success ring-1 ring-success-line">
+                <span class="h-2 w-2 rounded-full bg-success"></span>Agente activo
+            </span>
+            {% else %}
+            <span class="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-sm font-semibold text-content-muted ring-1 ring-line">
+                <span class="h-2 w-2 rounded-full bg-content-faint"></span>Agente en pausa
+            </span>
+            {% endif %}
+            {% if is_connected %}
+            <span class="inline-flex items-center gap-2 rounded-full bg-success-soft px-3 py-1.5 text-sm font-semibold text-success ring-1 ring-success-line">
+                <span class="h-2 w-2 rounded-full bg-success"></span>WhatsApp conectado
+            </span>
+            {% else %}
+            <span class="inline-flex items-center gap-2 rounded-full bg-warning-soft px-3 py-1.5 text-sm font-semibold text-warning ring-1 ring-warning-line">
+                <span class="h-2 w-2 rounded-full bg-warning"></span>WhatsApp sin conectar
+            </span>
+            {% endif %}
+        </div>
+    </div>
+
+    {# ── Apartados ── #}
+    {# Enlaces normales: cada apartado es una página con su propio formulario. #}
+    <nav aria-label="Apartados del agente">
+        <div class="grid grid-cols-4 gap-1 rounded-2xl bg-muted p-1 ring-1 ring-line sm:inline-flex">
+            {% url 'agent_settings:test' as url_test %}
+            {% url 'agent_settings:persona' as url_persona %}
+            {% url 'agent_settings:meta' as url_meta %}
+            {% url 'agent_settings:webhook' as url_webhook %}
+            {% include 'agent/settings/_tab_link.html' with url=url_test key='test' label='Probar' %}
+            {% include 'agent/settings/_tab_link.html' with url=url_persona key='persona' label='Personalidad' %}
+            {% include 'agent/settings/_tab_link.html' with url=url_meta key='meta' label='Meta' done=has_credentials %}
+            {% include 'agent/settings/_tab_link.html' with url=url_webhook key='webhook' label='Webhook' done=clinic_obj.whatsapp_verify_token %}
+        </div>
+    </nav>
+
+    {% block tab_content %}{% endblock %}
+</div>
+{% endblock %}

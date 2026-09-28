@@ -47,7 +47,7 @@ python manage.py runserver    # Uses config.settings.dev by default
 | `notifications` | Celery beat tasks for reminder dispatch |
 | `billing` | `Subscription` (planes de la clínica) y `PatientInvoice`: factura de paciente que agrupa `PerformedProcedure`. Borrador editable; al emitir copia sus líneas (`lines`), congela `total`, toma número de la serie de su clínica (`InvoiceSequence`) y no vuelve a mirar los procedimientos. No se corrige: se anula (`void()`) y se emite otra |
 | `booking` | Template-only public booking flow (no models) |
-| `agent` | WhatsApp bot state: `AgentMemory` (contexto del LLM), `ConversationSession` (hilo), `ChatMessage` (historial append-only, auditado), `ChatAttachment` (foto/nota de voz del paciente, irremplazable), `WorkflowError` |
+| `agent` | WhatsApp bot state: `AgentMemory` (contexto del LLM), `ConversationSession` (hilo), `ChatMessage` (historial append-only, auditado), `ChatAttachment` (foto/nota de voz del paciente, irremplazable), `WorkflowError`, `AgentProfile` (personalidad del agente por clínica) |
 | `knowledge` | Clinic knowledge base: `ClinicKnowledgeBase`, `ClinicInfoQuery`, `ClinicInfoCache` |
 | `audit` | Append-only audit trail: `ChangeLog` (writes, via signals) and `AccessLog` (reads, instrumented per view) |
 | `clinical` | Clinical core: `MedicalHistory`, `Episode`, `Visit`, `ClinicalNote` (SOAP), `Addendum`. Immutable after signing; soft-delete only. Also versioned anamnesis: `QuestionnaireTemplate`, `TemplateVersion`, `Question`, `QuestionnaireResponse` (immutable literal snapshot) , `ClinicalAlert` (per-patient, deactivated never deleted), `Lesion` (foot-map, coded zone + normalized coords) and its follow-up: `LesionObservation` (measurements per visit) + `LesionAttachment` (photo in a private R2 bucket, signed URLs only). `PerformedProcedure` links a visit to the service catalogue with the price frozen. Versioned informed consent: `ConsentTemplate`, `ConsentVersion`, `SignedConsent` (literal `text_copy` + signature in the private bucket) |
@@ -208,16 +208,32 @@ Panel map (namespace in brackets):
 
 | Prefix | Routes |
 |---|---|
-| `/` (`core`) | `buscar/`, `login/`, `logout/`, `cuenta/` (`perfil/`, `horario/`, `contrasena/`), `clinica/` (`editar/`, `integraciones/`, `integraciones/probar/`), `panel/citas/<uuid>/` (`gestionar/`, `accion/`, `resumen/`) |
+| `/` (`core`) | `buscar/`, `login/`, `logout/`, `cuenta/` (`perfil/`, `horario/`, `contrasena/`), `clinica/` (`editar/`, `integraciones/` → redirect to `/agente/`), `panel/citas/<uuid>/` (`gestionar/`, `accion/`, `resumen/`) |
 | `/citas/` (`appointments`) | `crear/`, `listado/`, `<uuid>/procedimiento/`, `mi-perfil/` (redirect) |
 | `/profesionales/` (`professionals`) | `crear/`, `<pk>/editar/` — top-level, views live in `appointments` (`appointments/professional_urls.py`) |
 | `/pacientes/` (`patients`) | `crear/`, `<id>/` + tabs `anamnesis/`, `alertas/`, `lesiones/`, `consentimientos/`, `procedimientos/`, `editar/` |
 | `/servicios/` (`services`) | `crear/`, `<pk>/editar/`, `<pk>/eliminar/` |
 | `/conocimiento/` (`knowledge`) | `crear/`, `<uuid>/editar/`, `<uuid>/eliminar/` |
 | `/chats/` (`agent`) | `agente/`, `lista/`, `adjuntos/<uuid>/`, `<uuid>/` (`mensajes/`, `enviar/`, `modo/`) |
+| `/agente/` (`agent_settings`, admins only) | test chat at the root, `probar/enviar/`, `personalidad/`, `meta/`, `webhook/` — views in `agent/settings_views.py` |
 | `/facturacion/` (`billing`) | `nueva/`, `pendientes/`, `<pk>/` (`emitir/`, `anular/`, `cobrar/`, `procedimientos/`, `eliminar/`) |
 | `/clinico/` (`clinical`) | `adjuntos/<uuid>/`, `consentimientos/<uuid>/firma/` |
 | `/reservar/` (`booking`, public) | `fecha/`, `confirmar/`, `confirmada/` |
+
+### Agent personality (`agent.AgentProfile`)
+
+One per clinic (`AgentProfile.for_clinic()` returns an unsaved default when
+missing, so a clinic without one keeps the old tone). It only changes *style*:
+name, tone, tú/usted, emojis (all coded choices), a welcome text for new
+contacts and capped free `style_notes`. The prompt block is written in Django
+(`agent/persona.py`, pure) and served ready-made at `GET /api/agent/profile/`
+(clinic `Api-Key` only; the clinic comes from the key). n8n
+(`WA-Inbound-Orchestrator con buffer`) calls it on every execution — both the
+WhatsApp and the panel-test path — in the `Cargar Perfil Agente` node, and pastes
+`persona_prompt` at the top of the system message; on failure it falls back to
+the default tone. The fixed rules come *after* the block and it says it cannot
+override them. Free text is flattened to one quoted line, so it cannot open a
+new prompt section. Audited via `audit.registry`.
 
 ### REST API
 

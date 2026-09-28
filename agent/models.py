@@ -394,3 +394,93 @@ class ChatAttachment(models.Model):
 
     def delete(self, *args, **kwargs):
         raise ChatAttachmentImmutable('Los adjuntos de chat no se borran uno a uno.')
+
+
+class AgentProfile(models.Model):
+    """Cómo se presenta y cómo habla el agente de WhatsApp de una clínica.
+
+    Solo cambia el estilo: las reglas del agente (herramientas, no inventar
+    datos, confirmar antes de citar) viven fijas en el prompt de n8n y este
+    perfil nunca las sustituye. Por eso casi todo son opciones cerradas; el
+    único texto libre de estilo es `style_notes`, y va con tope de longitud.
+
+    n8n lo lee en cada ejecución (`GET /api/agent/profile/`), así que un
+    cambio guardado se nota en el siguiente mensaje. Una clínica sin perfil
+    recibe los valores por defecto, que reproducen el tono de siempre.
+    """
+
+    class Tone(models.TextChoices):
+        CLOSE = 'cercano', 'Cercano'
+        PROFESSIONAL = 'profesional', 'Profesional'
+        FORMAL = 'formal', 'Formal'
+
+    class AddressForm(models.TextChoices):
+        TU = 'tu', 'De tú'
+        USTED = 'usted', 'De usted'
+
+    class EmojiUsage(models.TextChoices):
+        NONE = 'ninguno', 'Sin emojis'
+        MODERATE = 'moderado', 'Con moderación'
+
+    WELCOME_MAX_LENGTH = 500
+    STYLE_NOTES_MAX_LENGTH = 800
+
+    clinic = models.OneToOneField(
+        Clinic,
+        on_delete=models.CASCADE,
+        related_name='agent_profile',
+        db_column='clinic_id',
+    )
+    agent_name = models.CharField(
+        'nombre del agente',
+        max_length=60,
+        blank=True,
+        help_text='Cómo se presenta ante los pacientes. Vacío: sin nombre propio.',
+    )
+    tone = models.CharField(
+        'tono', max_length=20, choices=Tone.choices, default=Tone.PROFESSIONAL
+    )
+    address_form = models.CharField(
+        'trato', max_length=10, choices=AddressForm.choices, default=AddressForm.TU
+    )
+    emoji_usage = models.CharField(
+        'emojis', max_length=10, choices=EmojiUsage.choices, default=EmojiUsage.NONE
+    )
+    welcome_message = models.TextField(
+        'presentación para contactos nuevos',
+        max_length=WELCOME_MAX_LENGTH,
+        blank=True,
+        help_text='Lo que el agente cuenta en su primer mensaje a alguien que no es '
+                  'paciente todavía. Lo adapta a lo que le pregunten, no lo copia literal.',
+    )
+    style_notes = models.TextField(
+        'indicaciones de estilo',
+        max_length=STYLE_NOTES_MAX_LENGTH,
+        blank=True,
+        help_text='Expresiones que usar o evitar, cómo despedirse… Solo estilo: '
+                  'no cambia lo que el agente puede hacer.',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        'core.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+
+    class Meta:
+        db_table = 'agent_profile'
+        verbose_name = 'perfil del agente'
+        verbose_name_plural = 'perfiles del agente'
+
+    def __str__(self):
+        return f'Perfil del agente de {self.clinic_id}'
+
+    @classmethod
+    def for_clinic(cls, clinic) -> 'AgentProfile':
+        """Perfil de la clínica; sin guardar y con los valores por defecto si no tiene."""
+        try:
+            return clinic.agent_profile
+        except cls.DoesNotExist:
+            return cls(clinic=clinic)

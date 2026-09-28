@@ -142,6 +142,12 @@ El recurso `/api/professionals/` devuelve:
 | `ConversationSessionViewSet` | `/api/agent/sessions/` | `IsStaffOrAdmin` \| `IsAgentClinicKey` | phone | clinic, phone | BulkCreate + BulkUpdate |
 | `ChatMessageViewSet` | `/api/agent/messages/` | `IsStaffOrAdmin` \| `IsAgentClinicKey` | body | session, direction, sender, message_type | Append-only (GET/POST) + BulkCreate |
 
+#### Personalidad del agente
+
+| Método | URL | Permiso | Descripción |
+|--------|-----|---------|-------------|
+| GET | `/api/agent/profile/` | `IsAgentClinicKey` | Nombre, tono, trato, emojis, presentación y `style_notes` de la clínica de la clave, más `prompt`: el bloque ya redactado que n8n pega al principio del system message. Sin perfil guardado, devuelve los valores por defecto. |
+
 #### Acción personalizada en ConversationSessionViewSet
 
 | Método | URL | Descripción |

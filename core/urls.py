@@ -1,10 +1,10 @@
 from django.urls import path
+from django.views.generic import RedirectView
 
 from core.views import (
     AccountProfileView,
     AccountScheduleView,
     AccountView,
-    AgentTestMessageView,
     AppointmentQuickDetailView,
     ClinicEditView,
     ClinicInfoView,
@@ -15,7 +15,6 @@ from core.views import (
     DashboardView,
     PasswordChangeSectionView,
     SearchView,
-    WhatsAppIntegrationView,
 )
 
 app_name = 'core'
@@ -35,8 +34,13 @@ urlpatterns = [
     path('cuenta/contrasena/', PasswordChangeSectionView.as_view(), name='password-change'),
     path('clinica/', ClinicInfoView.as_view(), name='clinic-info'),
     path('clinica/editar/', ClinicEditView.as_view(), name='clinic-edit'),
-    path('clinica/integraciones/', WhatsAppIntegrationView.as_view(), name='clinic-integrations'),
-    path('clinica/integraciones/probar/', AgentTestMessageView.as_view(), name='clinic-agent-test'),
+    # El agente de WhatsApp tiene sección propia (`/agente/`). La ruta vieja
+    # redirige: puede estar en un marcador.
+    path(
+        'clinica/integraciones/',
+        RedirectView.as_view(pattern_name='agent_settings:test', permanent=False),
+        name='clinic-integrations',
+    ),
     path('panel/citas/<uuid:appointment_id>/gestionar/', DashboardAppointmentManageView.as_view(), name='dashboard-manage-appointment'),
     path('panel/citas/<uuid:appointment_id>/accion/', DashboardAppointmentActionView.as_view(), name='dashboard-appointment-action'),
     path('panel/citas/<uuid:appointment_id>/resumen/', AppointmentQuickDetailView.as_view(), name='appointment-quick-detail'),
