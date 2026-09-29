@@ -200,3 +200,119 @@ class TestTestThreadIsSeparateFromTheInbox:
         client.force_login(admin_user)
         response = client.get(reverse('agent_settings:test'))
         assert response.context['test_messages'] == []
+
+
+# ---------------------------------------------------------------------------
+# Fotos desde el chat de prueba
+# ---------------------------------------------------------------------------
+
+def _jpeg_with_gps():
+    from io import BytesIO
+
+    from PIL import Image
+
+    exif = Image.Exif()
+    exif.get_ifd(0x8825)[1] = 'N'
+    buffer = BytesIO()
+    Image.new('RGB', (40, 20), (200, 60, 60)).save(buffer, format='JPEG', exif=exif)
+    return buffer.getvalue()
+
+
+def _send_photo(client, content=None, message=''):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    upload = SimpleUploadedFile('herida.jpg', content or _jpeg_with_gps(), content_type='image/jpeg')
+    return client.post(reverse('agent_settings:test-send'), {'file': upload, 'message': message})
+
+
+@contextmanager
+def _n8n_captures(payload='{"reply": "La clínica la revisará."}'):
+    """Como `_n8n_replies`, pero guarda lo que Django manda a n8n."""
+    sent = []
+
+    class _Response:
+        def read(self):
+            return payload.encode('utf-8')
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def _urlopen(req, timeout=None):
+        sent.append(json.loads(req.data))
+        return _Response()
+
+    with patch('urllib.request.urlopen', side_effect=_urlopen):
+        yield sent
+
+
+@pytest.mark.django_db
+class TestAgentTestPhoto:
+    def test_photo_is_recorded_as_an_image_message_with_attachment(self, client, admin_user):
+        client.force_login(admin_user)
+
+        with _n8n_captures():
+            response = _send_photo(client, message='Me duele aquí')
+
+        assert response.status_code == 200
+        inbound = ChatMessage.objects.get(direction=ChatMessage.Direction.INBOUND)
+        assert inbound.message_type == ChatMessage.MessageType.IMAGE
+        assert inbound.body == 'Me duele aquí'
+        assert inbound.media is not None
+        assert inbound.media.mime_type == 'image/jpeg'
+
+    def test_n8n_is_told_about_the_photo_but_never_gets_it(self, client, admin_user):
+        client.force_login(admin_user)
+
+        with _n8n_captures() as sent:
+            _send_photo(client, message='Me duele aquí')
+
+        assert sent == [{
+            'clinic_id': admin_user.clinic.clinic_id,
+            'phone': sent[0]['phone'],
+            'message': 'Me duele aquí',
+            'message_type': 'image',
+        }]
+
+    def test_text_messages_still_go_as_text(self, client, admin_user):
+        client.force_login(admin_user)
+
+        with _n8n_captures() as sent:
+            _send(client)
+
+        assert sent[0]['message_type'] == 'text'
+
+    def test_photo_without_caption_uses_the_marker(self, client, admin_user):
+        client.force_login(admin_user)
+
+        with _n8n_captures():
+            _send_photo(client)
+
+        inbound = ChatMessage.objects.get(direction=ChatMessage.Direction.INBOUND)
+        assert inbound.body == '[image]'
+        assert inbound.display_body == ''
+
+    def test_invalid_file_is_rejected_and_leaves_nothing(self, client, admin_user):
+        client.force_login(admin_user)
+
+        with _n8n_captures() as sent:
+            response = _send_photo(client, content=b'esto no es una imagen')
+
+        assert response.status_code == 400
+        assert 'error' in response.json()
+        assert not ChatMessage.objects.exists()
+        assert sent == []
+
+    def test_history_links_the_photo_through_the_protected_view(self, client, admin_user):
+        client.force_login(admin_user)
+        with _n8n_captures():
+            _send_photo(client)
+
+        history = client.get(reverse('agent_settings:test')).context['test_messages']
+
+        inbound = ChatMessage.objects.get(direction=ChatMessage.Direction.INBOUND)
+        assert history[0]['image_url'] == reverse('agent:chat-media', args=[inbound.pk])
+        assert history[0]['text'] == ''
+        assert history[1]['image_url'] == ''

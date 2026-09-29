@@ -215,7 +215,7 @@ Panel map (namespace in brackets):
 | `/servicios/` (`services`) | `crear/`, `<pk>/editar/`, `<pk>/eliminar/` |
 | `/conocimiento/` (`knowledge`) | `crear/`, `<uuid>/editar/`, `<uuid>/eliminar/` |
 | `/chats/` (`agent`) | `agente/`, `lista/`, `adjuntos/<uuid>/`, `<uuid>/` (`mensajes/`, `enviar/`, `modo/`) |
-| `/agente/` (`agent_settings`, admins only) | test chat at the root, `probar/enviar/`, `personalidad/`, `meta/`, `webhook/` — views in `agent/settings_views.py` |
+| `/agente/` (`agent_settings`, admins only) | test chat at the root («Chat»), `probar/enviar/`, `personalidad/`, `configuracion/` (Meta credentials + webhook, two forms told apart by a hidden `form` field) — views in `agent/settings_views.py` |
 | `/facturacion/` (`billing`) | `nueva/`, `pendientes/`, `<pk>/` (`emitir/`, `anular/`, `cobrar/`, `procedimientos/`, `eliminar/`) |
 | `/clinico/` (`clinical`) | `adjuntos/<uuid>/`, `consentimientos/<uuid>/firma/` |
 | `/reservar/` (`booking`, public) | `fecha/`, `confirmar/`, `confirmada/` |

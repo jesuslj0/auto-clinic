@@ -1,0 +1,187 @@
+{% extends 'agent/settings/_layout.html' %}
+
+{% block tab_heading %}Configuración de WhatsApp{% endblock %}
+{% block tab_subheading %}Conecta el número de tu clínica con la WhatsApp Cloud API de Meta. Se hace una vez: primero las credenciales, después el webhook.{% endblock %}
+
+{% block tab_content %}
+<div class="space-y-6" x-data="{ copied: '' }">
+
+    {# ── 1. Credenciales de Meta ── #}
+    <section aria-labelledby="config-meta" class="grid gap-6 [&>*]:min-w-0 lg:grid-cols-5 lg:items-start">
+        <div class="space-y-3 lg:col-span-3">
+            <h3 id="config-meta" class="flex items-center gap-2 text-sm font-semibold text-content">
+                <span class="flex h-6 w-6 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-fg">1</span>
+                Credenciales de Meta
+                {% if has_credentials %}<span class="rounded-full bg-success-soft px-2 py-0.5 text-xs font-semibold text-success">Listas</span>{% endif %}
+            </h3>
+            <form method="post"
+                  x-data="{
+                      showToken: {{ has_token|yesno:'false,true' }},
+                      // Guardar solo se habilita cuando hay algo que guardar. Con errores
+                      // arranca en true: son cambios ya escritos que hay que poder reenviar.
+                      dirty: {{ meta_form.errors|yesno:'true,false' }}
+                  }"
+                  @input="dirty = true"
+                  @change="dirty = true"
+                  class="flex flex-col gap-5 rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+                {% csrf_token %}
+                <input type="hidden" name="form" value="meta">
+
+                {% if meta_form.non_field_errors %}
+                <div class="rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line">
+                    {% for error in meta_form.non_field_errors %}<p class="text-sm text-danger">{{ error }}</p>{% endfor %}
+                </div>
+                {% endif %}
+
+                {# Phone Number ID #}
+                <div>
+                    <label for="{{ meta_form.whatsapp_phone_number_id.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ meta_form.whatsapp_phone_number_id.label }}</label>
+                    <input type="text"
+                           name="{{ meta_form.whatsapp_phone_number_id.html_name }}"
+                           id="{{ meta_form.whatsapp_phone_number_id.id_for_label }}"
+                           value="{{ meta_form.whatsapp_phone_number_id.value|default:'' }}"
+                           placeholder="Ej. 123456789012345"
+                           class="block w-full rounded-xl border {% if meta_form.whatsapp_phone_number_id.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                    <p class="mt-1.5 text-xs text-content-faint">{{ meta_form.whatsapp_phone_number_id.help_text }}</p>
+                    {% if meta_form.whatsapp_phone_number_id.errors %}<p class="mt-1 text-xs text-danger">{{ meta_form.whatsapp_phone_number_id.errors|join:", " }}</p>{% endif %}
+                </div>
+
+                {# Token permanente #}
+                <div>
+                    <div class="mb-1.5 flex items-center justify-between">
+                        <label for="{{ meta_form.whatsapp_token.id_for_label }}" class="block text-sm font-medium text-content-muted">{{ meta_form.whatsapp_token.label }}</label>
+                        {% if has_token %}
+                        <span class="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-xs font-semibold text-success">
+                            <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                            Configurado
+                        </span>
+                        {% endif %}
+                    </div>
+                    <div class="relative">
+                        <input :type="showToken ? 'text' : 'password'"
+                               type="password"
+                               name="{{ meta_form.whatsapp_token.html_name }}"
+                               id="{{ meta_form.whatsapp_token.id_for_label }}"
+                               placeholder="{% if has_token %}•••••••••••••  (déjalo en blanco para conservarlo){% else %}EAAG...{% endif %}"
+                               autocomplete="off"
+                               class="block w-full rounded-xl border {% if meta_form.whatsapp_token.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 pr-11 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                        <button type="button" @click="showToken = !showToken" class="absolute inset-y-0 right-0 flex items-center px-3 text-content-faint hover:text-content-muted" :aria-label="showToken ? 'Ocultar' : 'Mostrar'">
+                            <svg x-show="!showToken" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                            <svg x-show="showToken" x-cloak class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.243 4.243L9.88 9.88" /></svg>
+                        </button>
+                    </div>
+                    <p class="mt-1.5 text-xs text-content-faint">{{ meta_form.whatsapp_token.help_text }}</p>
+                    {% if meta_form.whatsapp_token.errors %}<p class="mt-1 text-xs text-danger">{{ meta_form.whatsapp_token.errors|join:", " }}</p>{% endif %}
+                </div>
+
+                <div class="flex items-center justify-end gap-3 border-t border-line pt-5">
+                    <p x-show="dirty" x-cloak class="text-xs font-medium text-warning">Cambios sin guardar</p>
+                    <button type="submit"
+                            :disabled="!dirty"
+                            {% if not meta_form.errors %}disabled{% endif %}
+                            class="btn-primary disabled:cursor-not-allowed disabled:opacity-40">
+                        Guardar credenciales
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <aside class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line lg:col-span-2">
+            <h4 class="text-sm font-semibold text-content">Dónde encontrarlas</h4>
+            <ol class="mt-4 space-y-3 text-sm text-content-muted">
+                <li class="flex gap-3"><span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-fg">1</span><span>Entra en <span class="font-medium text-content">Meta for Developers</span> y abre la app de tu clínica.</span></li>
+                <li class="flex gap-3"><span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-fg">2</span><span>Ve a <span class="font-medium text-content">WhatsApp → API Setup</span> y copia el <span class="font-medium text-content">Phone Number ID</span>.</span></li>
+                <li class="flex gap-3"><span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-fg">3</span><span>Genera un token <span class="font-medium text-content">permanente</span> desde un usuario del sistema; el temporal caduca en 24 horas.</span></li>
+            </ol>
+        </aside>
+    </section>
+
+    {# ── 2. Webhook ── #}
+    <section aria-labelledby="config-webhook" class="grid gap-6 border-t border-line pt-6 [&>*]:min-w-0 lg:grid-cols-5 lg:items-start">
+        <div class="space-y-3 lg:col-span-3">
+            <h3 id="config-webhook" class="flex items-center gap-2 text-sm font-semibold text-content">
+                <span class="flex h-6 w-6 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-fg">2</span>
+                Webhook
+                {% if clinic_obj.whatsapp_verify_token %}<span class="rounded-full bg-success-soft px-2 py-0.5 text-xs font-semibold text-success">Listo</span>{% endif %}
+            </h3>
+            <p class="text-sm text-content-subtle">Por aquí le llegan al agente los mensajes de tus pacientes.</p>
+            <div class="space-y-6">
+                {# Callback URL #}
+                <div class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+                    <span class="mb-1.5 block text-sm font-medium text-content-muted">Callback URL</span>
+                    <div class="flex gap-2">
+                        <code class="min-w-0 flex-1 truncate rounded-xl bg-muted px-4 py-2.5 text-sm text-content-muted ring-1 ring-line">{{ webhook_url }}</code>
+                        <button type="button"
+                                data-copy="{{ webhook_url }}"
+                                @click="navigator.clipboard.writeText($el.dataset.copy); copied = 'webhook'; setTimeout(() => copied = '', 1500)"
+                                class="btn-secondary flex-shrink-0 whitespace-nowrap">
+                            <span x-show="copied !== 'webhook'">Copiar</span>
+                            <span x-show="copied === 'webhook'" x-cloak class="text-success">¡Copiado!</span>
+                        </button>
+                    </div>
+                    <p class="mt-1.5 text-xs text-content-faint">Es la misma para todas las clínicas: el agente reconoce la tuya por el número.</p>
+                </div>
+
+                {# Verify token #}
+                <form method="post"
+                      x-data="{
+                          dirty: {{ webhook_form.errors|yesno:'true,false' }},
+                          genVerify() {
+                              const v = 'vk_' + Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2, '0')).join('');
+                              this.$refs.verify.value = v;
+                              // Escribir por JS no dispara el evento input del campo.
+                              this.dirty = true;
+                          }
+                      }"
+                      @input="dirty = true"
+                      class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+                    {% csrf_token %}
+                    <input type="hidden" name="form" value="webhook">
+                    {% with field=webhook_form.whatsapp_verify_token %}
+                    <label for="{{ field.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ field.label }}</label>
+                    <div class="flex flex-wrap gap-2 sm:flex-nowrap">
+                        <input type="text"
+                               x-ref="verify"
+                               name="{{ field.html_name }}"
+                               id="{{ field.id_for_label }}"
+                               value="{{ field.value|default:'' }}"
+                               placeholder="Elige una cadena secreta"
+                               autocomplete="off"
+                               class="block w-full rounded-xl border {% if field.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                        <button type="button" @click="genVerify()" class="btn-secondary flex-shrink-0 whitespace-nowrap">Generar</button>
+                        <button type="button"
+                                @click="navigator.clipboard.writeText($refs.verify.value); copied = 'verify'; setTimeout(() => copied = '', 1500)"
+                                class="btn-secondary flex-shrink-0 whitespace-nowrap">
+                            <span x-show="copied !== 'verify'">Copiar</span>
+                            <span x-show="copied === 'verify'" x-cloak class="text-success">¡Copiado!</span>
+                        </button>
+                    </div>
+                    <p class="mt-1.5 text-xs text-content-faint">{{ field.help_text }}</p>
+                    {% if field.errors %}<p class="mt-1 text-xs text-danger">{{ field.errors|join:", " }}</p>{% endif %}
+                    {% endwith %}
+
+                    <div class="mt-5 flex items-center justify-end gap-3 border-t border-line pt-5">
+                        <p x-show="dirty" x-cloak class="text-xs font-medium text-warning">Cambios sin guardar</p>
+                        <button type="submit"
+                                :disabled="!dirty"
+                                {% if not webhook_form.errors %}disabled{% endif %}
+                                class="btn-primary disabled:cursor-not-allowed disabled:opacity-40">
+                            Guardar token
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <aside class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line lg:col-span-2">
+            <h4 class="text-sm font-semibold text-content">Cómo configurarlo en Meta</h4>
+            <ol class="mt-4 space-y-3 text-sm text-content-muted">
+                <li class="flex gap-3"><span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-fg">1</span><span>Guarda aquí un token de verificación (el botón <span class="font-medium text-content">Generar</span> te crea uno).</span></li>
+                <li class="flex gap-3"><span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-fg">2</span><span>En Meta, ve a <span class="font-medium text-content">WhatsApp → Configuration → Webhook</span> y pulsa <span class="font-medium text-content">Edit</span>.</span></li>
+                <li class="flex gap-3"><span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-fg">3</span><span>Pega la <span class="font-medium text-content">Callback URL</span> y el <span class="font-medium text-content">token</span>, y verifica.</span></li>
+                <li class="flex gap-3"><span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-fg">4</span><span>Suscríbete al campo <span class="font-medium text-content">messages</span>.</span></li>
+            </ol>
+        </aside>
+    </section>
+</div>
+{% endblock %}

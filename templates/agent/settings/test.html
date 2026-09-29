@@ -13,6 +13,9 @@
              x-data="{
                  messages: JSON.parse(document.getElementById('test-messages').textContent),
                  input: '',
+                 {# Foto elegida y pendiente de enviar; la vista previa es local (blob:). #}
+                 photo: null,
+                 photoPreview: '',
                  {# Contador, no booleano: con el debounce de n8n puede haber varios #}
                  {# mensajes en vuelo a la vez, que es justo lo que hay que poder probar. #}
                  pending: 0,
@@ -21,18 +24,49 @@
                  ahora() {
                      return new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
                  },
+                 pickPhoto(event) {
+                     const file = event.target.files[0];
+                     event.target.value = '';
+                     if (!file) return;
+                     this.clearPhoto();
+                     this.photo = file;
+                     this.photoPreview = URL.createObjectURL(file);
+                     this.$nextTick(() => this.$refs.input.focus());
+                 },
+                 clearPhoto() {
+                     if (this.photoPreview) URL.revokeObjectURL(this.photoPreview);
+                     this.photo = null;
+                     this.photoPreview = '';
+                 },
                  async send(preset) {
                      const text = (preset || this.input).trim();
-                     if (!text) return;
-                     this.messages.push({ role: 'user', text: text, time: this.ahora() });
-                     this.input = '';
+                     {# Las sugerencias son solo texto: no se llevan la foto elegida. #}
+                     const photo = preset ? null : this.photo;
+                     if (!text && !photo) return;
+                     const bubble = { role: 'user', text: text, time: this.ahora() };
+                     let body;
+                     let headers = { 'X-CSRFToken': '{{ csrf_token }}' };
+                     if (photo) {
+                         {# La burbuja se queda con la vista previa: se suelta al recargar. #}
+                         bubble.image = this.photoPreview;
+                         this.photo = null;
+                         this.photoPreview = '';
+                         body = new FormData();
+                         body.append('file', photo);
+                         body.append('message', text);
+                     } else {
+                         headers['Content-Type'] = 'application/json';
+                         body = JSON.stringify({ message: text });
+                     }
+                     this.messages.push(bubble);
+                     if (!preset) this.input = '';
                      this.pending++;
                      this.$nextTick(() => { this.scroll(); this.$refs.input.focus(); });
                      try {
                          const res = await fetch('{% url 'agent_settings:test-send' %}', {
                              method: 'POST',
-                             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-                             body: JSON.stringify({ message: text }),
+                             headers: headers,
+                             body: body,
                          });
                          const data = await res.json();
                          // Mensaje agrupado con los siguientes: contestará el último
@@ -63,7 +97,7 @@
                         <span x-show="loading" x-cloak class="font-medium text-brand-fg">escribiendo…</span>
                     </p>
                 </div>
-                <span class="hidden flex-shrink-0 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-content-subtle ring-1 ring-line sm:inline">Simulacro</span>
+                <span class="hidden flex-shrink-0 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-content-subtle ring-1 ring-line sm:inline">Modo Prueba</span>
             </div>
 
             {# Hilo de mensajes #}
@@ -94,7 +128,19 @@
                              tokens; un hexadecimal aquí las dejaría blancas también en oscuro.{% endcomment %}
                              :style="m.role === 'user' ? '--bubble-tail: #b25aca' : ''"
                              class="chat-bubble max-w-[85%] rounded-2xl px-3.5 py-2 text-sm shadow-sm sm:max-w-[70%]">
-                            <p class="whitespace-pre-line" x-text="m.text"></p>
+                            {# Recién enviada: vista previa local. Del historial: se abre a petición #}
+                            {# (vista protegida, deja AccessLog), igual que en la bandeja de chats. #}
+                            <template x-if="m.image">
+                                <img :src="m.image" alt="Foto enviada" class="mb-1.5 max-h-60 w-full rounded-xl object-cover">
+                            </template>
+                            <template x-if="m.image_url">
+                                <a :href="m.image_url" target="_blank" rel="noopener noreferrer"
+                                   class="mb-1.5 flex items-center gap-2 rounded-xl bg-white/15 px-3 py-2 text-xs font-medium hover:bg-white/25">
+                                    <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
+                                    Foto · Ver
+                                </a>
+                            </template>
+                            <p class="whitespace-pre-line" x-show="m.text" x-text="m.text"></p>
                             <p class="mt-1 text-right text-[11px]"
                                :class="m.role === 'user' ? 'text-white/70' : 'text-content-faint'"
                                x-text="m.time"></p>
@@ -123,16 +169,37 @@
                                 x-text="s"></button>
                     </template>
                 </div>
+                {# Foto elegida, antes de enviarla #}
+                <template x-if="photoPreview">
+                    <div class="mb-2.5 flex items-center gap-3 rounded-xl bg-muted px-2.5 py-2 ring-1 ring-line">
+                        <img :src="photoPreview" alt="Foto a enviar" class="h-12 w-12 flex-shrink-0 rounded-lg object-cover">
+                        <p class="min-w-0 flex-1 truncate text-xs text-content-muted">
+                            <span class="font-medium text-content" x-text="photo && photo.name"></span><br>
+                            Escribe un pie de foto si quieres y pulsa enviar.
+                        </p>
+                        <button type="button" @click="clearPhoto()" aria-label="Quitar la foto"
+                                class="flex-shrink-0 rounded-lg p-1.5 text-content-faint transition hover:bg-surface hover:text-content-muted">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+                </template>
                 <div class="flex items-end gap-2">
+                    <input type="file" x-ref="photo" @change="pickPhoto($event)" accept="image/jpeg,image/png,image/webp" class="hidden">
+                    <button type="button" @click="$refs.photo.click()" aria-label="Adjuntar una foto" title="Adjuntar una foto"
+                            class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-content-subtle ring-1 ring-line-strong transition hover:bg-muted hover:text-brand-fg">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                        </svg>
+                    </button>
                     <label for="agent-test-input" class="sr-only">Mensaje para el agente</label>
                     <textarea id="agent-test-input"
                               x-ref="input"
                               x-model="input"
                               @keydown.enter.prevent="send()"
                               rows="1"
-                              placeholder="Escribe lo que quieras…"
+                              :placeholder="photo ? 'Pie de foto (opcional)…' : 'Escribe lo que quieras…'"
                               class="max-h-24 min-h-[2.75rem] flex-1 resize-none rounded-xl border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500 transition"></textarea>
-                    <button type="button" @click="send()" :disabled="!input.trim()" aria-label="Enviar"
+                    <button type="button" @click="send()" :disabled="!input.trim() && !photo" aria-label="Enviar"
                             class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-brand-gradient text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">
                         <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
@@ -184,26 +251,31 @@
         <div class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line">
             <h3 class="text-sm font-semibold text-content">Estado</h3>
             <ul class="mt-4 space-y-3 text-sm">
+                {# Credenciales + webhook: la misma pestaña, así que un solo estado. #}
                 <li class="flex items-center justify-between gap-3">
                     <span class="flex items-center gap-2.5 text-content-muted">
-                        <span class="h-2 w-2 rounded-full {% if has_credentials %}bg-success{% else %}bg-warning{% endif %}"></span>
-                        Credenciales de Meta
+                        <span class="h-2 w-2 rounded-full {% if is_connected %}bg-success{% else %}bg-warning{% endif %}"></span>
+                        Conexión con Meta
                     </span>
-                    {% if has_credentials %}
-                    <span class="text-xs font-medium text-success">Listas</span>
+                    {% if is_connected %}
+                    <span class="text-xs font-medium text-success">Lista</span>
                     {% else %}
-                    <a href="{% url 'agent_settings:meta' %}" class="text-xs font-medium text-brand-fg hover:underline">Configurar</a>
+                    <a href="{% url 'agent_settings:config' %}" class="text-xs font-medium text-brand-fg hover:underline">
+                        {% if has_credentials or clinic_obj.whatsapp_verify_token %}Completar{% else %}Configurar{% endif %}
+                    </a>
                     {% endif %}
                 </li>
                 <li class="flex items-center justify-between gap-3">
                     <span class="flex items-center gap-2.5 text-content-muted">
-                        <span class="h-2 w-2 rounded-full {% if clinic_obj.whatsapp_verify_token %}bg-success{% else %}bg-warning{% endif %}"></span>
-                        Webhook
+                        <span class="h-2 w-2 rounded-full {% if profile.pk %}bg-success{% else %}bg-content-faint{% endif %}"></span>
+                        Personalidad
                     </span>
-                    {% if clinic_obj.whatsapp_verify_token %}
-                    <span class="text-xs font-medium text-success">Listo</span>
+                    {% if profile.pk %}
+                    <span class="text-xs text-content-subtle" title="{% if profile.updated_by %}Guardada por {{ profile.updated_by.get_full_name|default:profile.updated_by.email }}{% endif %}">
+                        Actualizada el {{ profile.updated_at|date:"j M, H:i" }}
+                    </span>
                     {% else %}
-                    <a href="{% url 'agent_settings:webhook' %}" class="text-xs font-medium text-brand-fg hover:underline">Configurar</a>
+                    <a href="{% url 'agent_settings:persona' %}" class="text-xs font-medium text-brand-fg hover:underline">Por defecto</a>
                     {% endif %}
                 </li>
                 <li class="flex items-center justify-between gap-3">
