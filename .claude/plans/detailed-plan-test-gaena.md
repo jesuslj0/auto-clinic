@@ -11,6 +11,18 @@ y que el agente conteste **como en producción**, con los datos reales de Gaena
 
 ---
 
+## Estado (29/09, 19:40)
+
+| Paso | Estado |
+|---|---|
+| X1 · X2 | Sin confirmar aquí (Xexu) |
+| X3 | ✅ Jesús tiene el token y está puesto en n8n |
+| J0 – J6 | ✅ Hechos, con dos cambios respecto al plan (ver J0 y J3) |
+| J1 | ✅ Y además se desactivó `WA-Post-Visit-Followup` |
+| **Siguiente** | **X4** (Xexu verifica la URL en Meta) → **X5** (suscribirse a `messages`) → prueba conjunta |
+
+---
+
 ## 0. Contexto (Claude de Jesús: léelo entero antes de nada)
 
 **Qué es AutoClinic y dónde está todo:** ver `CLAUDE.md`. Lo pendiente para
@@ -137,7 +149,16 @@ En AutoClinic, con usuario administrador de Gaena → **Agente → Configuració
 Inventa una cadena larga y aleatoria. Va en tres sitios: AutoClinic (X2), n8n
 (J2) y Meta (X4). Pásasela a Jesús **por privado**. → **🔗 A**
 
-### 🛠️ J0 · Copia de seguridad e inspección (Jesús)
+### ✅ 🛠️ J0 · Copia de seguridad e inspección (Jesús)
+
+> **Hecho.** Copia en n8n: `WA-Inbound-Orchestrator con buffer (backup 2026-09-29)`
+> (inactiva). **El punto 3 no se puede hacer así:** el webhook estaba en
+> «Using 'Respond to Webhook' Node» y, puesto en *Immediately*, n8n rechaza cada
+> POST con `500 Unused Respond to Webhook node found` (desde el camino común se
+> alcanzan los Respond del chat de prueba). Se dejó en «Using 'Respond to
+> Webhook' Node» con un nodo nuevo **`Responder 200 a Meta`** justo detrás del
+> webhook: Meta recibe el 200 en ~0,3 s, igual que con *Immediately*. **No volver
+> a ponerlo en Immediately.**
 
 1. En `n8n.alt4ir.online`, workflow **`WA-Inbound-Orchestrator con buffer`** →
    `...` → **Download**. Guárdalo fuera del repo, con fecha.
@@ -149,7 +170,12 @@ Inventa una cadena larga y aleatoria. Va en tres sitios: AutoClinic (X2), n8n
 3. Confirma que `Webhook WhatsApp` responde **Immediately** (se cambió hace
    días). Si no, cámbialo.
 
-### 🛠️ J1 · Recordatorios (Jesús)
+### ✅ 🛠️ J1 · Recordatorios (Jesús)
+
+> **Hecho.** Los flujos de recordatorios (`WA-Reminder-24h-Scheduler`,
+> `WA-Reminder-3h-Followup-Scheduler`) están inactivos. Se desactivó también
+> **`WA-Post-Visit-Followup`**, que escribe a diario a las 10:00 a los pacientes
+> con cita el día anterior (ver sección 8 antes de reactivarlo).
 
 Si hay un workflow de recordatorios de cita **activo** que envíe por WhatsApp,
 **desactívalo** mientras dura la prueba. Con Gaena apuntando al número de
@@ -157,7 +183,13 @@ prueba podría intentar mandar recordatorios a pacientes reales desde él (Meta
 los rechazaría: el número de prueba solo escribe a los 5 destinatarios
 verificados). Si no hay ninguno activo, nada.
 
-### 🛠️ J2 · Webhook GET para la verificación de Meta (Jesús) — N3
+### ✅ 🛠️ J2 · Webhook GET para la verificación de Meta (Jesús) — N3
+
+> **Hecho** como se describe (GET y POST conviven en el mismo path sin
+> problemas). `Webhook Verificación Meta` lleva `onError: continueRegularOutput`,
+> como los otros dos webhooks. Comprobado con curl: token malo → 403, sin
+> parámetros → 403, token correcto → devuelve el challenge (probado con un token
+> provisional; el real lo pegó Jesús después y el provisional ya da 403).
 
 Al guardar la URL, Meta hace un `GET` con `hub.mode`, `hub.verify_token` y
 `hub.challenge`, y espera recibir `hub.challenge` tal cual. Hoy solo hay un
@@ -208,11 +240,21 @@ En la app **AutoClinic Gaena** → caso de uso de WhatsApp → apartado
 - **Token de verificación:** el de X3
 - **Verificar y guardar.**
 
+Comprobarlo en n8n (Executions): aparece una ejecución que empieza en `Webhook
+Verificación Meta`. Si acaba en `Responder Challenge`, bien; si acaba en
+`Rechazar Verificación`, el token no coincide (espacios al copiar, o distinto en
+Meta y en n8n).
+
 **Todavía no suscribirse a `messages`**: se hace en X5, cuando n8n ya sepa
 contestar. Si nos suscribimos antes, cada mensaje recorre un flujo a medias y
 deja errores.
 
-### 🛠️ J3 · Parar los avisos de estado (Jesús)
+### ✅ 🛠️ J3 · Parar los avisos de estado (Jesús)
+
+> **Hecho**, con el IF llamado **`¿Es aviso de estado?`** en vez de «¿Es un
+> mensaje?» (con `skip === true` → rama true, el nombre del plan decía lo
+> contrario de lo que hace). Comprobado con un POST de aviso simulado: la
+> ejecución termina en ese IF y no llega a `Cargar Config Clínica`.
 
 Por cada respuesta que mande el agente, Meta enviará 2-3 avisos más (enviado,
 entregado, leído). `Normalizar Mensaje` los marca con `skip: true`, pero hoy el
@@ -229,7 +271,9 @@ mensaje?»:
 
 Más adelante esos avisos se mandarán a Django para los ✓✓ (N5).
 
-### 🛠️ J4 · Quitar `Responder a Webhook Postman` (Jesús) — N2
+### ✅ 🛠️ J4 · Quitar `Responder a Webhook Postman` (Jesús) — N2
+
+> **Hecho.**
 
 Conecta `¿Es Test?` (salida **false**) directamente a `Enviar Mensaje
 WhatsApp` y borra `Responder a Webhook Postman`. Con el webhook respondiendo
@@ -239,7 +283,13 @@ puede cortar el flujo justo antes de enviar.
 `Webhook Test` y `Responder Webhook Test` **no se tocan**: los usa el chat de
 prueba del panel.
 
-### 🛠️ J5 · Enviar en el formato de Meta (Jesús) — N1
+### ✅ 🛠️ J5 · Enviar en el formato de Meta (Jesús) — N1
+
+> **Hecho**, opcional N4 incluido: `Registrar Mensaje Saliente` y `Registrar
+> Respuesta Solo Texto` toman primero `messages[0].id` de la respuesta de Meta
+> (y siguen entendiendo el formato WaAPI). El texto va como
+> `JSON.stringify(String(... || ''))` para que un mensaje vacío no rompa el JSON.
+> Sin probar todavía contra Meta: se verá en la prueba conjunta.
 
 **`Enviar Mensaje WhatsApp`** (HTTP Request):
 
@@ -276,7 +326,10 @@ Deja preparado el ✓✓ de las respuestas del agente.
 **Estos nodos solo están en el camino del WhatsApp real.** El chat de prueba del
 panel no pasa por ellos.
 
-### 🛠️ J6 · Publicar y comprobar que no se ha roto nada (Jesús)
+### ✅ 🛠️ J6 · Publicar y comprobar que no se ha roto nada (Jesús)
+
+> **Hecho.** Publicado y activo; el chat de prueba del panel contesta como
+> siempre (ejecución 3085).
 
 1. Guarda y **publica** el workflow.
 2. **Chat de prueba del panel** (Agente → Chat): un «Hola». Tiene que contestar
@@ -355,6 +408,11 @@ Apuntad los resultados en la tabla del final.
   conversaciones de prueba. Las conversaciones solo se pueden borrar enteras,
   desde el admin.
 - Reactivar el flujo de recordatorios si se pausó en J1.
+- Reactivar `WA-Post-Visit-Followup` (desactivado el 29/09: escribe a diario a
+  las 10:00 a los pacientes con cita el día anterior). Ojo: mientras Gaena
+  apunte al número de prueba, intentaría escribir desde él a pacientes reales, y
+  además su envío sigue en formato WaAPI. Mejor dejarlo parado hasta M7 o
+  hasta pasarlo al formato de Meta.
 - 👤 **X6 (Xexu) · Token permanente (M4).** Business Manager de Gaena →
   Usuarios del sistema → crear uno administrador → asignarle la app
   *AutoClinic Gaena* y la WABA `799132616628033` → generar token **sin
@@ -362,7 +420,7 @@ Apuntad los resultados en la tabla del final.
   `whatsapp_business_management` → sustituir el temporal en AutoClinic (X2).
 - Gaena se queda apuntando al número de prueba hasta la migración de su número
   real (M7). Ese día se cambian el Phone Number ID y el token.
-- Actualizar `PENDIENTE-PRODUCCION.md`: N1, N2, N3, M5 y, si se hizo, N4.
+- Actualizar `PENDIENTE-PRODUCCION.md`: N1, N2, N3, N4 (hecho en J5) y M5.
 
 ---
 
