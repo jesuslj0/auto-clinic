@@ -90,15 +90,16 @@
         </div>
     </form>
 
-    {# ── Vista previa: lo que recibe el agente ── #}
+    {# ── Aviso: cómo se usa y qué versión está en vigor ── #}
     <aside class="space-y-4 lg:sticky lg:top-6 lg:col-span-2">
         <div class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line">
             <h3 class="text-sm font-semibold text-content">Lo que recibe el agente</h3>
-            <p class="mt-1 text-xs text-content-subtle">
-                Se añade al principio de sus instrucciones en cada mensaje.
-                {% if profile.pk %}Versión guardada{% if profile.updated_by %} por {{ profile.updated_by.get_full_name|default:profile.updated_by.email }}{% endif %}, {{ profile.updated_at|timesince }}.{% else %}Todavía no has guardado ninguna: es la personalidad por defecto.{% endif %}
+            <p class="mt-1 text-sm text-content-muted">
+                Estos datos y ajustes se añaden a las instrucciones del agente en cada mensaje.
             </p>
-            <pre class="mt-4 max-h-96 overflow-y-auto whitespace-pre-wrap break-words rounded-xl bg-muted px-4 py-3 font-mono text-xs leading-relaxed text-content-muted ring-1 ring-line">{{ persona_prompt }}</pre>
+            <p class="mt-3 text-xs text-content-subtle">
+                {% if saved_profile.pk %}Versión guardada{% if saved_profile.updated_by %} por {{ saved_profile.updated_by.get_full_name|default:saved_profile.updated_by.email }}{% endif %} el {{ saved_profile.updated_at|date:"j \d\e F \a \l\a\s H:i" }}.{% else %}Todavía no has guardado ninguna: se usa la personalidad por defecto.{% endif %}
+            </p>
         </div>
         <a href="{% url 'agent_settings:test' %}"
            class="flex items-center justify-between gap-3 rounded-3xl bg-brand-soft px-5 py-4 text-sm font-medium text-brand-fg ring-1 ring-brand-line transition hover:opacity-90">

@@ -188,12 +188,13 @@ class TestPersonaSettingsView:
 
         assert 'tone' in response.context['form'].errors
 
-    def test_preview_shows_the_saved_prompt(self, client, admin_user, profile_a):
+    def test_does_not_render_the_literal_prompt(self, client, admin_user, profile_a):
         client.force_login(admin_user)
 
-        response = client.get(self.url)
+        content = client.get(self.url).content.decode()
 
-        assert response.context['persona_prompt'] == build_persona_prompt(profile_a)
+        assert CLOSING_LINE not in content
+        assert 'Versión guardada' in content
 
     def test_only_admins(self, client, staff_user):
         client.force_login(staff_user)
@@ -210,8 +211,7 @@ class TestAgentSettingsSection:
     @pytest.mark.parametrize('url_name', [
         'agent_settings:test',
         'agent_settings:persona',
-        'agent_settings:meta',
-        'agent_settings:webhook',
+        'agent_settings:config',
     ])
     def test_every_tab_renders_for_admins(self, client, admin_user, url_name):
         client.force_login(admin_user)
@@ -222,8 +222,7 @@ class TestAgentSettingsSection:
     @pytest.mark.parametrize('url_name', [
         'agent_settings:test',
         'agent_settings:persona',
-        'agent_settings:meta',
-        'agent_settings:webhook',
+        'agent_settings:config',
     ])
     def test_staff_is_denied(self, client, staff_user, url_name):
         client.force_login(staff_user)
@@ -240,7 +239,7 @@ class TestAgentSettingsSection:
         clinic_a.save()
         client.force_login(admin_user)
 
-        client.post(reverse('agent_settings:meta'), {
+        client.post(reverse('agent_settings:config'), {'form': 'meta', 
             'whatsapp_phone_number_id': '123456',
             'whatsapp_token': '',
         })
@@ -254,14 +253,14 @@ class TestAgentSettingsSection:
         clinic_a.save()
         client.force_login(admin_user)
 
-        assert 'EAAG-secreto' not in client.get(reverse('agent_settings:meta')).content.decode()
+        assert 'EAAG-secreto' not in client.get(reverse('agent_settings:config')).content.decode()
 
     def test_meta_form_does_not_touch_the_verify_token(self, client, admin_user, clinic_a):
         clinic_a.whatsapp_verify_token = 'vk_123'
         clinic_a.save()
         client.force_login(admin_user)
 
-        client.post(reverse('agent_settings:meta'), {'whatsapp_phone_number_id': '1'})
+        client.post(reverse('agent_settings:config'), {'form': 'meta', 'whatsapp_phone_number_id': '1'})
 
         clinic_a.refresh_from_db()
         assert clinic_a.whatsapp_verify_token == 'vk_123'
@@ -269,8 +268,20 @@ class TestAgentSettingsSection:
     def test_webhook_form_saves_the_verify_token(self, client, admin_user, clinic_a):
         client.force_login(admin_user)
 
-        response = client.post(reverse('agent_settings:webhook'), {'whatsapp_verify_token': 'vk_abc'})
+        response = client.post(reverse('agent_settings:config'), {'form': 'webhook', 'whatsapp_verify_token': 'vk_abc'})
 
         assert response.status_code == 302
         clinic_a.refresh_from_db()
         assert clinic_a.whatsapp_verify_token == 'vk_abc'
+
+    def test_webhook_form_does_not_touch_the_credentials(self, client, admin_user, clinic_a):
+        clinic_a.whatsapp_phone_number_id = '123456'
+        clinic_a.whatsapp_token = 'EAAG-secreto'
+        clinic_a.save()
+        client.force_login(admin_user)
+
+        client.post(reverse('agent_settings:config'), {'form': 'webhook', 'whatsapp_verify_token': 'vk_abc'})
+
+        clinic_a.refresh_from_db()
+        assert clinic_a.whatsapp_phone_number_id == '123456'
+        assert clinic_a.whatsapp_token == 'EAAG-secreto'

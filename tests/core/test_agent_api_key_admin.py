@@ -13,8 +13,7 @@ class TestPanelDoesNotExposeTheKey:
     @pytest.mark.parametrize('url_name', [
         'agent_settings:test',
         'agent_settings:persona',
-        'agent_settings:meta',
-        'agent_settings:webhook',
+        'agent_settings:config',
     ])
     def test_key_is_not_rendered_in_the_panel(self, client, admin_user, clinic_a, url_name):
         client.force_login(admin_user)
@@ -26,7 +25,7 @@ class TestPanelDoesNotExposeTheKey:
         client.force_login(admin_user)
         before = clinic_a.agent_api_key
 
-        client.post(reverse('agent_settings:meta'), data={'action': 'rotate_api_key'})
+        client.post(reverse('agent_settings:config'), data={'action': 'rotate_api_key'})
 
         clinic_a.refresh_from_db()
         assert clinic_a.agent_api_key == before

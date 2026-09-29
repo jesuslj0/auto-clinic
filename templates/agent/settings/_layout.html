@@ -14,7 +14,7 @@ con su formulario; aquí solo se pinta, cada vista marca el suyo con `agent_tab`
     {# ── Cabecera + estado ── #}
     <div class="flex flex-col gap-4 rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:flex-row sm:items-center sm:justify-between sm:p-6">
         <div class="flex items-start gap-4">
-            <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-success-soft text-success ring-1 ring-success-line">
+            <span class="mt-0.5 inline-flex flex-shrink-0 text-success">
                 {% include 'agent/settings/_whatsapp_icon.html' with size='h-6 w-6' %}
             </span>
             <div>
@@ -47,15 +47,13 @@ con su formulario; aquí solo se pinta, cada vista marca el suyo con `agent_tab`
     {# ── Apartados ── #}
     {# Enlaces normales: cada apartado es una página con su propio formulario. #}
     <nav aria-label="Apartados del agente">
-        <div class="grid grid-cols-4 gap-1 rounded-2xl bg-muted p-1 ring-1 ring-line sm:inline-flex">
+        <div class="grid grid-cols-3 gap-1 rounded-2xl bg-muted p-1 ring-1 ring-line sm:inline-flex">
             {% url 'agent_settings:test' as url_test %}
             {% url 'agent_settings:persona' as url_persona %}
-            {% url 'agent_settings:meta' as url_meta %}
-            {% url 'agent_settings:webhook' as url_webhook %}
-            {% include 'agent/settings/_tab_link.html' with url=url_test key='test' label='Probar' %}
+            {% url 'agent_settings:config' as url_config %}
+            {% include 'agent/settings/_tab_link.html' with url=url_test key='test' label='Chat' %}
             {% include 'agent/settings/_tab_link.html' with url=url_persona key='persona' label='Personalidad' %}
-            {% include 'agent/settings/_tab_link.html' with url=url_meta key='meta' label='Meta' done=has_credentials %}
-            {% include 'agent/settings/_tab_link.html' with url=url_webhook key='webhook' label='Webhook' done=clinic_obj.whatsapp_verify_token %}
+            {% include 'agent/settings/_tab_link.html' with url=url_config key='config' label='Configuración' done=is_connected %}
         </div>
     </nav>
 
