@@ -1,8 +1,12 @@
 # Pendiente para salir a producción con Gaena
 
-Estado a 28/09/2026. Qué falta, dónde se hace y en qué orden, para conectar el
+Estado a 29/09/2026. Qué falta, dónde se hace y en qué orden, para conectar el
 WhatsApp de Elena a la Cloud API oficial. Al final va el manual de la
 transcripción de notas de voz.
+
+**Avance del 29/09:** app de Meta creada en el portfolio de Gaena y primer
+mensaje enviado y recibido con el número de prueba (M1 hecha). Lo siguiente es
+conectar el webhook a n8n y cambiar el envío de n8n a la Cloud API (N1, N3, M5).
 
 Las fases 1, 2 y 4 del [plan de chats](PLAN-CHATS-PRODUCCION.md) están hechas y
 en `main`. El debounce de mensajes partidos también (panel en `main`,
@@ -14,6 +18,7 @@ casi todo lo pendiente está en Meta y en n8n, no en Django.
 - 🔴 **Bloqueante.** Sin esto no se conecta el número de Elena.
 - 🟡 **Antes de salir.** Se podría salir sin ello, pero no conviene.
 - 🟢 **Después.** Mejora, no impide salir.
+- ✅ **Hecho.**
 
 ---
 
@@ -21,12 +26,12 @@ casi todo lo pendiente está en Meta y en n8n, no en Django.
 
 | # | Qué | Dónde | Prioridad |
 |---|---|---|---|
-| M1 | Crear la app de Meta y probar todo con el **número de prueba** de Meta | Meta | 🔴 |
+| M1 | Crear la app de Meta y conseguir el **número de prueba** | Meta | ✅ 29/09 |
 | M2 | Verificar el portfolio de Elena | Meta | 🟡 |
 | M3 | Plantillas: redactarlas con Elena y mandarlas a revisión | Meta + Elena | 🔴 |
 | M4 | Token permanente (System User) | Meta | 🔴 |
 | M5 | Webhook: URL, verify token y suscripción a `messages` | Meta + n8n | 🔴 |
-| M6 | Método de pago en la WABA | Meta | 🔴 |
+| M6 | Método de pago en la WABA (confirmado: Meta lo pide) | Meta | 🔴 |
 | M7 | Migrar el número de Elena (el último paso) | Meta + Elena | 🔴 |
 | N1 | Enviar por Graph API, no por WaAPI | n8n | 🔴 |
 | N2 | Quitar `Responder a Webhook Postman` del camino real | n8n | 🔴 |
@@ -35,13 +40,15 @@ casi todo lo pendiente está en Meta y en n8n, no en Django.
 | N5 | Reenviar los `statuses` de Meta a Django (✓✓) | n8n | 🟡 |
 | N6 | Enganchar `WA-Media-Ingest` (fotos y audios) | n8n | 🟡 |
 | N7 | Recordatorio de cita por plantilla | n8n | 🔴 |
-| N8 | Respuesta a fotos: cambiar el "solo entiendo texto" | n8n | 🟡 |
+| N8 | Fotos por WhatsApp real: que lleguen al agente (con la Cloud API) | n8n | 🟡 |
 | D1 | Fase 3: plantillas en el panel (en curso) | Django | 🔴 |
 | D2 | Pasar la suite completa de tests | Django | 🔴 |
 | D3 | Despliegue: migraciones y variables de entorno | Django / servidor | 🔴 |
 | D4 | Notas de voz Ogg/Opus en el Safari del iPhone de Elena | Django | 🟡 |
+| D5 | Versión de la API de Meta: Django usa la v21.0, Meta va por la v26.0 | Django + n8n | 🟡 |
 | T | Transcripción de notas de voz | n8n + Django | 🟡 (ver manual) |
 | E1 | Elena: copia de sus chats antes de migrar | Elena | 🔴 |
+| E2 | Elena: contarle el aviso de Meta que verán sus pacientes | Elena | 🟡 |
 
 ---
 
@@ -50,7 +57,7 @@ casi todo lo pendiente está en Meta y en n8n, no en Django.
 No migréis el número de Elena para probar. **El número de prueba que da Meta
 sirve para probarlo todo antes**, sin tocar nada suyo:
 
-1. **M1** Crear la app y usar el número de prueba de Meta.
+1. ✅ **M1** Crear la app y usar el número de prueba de Meta. Hecho el 29/09.
 2. **N1, N2, N3, M4, M5** Cambiar n8n a la Cloud API y conectar el webhook, contra el número de prueba.
 3. **Prueba completa** con el número de prueba: texto, ráfaga de mensajes, foto, audio, ✓✓, recordatorio con plantilla.
 4. **M3** En paralelo desde el primer día: plantillas redactadas con Elena y enviadas a revisión.
@@ -66,24 +73,45 @@ principio.
 
 ## Meta
 
-### M1 🔴 App de Meta y número de prueba
+### M1 ✅ App de Meta y número de prueba (hecho el 29/09)
 
-- Crear la app en Meta for Developers con el producto WhatsApp.
-- **Crearla dentro del portfolio de Elena**, no del de Propus. Si la app y la
-  WABA son del mismo negocio, no hace falta App Review ni que Propus esté
-  verificada. Comprobarlo al crearla.
-- Meta da un **número de prueba** gratuito que puede escribir a unos pocos
-  números verificados (los vuestros). Trae ya aprobada una plantilla de ejemplo,
-  `hello_world`, que sirve para probar el envío de plantillas.
-- Con ese número se prueba todo el circuito de n8n y Django sin tocar el
-  WhatsApp de Elena.
+- App **AutoClinic Gaena**, creada en el portfolio **Clínica de podología
+  Gaena** (no en el de Propus), con el caso de uso «Conecta con los clientes a
+  través de WhatsApp». Está en modo desarrollo. Meta no pidió ningún requisito
+  para publicarla: ni revisión de la app ni verificación.
+- Número de prueba: **+1 555 156 9032**.
+  - Phone Number ID: `1340751929128708`
+  - Id de la WABA de prueba: `799132616628033`
+- Token temporal: se genera en «Paso 1. Probar» → «Generar identificador» y
+  caduca en 24 horas. Se vuelve a generar cuando haga falta; no se guarda en
+  ningún sitio. Se le dio acceso **solo** a la WABA de prueba de Gaena, no a la
+  de Propus Nation ni a otras.
+- Prueba hecha: la plantilla de ejemplo de Meta («Confirmación de pedido»; el
+  `hello_world` ya no aparece) enviada a un móvil nuestro, y recibida. Confirma
+  que la app, el número y el envío de plantillas funcionan.
+- Destinatarios: caben hasta 5 números verificados. **Falta añadir el móvil de
+  Jesús.**
+- **Lo que ve el paciente:** en el chat aparece el aviso de Meta *«Actualmente,
+  esta empresa está usando un servicio seguro de Meta para administrar este
+  chat»* (ver E2).
+- **Ojo:** el número real de Elena se añade en «Paso 2. Configuración de
+  producción». En cuanto se añade, deja de funcionar en la app de su móvil. No
+  tocar hasta M7.
 
 ### M2 🟡 Verificar el portfolio de Elena
 
-- A nombre de Gaena, con sus documentos (no los de Propus/Iberium).
-- Sin verificar funciona, con un límite de 250 conversaciones iniciadas por la
-  clínica al día. Para una podóloga sola no es un problema, pero quita topes y
-  tarda unos días: mejor empezarlo ya.
+- Meta la marca como **«Opcional, aunque recomendado»** (Paso 3 de su guía) y
+  tarda de 2 a 10 días laborables. Sin verificar funciona, con un límite de 250
+  conversaciones iniciadas por la clínica al día.
+- Lo que se pierde sin verificar: el **nombre de la clínica** en los chats (a
+  los pacientes que no la tengan guardada les sale el número), la protección de
+  la cuenta contra bloqueos, más mensajes por número y hasta 20 números.
+- Hoy el portfolio aparece como «Empresa no verificada». Ya se intentó y no
+  pasó: averiguar el motivo del rechazo.
+- En «Ubicación de la empresa», **España**, no «Other»: con «Other» Meta pide
+  documentos genéricos de otros países. Documentos de la clínica, no de
+  Propus/Iberium: el certificado de situación censal de Hacienda, con el nombre
+  legal escrito igual que en el Business Manager.
 
 ### M3 🔴 Plantillas
 
@@ -102,8 +130,9 @@ principio.
   producción hace falta el de un **System User** del Business Manager de Elena,
   con acceso a la app y a la WABA, y los permisos
   `whatsapp_business_messaging` y `whatsapp_business_management`.
+- En la guía de Meta aparece como «Usuario del sistema», dentro del Paso 2.
 - Ese token es el que se guarda en la configuración de la clínica en AutoClinic
-  (Agente → Meta).
+  (Agente → Configuración).
 
 ### M5 🔴 Webhook
 
@@ -117,8 +146,9 @@ principio.
 ### M6 🔴 Método de pago
 
 - Las plantillas (el recordatorio) son mensajes que inicia la clínica y Meta los
-  cobra. Comprobar en la WABA si pide método de pago antes de dejar enviarlas;
-  normalmente sí.
+  cobra. **Confirmado:** la guía de Meta pone el método de pago dentro del Paso 2
+  (configuración de producción), en la WABA real. Con el número de prueba no
+  hace falta.
 
 ### M7 🔴 Migrar el número de Elena
 
@@ -227,12 +257,30 @@ El nombre de la plantilla no debería ir escrito a fuego en n8n: que lo lea de
 Django (ver D1). Mientras se prueba con el número de prueba, se puede usar
 `hello_world`.
 
-### N8 🟡 Respuesta a las fotos
+### N8 🟡 Fotos por WhatsApp real: que lleguen al agente
 
-Hoy todo lo que no es texto recibe "de momento solo puedo procesar mensajes de
-texto". Con las fotos guardándose y visibles para Elena, ese mensaje ya no es
-verdad. Decidir el texto (por ejemplo, que la foto le ha llegado a la clínica y
-la revisará Elena). Las notas de voz tienen su propio circuito (ver T).
+**Solo aplica cuando trabajemos con la Cloud API.** Con el chat de prueba ya
+funciona.
+
+Lo que ya está hecho (29/09): `Preparar Contexto Agente` reconoce
+`message_type === 'image'` y, en vez del pie de foto a secas, le pasa al agente
+un aviso: que el paciente ha mandado una foto (con su pie, si lo trae), que no
+puede verla, que diga que la ha recibido y que la revisará la clínica, y que no
+valore ni diagnostique nada a partir de ella. El chat de prueba lo usa desde
+`Normalizar Mensaje Chat`, que ya marca el tipo.
+
+Lo que falta, solo en `Normalizar Mensaje` (la rama de Meta):
+
+- `message_type: 'image'` cuando `msg.type === 'image'`.
+- `message`: el pie de foto, que en la Cloud API viene en `msg.image.caption`
+  (no en `msg.text.body`). Vacío si no trae.
+- Que la foto **no** se desvíe hacia `Responder Solo Texto`: `is_text` a `true`
+  para las imágenes, como hace `Normalizar Mensaje Chat`, para que sigan el
+  camino normal hasta el agente.
+
+No hay que tocar nada más: el aviso al agente ya lo pone `Preparar Contexto
+Agente`. **No** meter también el aviso en `Normalizar Mensaje`, o le llegaría
+duplicado. Las notas de voz tienen su propio circuito (ver T).
 
 ---
 
@@ -280,10 +328,30 @@ convertirlas a AAC o MP3 al recibirlas. Es el único punto de audio que de
 verdad importa para salir: si no suenan y no hay transcripción, Elena no tiene
 forma de saber qué le han dicho.
 
+### D5 🟡 Versión de la API de Meta
+
+Django envía a Meta con `WHATSAPP_GRAPH_API_VERSION`, que no está definida en
+ningún settings: se usa el valor por defecto de `agent/whatsapp.py`, que es la
+**v21.0**. Las pantallas de Meta ya usan la **v26.0** (su código de ejemplo, la
+v25.0), y Meta retira las versiones antiguas con el tiempo. Antes de salir:
+
+- Comprobar en la documentación de Meta hasta cuándo se admite la v21.0.
+- Definir `WHATSAPP_GRAPH_API_VERSION` en los settings o el `.env` con una
+  versión reciente, en vez de depender del valor por defecto.
+- Usar la misma versión en los nodos de n8n que llaman a Meta (N1, N7) y en
+  `send_template()` (D1).
+
 ### E1 🔴 Elena: copia de sus chats
 
 Antes de migrar el número, que Elena exporte o haga copia de sus conversaciones.
 Al pasarlo a la Cloud API deja de funcionar en su app.
+
+### E2 🟡 Elena: el aviso de Meta que verán sus pacientes
+
+Cuando su número pase a la Cloud API, en los chats de sus pacientes aparecerá:
+*«Actualmente, esta empresa está usando un servicio seguro de Meta para
+administrar este chat»*. Es el aviso estándar de Meta y no se puede quitar.
+Contárselo para que no le pille por sorpresa si algún paciente le pregunta.
 
 ---
 
