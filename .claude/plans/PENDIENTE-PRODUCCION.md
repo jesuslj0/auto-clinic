@@ -4,9 +4,19 @@ Estado a 29/09/2026. Qué falta, dónde se hace y en qué orden, para conectar e
 WhatsApp de Elena a la Cloud API oficial. Al final va el manual de la
 transcripción de notas de voz.
 
-**Avance del 29/09:** app de Meta creada en el portfolio de Gaena y primer
-mensaje enviado y recibido con el número de prueba (M1 hecha). Lo siguiente es
-conectar el webhook a n8n y cambiar el envío de n8n a la Cloud API (N1, N3, M5).
+**Avance del 29/09: el circuito completo funciona con el número de prueba.** Un
+WhatsApp real al +1 555 156 9032 llega a n8n, el agente de Gaena contesta
+(«Lucía», con su personalidad y sus datos) y la respuesta llega al móvil. Las
+conversaciones aparecen en Chats y el modo humano funciona. Hechas M1, M4, M5,
+M8, N1, N2, N3 y N4. Hizo falta arreglar tres cosas que no estaban previstas:
+
+1. La clave maestra que usa n8n para cargar la configuración de la clínica no
+   coincidía con la de Django (403 en `Cargar Config Clínica`).
+2. La app de Meta tenía que estar **publicada** (M8).
+3. La WABA no estaba suscrita a nuestra app, solo a la app interna de Meta del
+   visor de pruebas (ver M5). **Repetirlo con la WABA real de Elena.**
+
+Lo siguiente: el guion de pruebas de `detailed-plan-test-gaena.md` (sección 5).
 
 Las fases 1, 2 y 4 del [plan de chats](PLAN-CHATS-PRODUCCION.md) están hechas y
 en `main`. El debounce de mensajes partidos también (panel en `main`,
@@ -29,14 +39,15 @@ casi todo lo pendiente está en Meta y en n8n, no en Django.
 | M1 | Crear la app de Meta y conseguir el **número de prueba** | Meta | ✅ 29/09 |
 | M2 | Verificar el portfolio de Elena | Meta | 🟡 |
 | M3 | Plantillas: redactarlas con Elena y mandarlas a revisión | Meta + Elena | 🔴 |
-| M4 | Token permanente (System User) | Meta | 🔴 |
-| M5 | Webhook: URL, verify token y suscripción a `messages` | Meta + n8n | 🔴 |
+| M4 | Token permanente (System User) | Meta | ✅ 29/09 |
+| M5 | Webhook: URL, verify token, suscripción a `messages` y WABA suscrita a la app | Meta + n8n | ✅ 29/09 (repetir en M7) |
 | M6 | Método de pago en la WABA (confirmado: Meta lo pide) | Meta | 🔴 |
 | M7 | Migrar el número de Elena (el último paso) | Meta + Elena | 🔴 |
-| N1 | Enviar por Graph API, no por WaAPI | n8n | 🔴 |
-| N2 | Quitar `Responder a Webhook Postman` del camino real | n8n | 🔴 |
-| N3 | Webhook: responder a la verificación `GET` de Meta | n8n | 🔴 |
-| N4 | Guardar el `wamid` de las respuestas del agente | n8n | 🟡 |
+| M8 | Publicar la app de Meta (sin publicar no llegan los mensajes reales) | Meta | ✅ 29/09 |
+| N1 | Enviar por Graph API, no por WaAPI | n8n | ✅ 29/09 |
+| N2 | Quitar `Responder a Webhook Postman` del camino real | n8n | ✅ 29/09 |
+| N3 | Webhook: responder a la verificación `GET` de Meta | n8n | ✅ 29/09 |
+| N4 | Guardar el `wamid` de las respuestas del agente | n8n | ✅ 29/09 |
 | N5 | Reenviar los `statuses` de Meta a Django (✓✓) | n8n | 🟡 |
 | N6 | Enganchar `WA-Media-Ingest` (fotos y audios) | n8n | 🟡 |
 | N7 | Recordatorio de cita por plantilla | n8n | 🔴 |
@@ -49,6 +60,7 @@ casi todo lo pendiente está en Meta y en n8n, no en Django.
 | T | Transcripción de notas de voz | n8n + Django | 🟡 (ver manual) |
 | E1 | Elena: copia de sus chats antes de migrar | Elena | 🔴 |
 | E2 | Elena: contarle el aviso de Meta que verán sus pacientes | Elena | 🟡 |
+| E3 | **Obligatorio:** pedir a Elena su política de privacidad y ponerla en la app de Meta antes del primer paciente | Elena + Meta | 🔴 |
 
 ---
 
@@ -142,6 +154,18 @@ principio.
 - Suscribirse al campo **`messages`** (trae tanto los mensajes como los
   `statuses`).
 - Depende de N3: Meta hace un `GET` de verificación al guardar la URL.
+- **Suscribir la cuenta de WhatsApp (WABA) a la app.** Configurar el webhook
+  en la app no basta: los mensajes reales solo se entregan a las apps
+  suscritas a la WABA. Con el número de prueba, la WABA venía suscrita solo a
+  `WA DevX Webhook Events 1P App` (la app interna de Meta que alimenta el visor
+  «Comprobar webhooks de prueba»), y por eso los mensajes se veían en el panel
+  de Meta pero no llegaban a n8n. El botón «Test» sí llega porque va directo a
+  la URL. Arreglo, desde el Explorador de la API Graph con la app **AutoClinic
+  Gaena** y un token de usuario con `whatsapp_business_management`:
+  - `GET <WABA_ID>/subscribed_apps` → tiene que aparecer *AutoClinic Gaena*.
+  - Si no aparece: `POST <WABA_ID>/subscribed_apps` → `{"success": true}`.
+  - Hecho el 29/09 con la WABA de prueba (`799132616628033`). **Repetirlo con la
+    WABA real de Elena en M7.**
 
 ### M6 🔴 Método de pago
 
@@ -156,6 +180,20 @@ principio.
 - Antes: **E1** (copia de sus chats). El número se borra de la app de WhatsApp
   Business del móvil y ya no se puede usar ahí.
 - Tras la migración: nombre para mostrar pendiente de aprobación por Meta.
+
+### M8 🔴 Publicar la app de Meta
+
+Comprobado el 29/09: **con la app sin publicar, Meta no entrega los mensajes
+reales al webhook**, ni siquiera los de los administradores. Solo llegan los de
+prueba que se lanzan desde el panel de la app (botón «Test» de cada campo).
+
+- Menú de la app → **Publicar**. No pide verificación del negocio ni revisión
+  de la app; solo la **URL de la política de privacidad** (Configuración →
+  Básica).
+- Publicar no toca ningún número: solo cambia la app a modo «en vivo».
+- De momento se pone la de Propus (`https://propus.ink/legal/privacidad`) para
+  desbloquear. **Hay que sustituirla por la de Gaena antes del primer paciente
+  (E3).**
 
 ---
 
@@ -352,6 +390,25 @@ Cuando su número pase a la Cloud API, en los chats de sus pacientes aparecerá:
 *«Actualmente, esta empresa está usando un servicio seguro de Meta para
 administrar este chat»*. Es el aviso estándar de Meta y no se puede quitar.
 Contárselo para que no le pille por sorpresa si algún paciente le pregunta.
+
+### E3 🔴 Obligatorio: la política de privacidad de Gaena en la app de Meta
+
+**No se sale a producción sin esto.** Para publicar la app (M8) se ha puesto
+temporalmente la política de Propus (`https://propus.ink/legal/privacidad`).
+Pero la responsable de los datos de los pacientes es **la clínica**: la URL que
+enlaza la app tiene que ser **la política de privacidad de Gaena**.
+
+1. Pedirle a Elena la URL de su política de privacidad.
+2. Comprobar que cuenta que la clínica atiende por **WhatsApp con un asistente
+   de IA** y quién trata los datos por su cuenta: **Propus** (AutoClinic),
+   **Meta** (WhatsApp) y **Microsoft** (Azure OpenAI). Si no lo cuenta, que la
+   actualice antes.
+3. Sustituirla en la app de Meta: **Configuración → Básica → URL de la
+   política de privacidad** → Guardar cambios. No hace falta volver a publicar.
+
+Relacionado y también antes de salir: el **contrato de encargado del
+tratamiento** entre Gaena y Propus (Propus trata datos de salud por cuenta de la
+clínica). Que lo revise quien lleve la parte legal.
 
 ---
 
