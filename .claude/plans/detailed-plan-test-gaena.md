@@ -11,15 +11,21 @@ y que el agente conteste **como en producción**, con los datos reales de Gaena
 
 ---
 
-## Estado (29/09, 19:40)
+## Estado (30/09)
+
+**✅ El agente funciona por WhatsApp real** desde el número de prueba, de
+extremo a extremo: alta de paciente nuevo, crear cita, listar citas, cancelar y
+respuesta humana desde el panel. **Todo el guion de la sección 5 probado; solo
+falta conectar las imágenes** (`WA-Media-Ingest`, N6/N8).
 
 | Paso | Estado |
 |---|---|
-| X1 · X2 | Sin confirmar aquí (Xexu) |
-| X3 | ✅ Jesús tiene el token y está puesto en n8n |
+| X2 – X5 | ✅ (el flujo real funciona, así que Gaena tiene el Phone Number ID, la URL está verificada y la suscripción a `messages` hecha) |
 | J0 – J6 | ✅ Hechos, con dos cambios respecto al plan (ver J0 y J3) |
 | J1 | ✅ Y además se desactivó `WA-Post-Visit-Followup` |
-| **Siguiente** | **X4** (Xexu verifica la URL en Meta) → **X5** (suscribirse a `messages`) → prueba conjunta |
+| Clave maestra | ✅ Arreglado un 403 de `agent-config` (ver sección 7) |
+| Prueba conjunta | ✅ Todo menos las fotos (11), pendiente de conectar imágenes |
+| **Pendiente** | Conectar imágenes (N6/N8) · limpieza (sección 8) · X6 token permanente |
 
 ---
 
@@ -392,6 +398,7 @@ Apuntad los resultados en la tabla del final.
 
 | Síntoma | Causa probable | Qué mirar |
 |---|---|---|
+| La ejecución falla en `Cargar Config Clínica` con **403** «no tiene permiso» | La clave maestra no coincide entre Django (`AGENT_MASTER_API_KEY` del `.env`) y la credencial de n8n **`Django Agent Master Key`** (Header Auth: Name `Authorization`, Value `Api-Key <clave>`) | **Pasó el 29/09 y se arregló igualando las dos.** El loader nunca se había usado: el chat de prueba no pasa por él. n8n no la lee de su entorno (se puede quitar de ahí). Para distinguirlo de un 404: con la clave bien, un `phone_number_id` desconocido da **404**, no 403 |
 | Meta: «no se pudo validar la URL» | El GET no responde bien | El `curl` de J2; que el workflow esté publicado; mismo token en los tres sitios |
 | Escribo y no aparece ninguna ejecución en n8n | No suscritos a `messages`, o la WABA no está suscrita a la app | X5. Si está, Xexu revisa en Meta que la app esté suscrita a la WABA `799132616628033` |
 | La ejecución falla en `Cargar Config Clínica` | Ninguna clínica con ese Phone Number ID, o dos | X2 |
@@ -428,15 +435,15 @@ Apuntad los resultados en la tabla del final.
 
 | # | ¿Bien? | Qué pasó / notas |
 |---|---|---|
-| 1 | | |
-| 2 | | |
-| 3 | | |
-| 4 | | |
-| 5 | | |
-| 6 | | |
-| 7 | | |
-| 8 | | |
-| 9 | | |
-| 10 | | |
-| 11 | | |
-| 12 | | |
+| 1 | ✅ | Onboarding de paciente nuevo por WhatsApp real (30/09) |
+| 2 | ✅ | Alta del paciente completada |
+| 3 | ✅ | |
+| 4 | ✅ | |
+| 5 | ✅ | |
+| 6 | ✅ | Cita creada desde WhatsApp |
+| 7 | ✅ | Listar citas y cancelar, funcionan |
+| 8 | ✅ | |
+| 9 | ✅ | Respuesta humana desde el panel llega al móvil |
+| 10 | ✅ | |
+| 11 | ⬜ | Pendiente: conectar las imágenes (`WA-Media-Ingest`, N6/N8) |
+| 12 | ✅ | |
