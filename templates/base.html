@@ -279,13 +279,18 @@ emite en toda página del panel, aunque no contenga ningún formulario.
                             {% endif %}
                         </button>
                         {% endif %}
-                        {% include 'partials/_section_icon.html' %}
-                        <div class="min-w-0">
-                            <h2 class="truncate text-lg font-semibold text-content sm:text-xl">{% block page_heading %}Panel de la clínica{% endblock %}</h2>
-                            {% block page_subheading %}{% endblock %}
+                        {% comment %}Icono y título en su propio bloque: así el icono se alinea
+                        con la línea del título y no con la fila entera, que en móvil
+                        la hace más alta el botón del menú.{% endcomment %}
+                        <div class="flex min-w-0 items-start gap-2 sm:gap-3">
+                            {% include 'partials/_section_icon.html' %}
+                            <div class="min-w-0">
+                                <h2 class="truncate text-base font-semibold text-content sm:text-xl">{% block page_heading %}Panel de la clínica{% endblock %}</h2>
+                                {% block page_subheading %}{% endblock %}
+                            </div>
                         </div>
                     </div>
-                    <div class="flex flex-shrink-0 items-center gap-2">
+                    <div class="page-actions flex flex-shrink-0 items-center gap-2">
                         {% block page_actions %}{% endblock %}
                     </div>
                 </div>

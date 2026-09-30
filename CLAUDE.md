@@ -359,4 +359,8 @@ overrides: `CLINICAL_MEDIA_URL_EXPIRE` (signed-URL seconds, default 600),
   ```
 - **No linting configuration** — no flake8, black, or isort setup.
 - Templates are in Spanish (recent migration from English).
-- Static files served by WhiteNoise in production.
+- Static files served by WhiteNoise in production, with **hashed names**
+  (`CompressedManifestStaticFilesStorage`, set in `base.py` because the
+  Dockerfile's `collectstatic` runs with the default settings — the manifest
+  must be built there). Always reference static files with `{% static %}`,
+  never a literal `/static/…` path. Tests use plain `StaticFilesStorage`.

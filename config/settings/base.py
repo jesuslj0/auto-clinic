@@ -137,8 +137,14 @@ STORAGES = {
     'default': {
         'BACKEND': 'django.core.files.storage.FileSystemStorage',
     },
+    # Nombres con hash del contenido (`chat_inbox.3f2a….js`): tras un despliegue
+    # el HTML nuevo pide el JS nuevo por su nombre nuevo, y ningún navegador ni
+    # proxy puede servirle el antiguo de caché. Va aquí y no en `prod.py`
+    # porque el `collectstatic` del Dockerfile corre con los settings por
+    # defecto: el manifiesto tiene que generarse en el build. Con DEBUG=True
+    # (desarrollo) se sirven los nombres sin hash, como siempre.
     'staticfiles': {
-        'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
     },
     'clinical_media': {
         'BACKEND': 'storages.backends.s3.S3Storage',

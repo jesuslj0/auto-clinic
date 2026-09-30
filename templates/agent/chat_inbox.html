@@ -74,6 +74,17 @@ funcionando como antes, recargando al navegar.
     <button type="button" @click="window.location.reload()" class="ml-auto font-semibold underline underline-offset-2">Actualizar</button>
 </p>
 
+{% if active_session %}
+{# Solo móvil: la lista y el hilo no caben juntos, así que se vuelve desde aquí. #}
+<a href="{% url 'agent:chat-inbox' %}{% if query %}?q={{ query }}{% endif %}"
+   class="mb-3 inline-flex items-center gap-1 rounded-lg py-1 pr-2 text-sm font-medium text-content-subtle transition hover:text-brand-fg lg:hidden">
+    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+    </svg>
+    Volver a los chats
+</a>
+{% endif %}
+
 <section class="grid gap-4 lg:h-[calc(100vh-12rem)] lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
 
     <!-- Lista de conversaciones -->
@@ -107,13 +118,15 @@ funcionando como antes, recargando al navegar.
     <!-- Hilo -->
     {% comment %}Un hilo sin mensajes, en móvil, llena la pantalla: si no, el
     compositor quedaría a media altura con un hueco vacío debajo.{% endcomment %}
-    <section class="flex min-h-0 flex-col overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line {% if not active_session %}max-lg:hidden{% elif not chat_messages %}max-lg:min-h-[calc(100dvh-8rem)]{% endif %}">
+    <section class="flex min-h-0 flex-col overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line {% if not active_session %}max-lg:hidden{% elif not chat_messages %}max-lg:min-h-[calc(100dvh-8rem)]{% endif %}"
+             :class="expanded && 'max-lg:fixed max-lg:inset-0 max-lg:z-[60] max-lg:h-[100dvh] max-lg:min-h-0 max-lg:rounded-none max-lg:ring-0'">
         {% if active_session %}
         {% include 'agent/_thread_header.html' with session=active_session query=query %}
 
         <div class="relative flex min-h-0 flex-1 flex-col">
         <div x-ref="thread" @scroll.passive="onThreadScroll()" @click="onThreadClick($event)"
-             class="min-h-0 flex-1 space-y-3 overflow-y-auto bg-brand-gradient-soft px-4 py-5 sm:px-6 max-lg:max-h-[60vh] {% if not chat_messages %}flex flex-col max-lg:max-h-none{% endif %}">
+             class="min-h-0 flex-1 space-y-3 overflow-y-auto bg-brand-gradient-soft px-4 py-5 sm:px-6 max-lg:max-h-[60vh] {% if not chat_messages %}flex flex-col max-lg:max-h-none{% endif %}"
+             :class="expanded && 'max-lg:!max-h-none'">
             {% if has_older_messages %}
             <div class="text-center">
                 <a href="{% url 'agent:chat-thread' active_session.id %}?limit={{ next_message_limit }}{% if query %}&q={{ query }}{% endif %}"

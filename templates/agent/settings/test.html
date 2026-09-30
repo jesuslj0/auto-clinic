@@ -20,7 +20,14 @@
                  {# mensajes en vuelo a la vez, que es justo lo que hay que poder probar. #}
                  pending: 0,
                  get loading() { return this.pending > 0; },
+                 {# Pantalla completa en móvil, igual que el hilo de los chats reales. #}
+                 expanded: false,
                  init() { this.$nextTick(() => this.scroll()); },
+                 toggleExpanded(force) {
+                     this.expanded = typeof force === 'boolean' ? force : !this.expanded;
+                     document.documentElement.style.overflow = this.expanded ? 'hidden' : '';
+                     this.$nextTick(() => this.scroll());
+                 },
                  ahora() {
                      return new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
                  },
@@ -84,7 +91,9 @@
                  },
                  scroll() { const el = this.$refs.thread; if (el) el.scrollTop = el.scrollHeight; }
              }">
-        <div class="flex h-[36rem] flex-col overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line lg:h-[calc(100vh-23rem)] lg:min-h-[30rem]">
+        <div class="flex h-[36rem] flex-col overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line lg:h-[calc(100vh-23rem)] lg:min-h-[30rem]"
+             :class="expanded && 'max-lg:fixed max-lg:inset-0 max-lg:z-[60] max-lg:!h-[100dvh] max-lg:rounded-none max-lg:ring-0'"
+             @keydown.escape.window="expanded && toggleExpanded(false)">
             {# Cabecera del chat: quién contesta y como quién escribes #}
             <div class="flex items-center gap-3 border-b border-line px-5 py-4">
                 <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-gradient text-white shadow-sm">
@@ -98,6 +107,17 @@
                     </p>
                 </div>
                 <span class="hidden flex-shrink-0 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-content-subtle ring-1 ring-line sm:inline">Modo Prueba</span>
+                <button type="button" data-thread-expand @click="toggleExpanded()"
+                        class="flex-shrink-0 rounded-xl p-1.5 text-content-subtle transition hover:bg-muted-strong hover:text-content lg:hidden"
+                        :aria-label="expanded ? 'Salir de pantalla completa' : 'Ver el chat a pantalla completa'"
+                        :aria-pressed="expanded.toString()" aria-label="Ver el chat a pantalla completa">
+                    <svg x-show="!expanded" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                    </svg>
+                    <svg x-show="expanded" x-cloak class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+                    </svg>
+                </button>
             </div>
 
             {# Hilo de mensajes #}
