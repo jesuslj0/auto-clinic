@@ -7,6 +7,7 @@ from agent.views import (
     ChatSessionListFragmentView,
     ChatSendMessageView,
     ChatToggleAgentView,
+    ChatTypingView,
     ClinicAgentSwitchView,
 )
 
@@ -20,5 +21,6 @@ urlpatterns = [
     path('<uuid:session_id>/', ChatInboxView.as_view(), name='chat-thread'),
     path('<uuid:session_id>/mensajes/', ChatMessagesFragmentView.as_view(), name='chat-messages-fragment'),
     path('<uuid:session_id>/enviar/', ChatSendMessageView.as_view(), name='chat-send'),
+    path('<uuid:session_id>/escribiendo/', ChatTypingView.as_view(), name='chat-typing'),
     path('<uuid:session_id>/modo/', ChatToggleAgentView.as_view(), name='chat-toggle-agent'),
 ]

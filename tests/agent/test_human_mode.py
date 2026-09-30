@@ -239,3 +239,18 @@ class TestShouldReplyEndpoint:
         response = staff_client.get(self.url, {'phone': session_other_clinic.phone})
         assert response.status_code == 200
         assert response.data['session_id'] is None
+
+    def test_finds_thread_with_meta_phone_format(self, staff_client, clinic_a):
+        """Meta manda `34644…` sin «+» y el hilo se guarda normalizado.
+
+        Si no casaran, el endpoint no encontraría el hilo y diría «contesta»
+        aunque estuviera en modo humano.
+        """
+        session = ConversationSession.objects.create(
+            clinic=clinic_a, phone='+34644520621', agent_paused=True
+        )
+
+        response = staff_client.get(self.url, {'phone': '34644520621'})
+
+        assert response.data['session_id'] == str(session.id)
+        assert response.data['agent_should_reply'] is False

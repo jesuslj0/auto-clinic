@@ -13,6 +13,8 @@ qué no se puede escribir. Recibe `session`.
         <label class="sr-only" for="chat-body">Mensaje</label>
         <textarea id="chat-body" name="body" rows="1" required maxlength="4096"
                   placeholder="Escribe un mensaje…"
+                  data-typing-url="{% url 'agent:chat-typing' session.id %}"
+                  @input="onComposerInput($event)"
                   class="min-h-[2.75rem] flex-1 resize-y rounded-2xl border-line text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"></textarea>
         <button type="submit" class="btn-primary flex-shrink-0 px-4 py-2.5 text-sm">
             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">

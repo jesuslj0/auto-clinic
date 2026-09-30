@@ -30,6 +30,7 @@ document.addEventListener('alpine:init', () => {
         viewer: { open: false, src: '', who: '', when: '', zoom: 1, loading: false, error: false },
         viewerBaseWidth: 0,
         viewerOpener: null,
+        lastTypingAt: 0,
 
         init() {
             this.scrollToBottom();
@@ -70,6 +71,25 @@ document.addEventListener('alpine:init', () => {
                     this.scheduleListRefresh();
                     break;
             }
+        },
+
+        // --- «Escribiendo…» en el WhatsApp del paciente -------------------------
+
+        // Mientras el staff teclea, Django le pide a Meta el indicador (dura 25 s).
+        // Se avisa como mucho cada 20 s; Django tiene su propio límite por hilo.
+        // Nunca molesta: si falla, se ignora.
+        onComposerInput(event) {
+            const field = event.target;
+            if (!field.value.trim()) return;
+            const now = Date.now();
+            if (now - this.lastTypingAt < 20000) return;
+            this.lastTypingAt = now;
+            const token = field.form && field.form.querySelector('[name=csrfmiddlewaretoken]');
+            fetch(field.dataset.typingUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'X-CSRFToken': token ? token.value : '' },
+            }).catch(() => {});
         },
 
         // --- Hilo -----------------------------------------------------------

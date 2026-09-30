@@ -5,15 +5,20 @@ cualquier vista futura del panel deben pasar por el mismo sitio para mantener
 coherentes la sesión, sus contadores denormalizados y el hilo de mensajes.
 """
 
+import logging
+
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 
 from agent.models import ChatMessage, ConversationSession
 from agent.realtime import broadcast_message, broadcast_session
-from agent.whatsapp import WhatsAppError, send_text
+from agent.whatsapp import WhatsAppError, send_text, send_typing
 from patients.models import Patient
 from patients.services import normalize_phone_safe
+
+logger = logging.getLogger(__name__)
 
 PREVIEW_MAX_LENGTH = 280
 
@@ -230,6 +235,55 @@ def send_staff_message(*, session: ConversationSession, body: str) -> ChatMessag
     message.save(update_fields=['status', 'wa_message_id', 'sent_at'])
     broadcast_message(message)
     return message
+
+
+#: Cada cuánto, como mucho, se repite el «escribiendo…» de una conversación.
+#: Meta lo mantiene 25 s: repetirlo a los 20 lo deja encendido mientras alguien
+#: siga escribiendo, sin una llamada a Meta por tecla ni por pestaña abierta.
+STAFF_TYPING_INTERVAL_SECONDS = 20
+
+
+def signal_staff_typing(session: ConversationSession) -> bool:
+    """Enseña «escribiendo…» al paciente mientras el staff redacta. `True` si salió.
+
+    Nunca lanza: es un adorno, y un fallo de Meta no debe molestar a quien
+    escribe (se deja en el log y ya). No se envía nada si:
+
+    - la ventana de 24 h está cerrada (tampoco se podría responder);
+    - no hay un mensaje del paciente con id de WhatsApp al que engancharlo
+      (Meta lo exige);
+    - ya se envió hace menos de `STAFF_TYPING_INTERVAL_SECONDS` en este hilo.
+
+    Ojo: la llamada marca como leído ese mensaje del paciente en su WhatsApp.
+    Aquí es verdad —quien escribe la respuesta lo ha leído—.
+    """
+    if session.clinic is None or not session.can_send_free_text:
+        return False
+
+    last_inbound = (
+        session.messages
+        .filter(direction=ChatMessage.Direction.INBOUND, wa_message_id__isnull=False)
+        .exclude(wa_message_id='')
+        .order_by('-created_at', '-id')
+        .values_list('wa_message_id', flat=True)
+        .first()
+    )
+    if not last_inbound:
+        return False
+
+    # `add` solo escribe si la clave no existe: es el candado del intervalo, y
+    # dos pestañas del mismo hilo no disparan dos llamadas. Con la caché por
+    # defecto (memoria del proceso) el candado es por proceso; con varios
+    # procesos se colaría alguna llamada de más, sin más consecuencia.
+    if not cache.add(f'agent:staff-typing:{session.pk}', 1, STAFF_TYPING_INTERVAL_SECONDS):
+        return False
+
+    try:
+        send_typing(session.clinic, last_inbound)
+    except WhatsAppError as exc:
+        logger.info('No se pudo enviar «escribiendo…» (sesión %s): %s', session.pk, exc)
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------
