@@ -32,6 +32,19 @@ casi todo lo pendiente está en Meta y en n8n, no en Django.
 
 ---
 
+## ⏰ Tareas futuras con fecha (no olvidar)
+
+| Cuándo | Qué | Por qué |
+|---|---|---|
+| **Primeros de noviembre de 2026** (límite: **15/12/2026**) | **Sustituir Whisper** por otro modelo de transcripción que procese en la UE | El despliegue `whisper` (recurso `propus-openai-se`, Sweden Central) tiene fecha de retirada el **15/12/2026**. Opciones: **Azure AI Speech** en Germany West Central (procesa en la UE, sin retirada a la vista), o `gpt-4o-mini-transcribe` si para entonces Microsoft lo ofrece en *Data Zone* UE o *Standard* regional (hoy solo existe en «Estándar global», que puede sacar los datos de la UE). El cambio solo toca el subflujo `WA-Audio-Transcribe` |
+| Cuando haya uso real | **Cuota de Whisper**: hoy 3 peticiones por minuto, el máximo que da Azure | Si aparecen fallos por «demasiadas peticiones», pedir más cuota desde el despliegue (botón *Solicitar cuota*) |
+| Antes del primer paciente | **Supervisión de abusos de Azure**: pedir a Microsoft que la desactive en `propus-openai-de` y `propus-openai-se` | Por defecto Microsoft puede guardar hasta 30 días lo que se envía al modelo para vigilar abusos. Con datos de salud conviene pedir la exención (formulario de Microsoft). Revisarlo con quien lleve lo legal |
+| Antes del primer paciente | **E3**: política de privacidad de Gaena en la app de Meta, y contrato de encargado del tratamiento | Ver E3 |
+| Al terminar las pruebas | Reactivar los workflows pausados: recordatorios y `WA-Post-Visit-Followup` | Jesús los desactivó durante las pruebas con el número de prueba |
+| **21/09/2027** | Retirada de `gpt-5.4-mini` (el modelo del agente) | Está configurado para actualizarse solo a la nueva versión. Comprobar antes que la nueva siga en «Estándar de zona de datos (EUR)» |
+
+---
+
 ## Resumen
 
 | # | Qué | Dónde | Prioridad |
@@ -57,7 +70,7 @@ casi todo lo pendiente está en Meta y en n8n, no en Django.
 | D3 | Despliegue: migraciones y variables de entorno | Django / servidor | 🔴 |
 | D4 | Notas de voz Ogg/Opus en el Safari del iPhone de Elena | Django | 🟡 |
 | D5 | Versión de la API de Meta: Django usa la v21.0, Meta va por la v26.0 | Django + n8n | 🟡 |
-| T | Transcripción de notas de voz | n8n + Django | 🟡 (ver manual) |
+| T | Transcripción de notas de voz: n8n montado el 30/09 (Whisper, Sweden Central), falta probar. Guardarla en Django es la fase B | n8n + Django | 🟡 (ver `plan-transcripcion-audios.md`) |
 | E1 | Elena: copia de sus chats antes de migrar | Elena | 🔴 |
 | E2 | Elena: contarle el aviso de Meta que verán sus pacientes | Elena | 🟡 |
 | E3 | **Obligatorio:** pedir a Elena su política de privacidad y ponerla en la app de Meta antes del primer paciente | Elena + Meta | 🔴 |
@@ -413,6 +426,14 @@ clínica). Que lo revise quien lleve la parte legal.
 ---
 
 # Manual: transcripción de notas de voz
+
+> **Actualización 30/09/2026:** la parte de n8n ya está montada, con otro
+> diseño: `plan-transcripcion-audios.md` manda sobre este manual en todo lo de
+> n8n y Azure. El modelo es **`whisper`** en el recurso **`propus-openai-se`**
+> (Sweden Central, Standard regional), no `gpt-4o-mini-transcribe`, que en Azure
+> solo existe como *Global Standard*. De este manual sigue valiendo la **parte de
+> Django** (`ChatTranscript`, el endpoint `/transcript/` y mostrar la
+> transcripción en el panel), que es la fase B, sin fecha.
 
 ## Qué problema resuelve
 
