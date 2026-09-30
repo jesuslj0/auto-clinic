@@ -31,6 +31,7 @@ document.addEventListener('alpine:init', () => {
         viewerBaseWidth: 0,
         viewerOpener: null,
         lastTypingAt: 0,
+        expanded: false,
 
         init() {
             this.scrollToBottom();
@@ -71,6 +72,25 @@ document.addEventListener('alpine:init', () => {
                     this.scheduleListRefresh();
                     break;
             }
+        },
+
+        // --- Pantalla completa (móvil) --------------------------------------
+
+        // El hilo pasa a ocupar toda la pantalla, encima de las barras de la app.
+        // La página de debajo no se desplaza mientras tanto, y Escape lo cierra.
+        toggleExpanded(force) {
+            this.expanded = typeof force === 'boolean' ? force : !this.expanded;
+            document.documentElement.style.overflow = this.expanded ? 'hidden' : '';
+            if (this.expanded && !this.onExpandedKey) {
+                this.onExpandedKey = (event) => {
+                    if (event.key === 'Escape' && !this.viewer.open) this.toggleExpanded(false);
+                };
+                document.addEventListener('keydown', this.onExpandedKey);
+            } else if (!this.expanded && this.onExpandedKey) {
+                document.removeEventListener('keydown', this.onExpandedKey);
+                this.onExpandedKey = null;
+            }
+            this.$nextTick(() => this.scrollToBottom());
         },
 
         // --- «Escribiendo…» en el WhatsApp del paciente -------------------------

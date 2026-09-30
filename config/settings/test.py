@@ -24,6 +24,10 @@ PASSWORD_HASHERS = [
 # boto3 firma en local).
 STORAGES = {
     **STORAGES,
+    # Sin manifiesto: los tests no ejecutan `collectstatic`.
+    'staticfiles': {
+        'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+    },
     'clinical_media': {
         'BACKEND': 'django.core.files.storage.InMemoryStorage',
         'OPTIONS': {'base_url': '/test-clinical-media/'},
