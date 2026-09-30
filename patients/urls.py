@@ -17,6 +17,7 @@ from patients.views import (
     PatientLesionResolveView,
     PatientLesionsTabView,
     PatientListView,
+    PatientPhotoView,
     PatientProcedureCreateView,
     PatientProceduresTabView,
 )
@@ -92,4 +93,6 @@ urlpatterns = [
         name='procedure-create',
     ),
     path('<int:id>/editar/', PatientEditView.as_view(), name='edit'),
+    # Foto de perfil: redirige a una URL firmada del bucket privado.
+    path('<int:id>/foto/', PatientPhotoView.as_view(), name='photo'),
 ]

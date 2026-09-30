@@ -24,9 +24,6 @@ services:
       retries: 5
 
   web:
-    # Única imagen del proyecto: celery y celery-beat la reutilizan en lugar de
-    # construir la suya. Sin esto, cada despliegue construía el mismo Dockerfile
-    # tres veces.
     build: .
     image: auto-clinic:latest
     restart: unless-stopped
@@ -34,8 +31,6 @@ services:
       bash -c "python manage.py migrate --noinput &&
                daphne -b 0.0.0.0 -p 8000 config.asgi:application"
     healthcheck:
-      # El Host se toma de ALLOWED_HOSTS porque Django rechaza con 400 cualquier
-      # cabecera que no esté en la lista, y 127.0.0.1 no lo está en producción.
       test:
         - CMD-SHELL
         - >
@@ -46,7 +41,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      # Margen para que corran las migraciones antes de empezar a contar fallos
       start_period: 90s
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
@@ -65,9 +59,6 @@ services:
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
       AGENT_MASTER_API_KEY: ${AGENT_MASTER_API_KEY}
       AGENT_ERRORS_API_KEY: ${AGENT_ERRORS_API_KEY}
-      # Bucket privado de Cloudflare R2 (`clinical_media`): fotos de lesiones,
-      # firmas de consentimiento y adjuntos de WhatsApp. Sin estas cuatro, esas
-      # subidas fallan. Los plazos de las URL firmadas tienen valor por defecto.
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
       R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
       R2_BUCKET_NAME: ${R2_BUCKET_NAME}
@@ -104,13 +95,10 @@ services:
       - traefik.http.routers.autoclinic-web.tls.certresolver=letsencrypt
       - traefik.http.services.autoclinic-web.loadbalancer.server.port=80
     depends_on:
-      # service_healthy y no service_started: si nginx abre antes de que las
-      # migraciones terminen, Traefik enruta tráfico a un backend que devuelve 502.
       web:
         condition: service_healthy
 
   celery:
-    # Reutiliza la imagen que construye `web`; sin `build` para no repetirla.
     image: auto-clinic:latest
     restart: unless-stopped
     command: celery -A config worker -l info

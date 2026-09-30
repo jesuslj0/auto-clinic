@@ -37,9 +37,15 @@ from agent.serializers import (
     WorkflowErrorSerializer,
 )
 from agent.realtime import broadcast_clinic, broadcast_session, clinic_unread_total
-from agent.services import apply_delivery_status, mark_session_read, send_staff_message
+from agent.services import (
+    apply_delivery_status,
+    mark_session_read,
+    send_staff_message,
+    signal_staff_typing,
+)
 from agent.whatsapp import WhatsAppError
 from core.authentication import ClinicAgent
+from patients.services import normalize_phone_safe
 from core.mixins import ExportMixin
 from core.permissions import IsAgentClinicKey, IsAgentErrorsKey, IsClinicAdminOrReadOnly, IsStaffOrAdmin
 
@@ -191,7 +197,12 @@ class ConversationSessionViewSet(ExportMixin, viewsets.ModelViewSet):
             history_size = 20
         history_size = max(0, min(history_size, 100))
 
-        session = self.get_queryset().filter(phone=phone).first()
+        # Mismo criterio que `record_message`: los hilos se guardan con el
+        # teléfono normalizado (+34…) y Meta lo manda sin «+». Sin esto no se
+        # encontraba nunca el hilo y el agente contestaba aunque estuviera en
+        # modo humano.
+        normalized = normalize_phone_safe(phone) or phone
+        session = self.get_queryset().filter(phone=normalized).first()
         if session is None:
             # Primer mensaje de este número: no hay hilo todavía, así que no hay
             # nada que pause al agente. Se responde sin crear la sesión, que ya
@@ -616,6 +627,21 @@ class ChatMediaView(LoginRequiredMixin, View):
         response['Cache-Control'] = 'private, no-store, max-age=0'
         response['Referrer-Policy'] = 'no-referrer'
         return response
+
+
+class ChatTypingView(ChatSessionActionMixin, View):
+    """El staff está escribiendo: enseña «escribiendo…» al paciente en WhatsApp.
+
+    Lo llama el compositor mientras se teclea (como mucho cada 20 s). Siempre
+    responde 204, haya salido el aviso o no: quien escribe no tiene nada que
+    hacer con el resultado. Vista de sesión: el `Api-Key` del agente no llega.
+    """
+
+    raise_exception = True
+
+    def post(self, request, session_id):
+        signal_staff_typing(self.get_session(session_id))
+        return HttpResponse(status=204)
 
 
 class ChatSendMessageView(ChatSessionActionMixin, View):

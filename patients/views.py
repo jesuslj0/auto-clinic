@@ -6,7 +6,9 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
 from django.db.models import Case, Count, F, IntegerField, Max, Min, Prefetch, Q, Sum, When
+from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
+from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from rest_framework import viewsets
 from django.urls import reverse, reverse_lazy
@@ -41,7 +43,8 @@ from core.permissions import IsAgentClinicKey, IsStaffOrAdmin
 from patients.filters import PatientFilter
 from patients.models import Patient
 from patients.serializers import PatientSerializer
-from patients.forms import PatientForm
+from patients.forms import PatientEditForm, PatientForm
+from patients.photos import PHOTO_CACHE_CONTROL, log_photo_view, signed_photo_url
 from patients.services import create_patient
 
 
@@ -1404,33 +1407,50 @@ class PatientCreateView(LoginRequiredMixin, CreateView):
         return reverse_lazy('patients:detail', kwargs={'id': self.object.pk})
 
 
-class PatientEditView(LoginRequiredMixin, UpdateView):
+class PatientEditView(PatientScopedMixin, AccessLogMixin, LoginRequiredMixin, UpdateView):
+    """Editar los datos de la ficha y su foto de perfil.
+
+    La lectura queda en `AccessLog` (`AccessLogMixin` registra el GET): el
+    formulario enseña notas y fecha de nacimiento.
+    """
+
     model = Patient
     pk_url_kwarg = 'id'
     context_object_name = 'patient'
     template_name = 'patients/edit_patient.html'
-    form_class = PatientForm
+    form_class = PatientEditForm
 
-    def get_queryset(self):
-        user = self.request.user
-        queryset = Patient.objects.select_related('clinic')
-        if not user.clinic_id:
-            return queryset
-        return queryset.filter(clinic=user.clinic)
-    
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['form'] = self.form_class(instance=self.object)
         context['section'] = 'patients'
         return context
-    
-    def form_valid(self, form):
-        form.save()
-        return super().form_valid(form)
-    
+
     def get_success_url(self):
         return reverse_lazy('patients:detail', kwargs={'id': self.object.pk})
-    
+
+
+class PatientPhotoView(PatientScopedMixin, LoginRequiredMixin, View):
+    """Foto de perfil del paciente: comprueba, registra y redirige a la URL firmada.
+
+    Un paciente de otra clínica es un 404 (`PatientScopedMixin`). Django no sirve
+    el fichero: lo entrega el bucket privado. Caché solo privada y más corta que
+    la firma (`PHOTO_CACHE_CONTROL`). Es una vista de sesión, así que el
+    `Api-Key` del agente no llega aquí.
+    """
+
+    raise_exception = True
+
+    def get(self, request, id):
+        patient = get_object_or_404(self.get_queryset(), pk=id)
+        if not patient.photo:
+            raise Http404('El paciente no tiene foto.')
+        url = signed_photo_url(patient, request.user)
+        log_photo_view(patient, request=request)
+
+        response = HttpResponseRedirect(url)
+        response['Cache-Control'] = PHOTO_CACHE_CONTROL
+        response['Referrer-Policy'] = 'no-referrer'
+        return response
 
 
 class PatientProcedureCreateView(

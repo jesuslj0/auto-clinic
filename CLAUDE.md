@@ -113,7 +113,14 @@ touching it — see `clinical/README.md` for the full picture:
   happens in `save()`, so every intake path goes through it. An attachment is
   frozen once uploaded, and soft-deleting it keeps the bucket object. Consent
   signatures live in the same private bucket under their own key prefix, with
-  the same rules.
+  the same rules. So does the patient's profile photo (`Patient.photo`,
+  `patients/photos.py`, prefix `patient-photos/`): cropped to a 512 px square
+  JPEG without metadata, served only via `patients:photo` (AccessLog; private
+  browser cache of 240 s, below the 300 s signature, because avatars repaint in
+  live lists — URLs carry `?v=<updated_at>`), rendered by
+  `patients/_avatar.html` (directory, patient file, chat list and thread),
+  excluded from the API — but, unlike clinical photos, replaceable and removable
+  (the old object is deleted on commit).
 - **Serving any clinical file goes through `signed_url_for(document, user)`**,
   which checks permission and signs in the same function — there is no
   sign-without-checking path. It works for anything exposing `.file` and
@@ -211,10 +218,10 @@ Panel map (namespace in brackets):
 | `/` (`core`) | `buscar/`, `login/`, `logout/`, `cuenta/` (`perfil/`, `horario/`, `contrasena/`), `clinica/` (`editar/`, `integraciones/` → redirect to `/agente/`), `panel/citas/<uuid>/` (`gestionar/`, `accion/`, `resumen/`) |
 | `/citas/` (`appointments`) | `crear/`, `listado/`, `<uuid>/procedimiento/`, `mi-perfil/` (redirect) |
 | `/profesionales/` (`professionals`) | `crear/`, `<pk>/editar/` — top-level, views live in `appointments` (`appointments/professional_urls.py`) |
-| `/pacientes/` (`patients`) | `crear/`, `<id>/` + tabs `anamnesis/`, `alertas/`, `lesiones/`, `consentimientos/`, `procedimientos/`, `editar/` |
+| `/pacientes/` (`patients`) | `crear/`, `<id>/` + tabs `anamnesis/`, `alertas/`, `lesiones/`, `consentimientos/`, `procedimientos/`, `editar/`, `foto/` |
 | `/servicios/` (`services`) | `crear/`, `<pk>/editar/`, `<pk>/eliminar/` |
 | `/conocimiento/` (`knowledge`) | `crear/`, `<uuid>/editar/`, `<uuid>/eliminar/` |
-| `/chats/` (`agent`) | `agente/`, `lista/`, `adjuntos/<uuid>/`, `<uuid>/` (`mensajes/`, `enviar/`, `modo/`) |
+| `/chats/` (`agent`) | `agente/`, `lista/`, `adjuntos/<uuid>/`, `<uuid>/` (`mensajes/`, `enviar/`, `escribiendo/`, `modo/`) |
 | `/agente/` (`agent_settings`, admins only) | test chat at the root («Chat»), `probar/enviar/`, `personalidad/`, `configuracion/` (Meta credentials + webhook, two forms told apart by a hidden `form` field) — views in `agent/settings_views.py` |
 | `/facturacion/` (`billing`) | `nueva/`, `pendientes/`, `<pk>/` (`emitir/`, `anular/`, `cobrar/`, `procedimientos/`, `eliminar/`) |
 | `/clinico/` (`clinical`) | `adjuntos/<uuid>/`, `consentimientos/<uuid>/firma/` |
@@ -284,6 +291,16 @@ listener, so the partial can be included any number of times.
 Browser side: `static/js/chat_live.js` (loaded by `base.html` for users with a clinic) keeps **one** socket per page, reconnects with exponential backoff (1 s → 30 s), treats close codes 4401/4403 as final, falls back to polling every 15 s after 3 failures, and emits `resync` to subscribers whenever events may have been missed. It keeps the sidebar unread badge (`[data-chat-unread]`) and the tab title up to date on every page. `static/js/chat_inbox.js` (Alpine `chatInbox`) fetches `GET /chats/<id>/mensajes/?after=<last id in DOM>` and `GET /chats/lista/`; dedup is by `data-message-id`. Structural changes (agent mode, clinic switch, 24 h window reopening) reload the page — never while a message is being typed.
 
 Delivery receipts (✓ / ✓✓ / blue ✓✓ / failed): n8n forwards Meta's `statuses` to `POST /api/agent/messages/status/` → `agent.services.apply_delivery_status()`, which only moves a status **forward** (Meta does not guarantee order), fills `delivered_at`/`seen_at` once (`read_at` is the *clinic* reading an inbound message, not the patient), saves with `save()` (audited) and emits `chat_message`; the client re-renders that bubble with `?only=<id>`. The mobile menu button carries the same unread badge as the sidebar.
+
+Human mode is enforced in n8n: on the real WhatsApp path the orchestrator calls
+`GET /api/agent/sessions/should-reply/` (phone normalized like `record_message`)
+after registering the message and ingesting media; if the agent must not reply
+it stops there (the message stays in the panel). If it must, it first sends
+Meta's typing indicator («escribiendo…», node `Mostrar Escribiendo`). While staff
+types in the composer, `POST /chats/<id>/escribiendo/` →
+`agent.services.signal_staff_typing()` does the same from Django (throttled to one
+call per thread every 20 s, silent on failure). Both mark the patient's last
+message as **read** in WhatsApp — Meta offers no typing without read.
 
 ### Background tasks (Celery)
 

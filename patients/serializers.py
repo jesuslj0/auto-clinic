@@ -8,7 +8,9 @@ from patients.services import create_patient, normalize_phone
 class PatientSerializer(ClinicScopedSerializerMixin, serializers.ModelSerializer):
     class Meta:
         model = Patient
-        fields = "__all__"
+        # `photo` fuera: la API es la puerta del agente (n8n) y la foto solo se
+        # sirve por sesión, firmada y con `AccessLog` (`patients:photo`).
+        exclude = ("photo",)
         read_only_fields = ("created_at", "updated_at")
 
     def create(self, validated_data):
