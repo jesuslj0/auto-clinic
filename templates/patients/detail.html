@@ -22,10 +22,8 @@ Ficha del paciente. Tres piezas, de arriba abajo:
 
     <div class="grid items-start gap-6 xl:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
         <aside class="rounded-3xl bg-surface p-6 shadow-soft ring-1 ring-line xl:sticky xl:top-24">
-            <div class="flex items-start gap-4">
-                <span aria-hidden="true" class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-gradient text-base font-semibold uppercase text-white shadow-glow">
-                    {{ patient.first_name|slice:":1" }}{{ patient.last_name|slice:":1" }}
-                </span>
+            <div class="flex items-center gap-4">
+                {% include 'patients/_avatar.html' with patient=patient classes="h-16 w-16 text-lg" %}
                 <div class="min-w-0">
                     <h3 class="break-words text-lg font-semibold leading-tight text-content">{{ patient }}</h3>
                     <p class="mt-1 text-xs text-content-subtle">Alta el {{ patient.created_at|date:"j \d\e F \d\e Y" }}</p>

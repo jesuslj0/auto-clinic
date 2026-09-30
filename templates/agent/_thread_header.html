@@ -9,11 +9,18 @@ Recibe `session` y `query`.
             <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
         </svg>
     </a>
-    <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-soft-strong text-sm font-semibold text-brand-fg">
-        {% if session.patient %}{{ session.patient.first_name|first|upper }}{{ session.patient.last_name|first|upper }}{% else %}?{% endif %}
-    </span>
+    {% if session.patient %}
+    {% include 'patients/_avatar.html' with patient=session.patient classes="h-10 w-10 text-sm" %}
+    {% else %}
+    <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-soft-strong text-sm font-semibold text-brand-fg">?</span>
+    {% endif %}
     <div class="min-w-0 flex-1">
-        <p class="truncate text-sm font-semibold text-content">{{ session.patient|default:session.phone }}</p>
+        {% if session.patient %}
+        <a href="{% url 'patients:detail' session.patient.id %}" title="Ver la ficha de {{ session.patient }}"
+           class="block truncate text-sm font-semibold text-content transition hover:text-brand-fg hover:underline underline-offset-2">{{ session.patient }}</a>
+        {% else %}
+        <p class="truncate text-sm font-semibold text-content">{{ session.phone }}</p>
+        {% endif %}
         <p class="truncate text-xs text-content-subtle">
             {{ session.phone }}
             {% if session.last_interaction %} · último mensaje {{ session.last_interaction|timesince }} atrás{% endif %}
@@ -28,20 +35,17 @@ Recibe `session` y `query`.
               class="flex items-center gap-0.5 rounded-full bg-muted-strong p-0.5 ring-1 ring-line">
             {% csrf_token %}
             {% if session.agent_paused %}
-            <button type="submit" class="rounded-full px-3 py-1 text-xs font-semibold text-content-subtle transition hover:text-brand-fg">
-                Agente IA
+            <button type="submit" class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-content-subtle transition hover:text-brand-fg">
+                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" /></svg><span class="max-sm:sr-only">Agente IA</span>
             </button>
-            <span class="rounded-full bg-tertiary-600 px-3 py-1 text-xs font-semibold text-white">Modo humano</span>
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-tertiary-600 px-3 py-1 text-xs font-semibold text-white"><svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg><span class="max-sm:sr-only">Modo humano</span></span>
             {% else %}
-            <span class="rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white">Agente IA</span>
-            <button type="submit" class="rounded-full px-3 py-1 text-xs font-semibold text-content-subtle transition hover:text-tertiary-600">
-                Modo humano
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white"><svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" /></svg><span class="max-sm:sr-only">Agente IA</span></span>
+            <button type="submit" class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-content-subtle transition hover:text-tertiary-600">
+                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg><span class="max-sm:sr-only">Modo humano</span>
             </button>
             {% endif %}
         </form>
-        {% if session.patient %}
-        <a href="{% url 'patients:detail' session.patient.id %}" class="btn-outlined px-3 py-1.5 text-xs">Ver ficha</a>
-        {% endif %}
     </div>
 </header>
 

@@ -113,7 +113,14 @@ touching it — see `clinical/README.md` for the full picture:
   happens in `save()`, so every intake path goes through it. An attachment is
   frozen once uploaded, and soft-deleting it keeps the bucket object. Consent
   signatures live in the same private bucket under their own key prefix, with
-  the same rules.
+  the same rules. So does the patient's profile photo (`Patient.photo`,
+  `patients/photos.py`, prefix `patient-photos/`): cropped to a 512 px square
+  JPEG without metadata, served only via `patients:photo` (AccessLog; private
+  browser cache of 240 s, below the 300 s signature, because avatars repaint in
+  live lists — URLs carry `?v=<updated_at>`), rendered by
+  `patients/_avatar.html` (directory, patient file, chat list and thread),
+  excluded from the API — but, unlike clinical photos, replaceable and removable
+  (the old object is deleted on commit).
 - **Serving any clinical file goes through `signed_url_for(document, user)`**,
   which checks permission and signs in the same function — there is no
   sign-without-checking path. It works for anything exposing `.file` and
@@ -211,7 +218,7 @@ Panel map (namespace in brackets):
 | `/` (`core`) | `buscar/`, `login/`, `logout/`, `cuenta/` (`perfil/`, `horario/`, `contrasena/`), `clinica/` (`editar/`, `integraciones/` → redirect to `/agente/`), `panel/citas/<uuid>/` (`gestionar/`, `accion/`, `resumen/`) |
 | `/citas/` (`appointments`) | `crear/`, `listado/`, `<uuid>/procedimiento/`, `mi-perfil/` (redirect) |
 | `/profesionales/` (`professionals`) | `crear/`, `<pk>/editar/` — top-level, views live in `appointments` (`appointments/professional_urls.py`) |
-| `/pacientes/` (`patients`) | `crear/`, `<id>/` + tabs `anamnesis/`, `alertas/`, `lesiones/`, `consentimientos/`, `procedimientos/`, `editar/` |
+| `/pacientes/` (`patients`) | `crear/`, `<id>/` + tabs `anamnesis/`, `alertas/`, `lesiones/`, `consentimientos/`, `procedimientos/`, `editar/`, `foto/` |
 | `/servicios/` (`services`) | `crear/`, `<pk>/editar/`, `<pk>/eliminar/` |
 | `/conocimiento/` (`knowledge`) | `crear/`, `<uuid>/editar/`, `<uuid>/eliminar/` |
 | `/chats/` (`agent`) | `agente/`, `lista/`, `adjuntos/<uuid>/`, `<uuid>/` (`mensajes/`, `enviar/`, `modo/`) |

@@ -360,13 +360,15 @@ Estado: **hecha en Django y probada en navegador**; falta conectar n8n (ver abaj
 Nada de esto bloquea seguir con la fase 3; todo se hace al conectar la Cloud API
 o antes de desplegar.
 
-1. **Enganchar `WA-Media-Ingest` desde el orquestador** («WA-Inbound-Orchestrator
-   con buffer», activo). En «Normalizar Mensaje» (rama Meta) sacar
-   `msg.image.id` / `msg.audio.id` (`voice` también es audio); tras
-   «Registrar Mensaje Entrante», si hay media_id, llamar al subflujo con
-   `message_id` (id que devuelve Django), `media_id`, `whatsapp_token` y
-   `django_auth_header` del Config Loader. No tocado todavía porque es el flujo
-   en producción.
+1. ~~**Enganchar `WA-Media-Ingest` desde el orquestador**~~ — hecho el
+   2026-09-30. «Normalizar Mensaje» (ya solo Cloud API, sin rama WaAPI) saca
+   `media_id` de `image`/`audio` y pasa el pie de foto como texto; tras
+   «Registrar Mensaje Entrante», «¿Tiene Adjunto?» → «Ingerir Adjunto»
+   (Execute Workflow, `onError` continúa: si falla la descarga el paciente
+   recibe respuesta igual). Las fotos van al agente como aviso (no ve la
+   imagen); las notas de voz se guardan y reciben la respuesta «solo texto».
+   WA-Media-Ingest publicado (n8n 2.x exige publicar los subflujos) y en
+   Graph API v26.0. Falta probarlo con una foto real.
 2. ~~**Purga general de n8n**~~ — hecho el 2026-09-27: variables de purga
    puestas en `n8n.alt4ir.online` (ojo: ESE es el n8n en uso, no el contenedor
    local de `/home/jesuslj/n8n`). Queda comprobar que las ejecuciones antiguas

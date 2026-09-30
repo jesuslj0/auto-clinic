@@ -1,0 +1,19 @@
+{% comment %}
+Avatar de un paciente: su foto de perfil o, si no tiene, sus iniciales.
+
+Recibe `patient` y `classes` (tamaño y texto, p. ej. "h-10 w-10 text-sm").
+
+La foto va SIEMPRE por `patients:photo`, que comprueba la clínica, deja
+`AccessLog` y redirige a una URL firmada del bucket privado; nunca se pinta la
+clave ni una URL del bucket. Las iniciales quedan debajo: si la imagen no carga
+(sin R2 en local, firma caducada) se retira y se ven ellas.
+{% endcomment %}
+<span class="relative flex {{ classes }} flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft-strong font-semibold text-brand-fg" aria-hidden="true">
+    {{ patient.first_name|first|upper }}{{ patient.last_name|first|upper }}
+    {% if patient.photo %}
+    <img src="{% url 'patients:photo' patient.id %}?v={{ patient.updated_at|date:'U' }}" alt="" loading="lazy" decoding="async"
+         referrerpolicy="no-referrer"
+         onerror="this.remove()"
+         class="absolute inset-0 h-full w-full object-cover">
+    {% endif %}
+</span>
