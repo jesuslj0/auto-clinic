@@ -80,8 +80,10 @@ cliente para no pintar dos veces un mensaje que llega por el socket.
             </span>
             {% endif %}
             {{ message.sent_at|default:message.created_at|date:"H:i" }}
-            {% if message.direction == 'outbound' and message.status %}
+            {% if message.direction == 'outbound' and message.status and not message.session.is_test %}
             {% comment %}
+            Sin acuses en los hilos de prueba: nunca salen por WhatsApp, así que no hay
+            entrega ni lectura que mostrar.
             Acuse de WhatsApp, como en la app: reloj, ✓, ✓✓ y ✓✓ en azul. Se
             repinta solo cuando llega un acuse nuevo (`chat_inbox.js` pide
             `?only=<id>`). Los colores son literales porque van sobre la burbuja
