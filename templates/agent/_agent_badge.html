@@ -1,13 +1,11 @@
 {% comment %}
-Badge único del agente + botón de recarga que pregunta a n8n (/healthz).
-Parámetros: `enabled` (agent_enabled), `toggle` (si es el interruptor general, con
-formulario) y `next` (destino tras el POST). Sin comprobar, muestra el interruptor de
-la clínica; tras comprobar, «Agente en línea · N ms» o «Agente sin conexión». Con el
-agente apagado, el badge sigue diciéndolo (es lo que manda) y el resultado va en el
-tooltip del botón.
+Badge único del agente. Pulsarlo SOLO recarga su estado: pregunta a n8n (/healthz)
+y muestra «Agente en línea · N ms» o «Agente sin conexión». No enciende ni apaga
+nada: el interruptor general vive en Ajustes del agente (con aviso en modal).
+Parámetro: `enabled` (agent_enabled). Con el agente apagado, el badge sigue
+diciéndolo (es lo que manda) y el resultado va en el tooltip.
 {% endcomment %}
-<div x-data="{ state: 'idle', detail: '', ms: null, enabled: {{ enabled|yesno:'true,false' }},
-        get live() { return this.enabled && this.state !== 'idle' && this.state !== 'loading'; },
+<button type="button" x-data="{ state: 'idle', detail: '', ms: null, enabled: {{ enabled|yesno:'true,false' }},
         async check() {
             if (this.state === 'loading') return;
             this.state = 'loading';
@@ -19,40 +17,20 @@ tooltip del botón.
                 this.state = 'down'; this.detail = 'No se pudo completar la comprobación.'; this.ms = null;
             }
         } }"
-     class="inline-flex items-center gap-1.5">
-    {% if toggle %}
-    <form method="post" action="{% url 'agent:agent-switch' %}">
-        {% csrf_token %}
-        <input type="hidden" name="next" value="{{ next }}">
-        <button type="submit" :title="enabled ? 'Desactivar el agente en toda la clínica' : 'Activar el agente en toda la clínica'"
-    {% else %}
-    <div>
-        <span
-    {% endif %}
-                class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ring-1 transition"
-                :class="!enabled ? 'bg-muted-strong text-content-muted ring-line-strong' :
-                        state === 'ok' ? 'bg-success-soft text-success ring-success-line' :
-                        state === 'down' ? 'bg-danger-soft text-danger ring-danger-line' :
-                        '{% if toggle %}bg-brand-soft text-brand-fg ring-brand-line{% else %}bg-success-soft text-success ring-success-line{% endif %}'">
-            <span class="h-2 w-2 rounded-full"
-                  :class="!enabled ? 'bg-content-faint' : state === 'ok' ? 'bg-success' : state === 'down' ? 'bg-danger' : '{% if toggle %}bg-brand-500{% else %}bg-success{% endif %}'"></span>
-            <span x-text="!enabled ? '{% if toggle %}Agente apagado{% else %}Agente en pausa{% endif %}'
-                          : state === 'ok' ? 'Agente en línea · ' + ms + ' ms'
-                          : state === 'down' ? 'Agente sin conexión'
-                          : 'Agente activo'">{% if enabled %}Agente activo{% elif toggle %}Agente apagado{% else %}Agente en pausa{% endif %}</span>
-    {% if toggle %}
-        </button>
-    </form>
-    {% else %}
-        </span>
-    </div>
-    {% endif %}
-    <button type="button" @click="check()" :disabled="state === 'loading'"
-            class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-content-muted ring-1 ring-line transition hover:bg-muted-strong disabled:opacity-60"
-            :title="state === 'idle' || state === 'loading' ? 'Comprobar si el agente (n8n) responde' : detail"
-            aria-label="Comprobar si el agente responde">
-        <svg class="h-4 w-4" :class="state === 'loading' && 'animate-spin'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 20v-5h-5M5.6 15A8 8 0 0 0 20 12M18.4 9A8 8 0 0 0 4 12"/>
-        </svg>
-    </button>
-</div>
+        @click="check()" :disabled="state === 'loading'"
+        :title="state === 'idle' || state === 'loading' ? 'Pulsa para comprobar si el agente (n8n) responde' : detail + ' · Pulsa para volver a comprobar'"
+        class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ring-1 transition disabled:opacity-70"
+        :class="!enabled ? 'bg-muted-strong text-content-muted ring-line-strong' :
+                state === 'ok' ? 'bg-success-soft text-success ring-success-line' :
+                state === 'down' ? 'bg-danger-soft text-danger ring-danger-line' :
+                'bg-success-soft text-success ring-success-line'">
+    <span class="h-2 w-2 rounded-full"
+          :class="!enabled ? 'bg-content-faint' : state === 'down' ? 'bg-danger' : 'bg-success'"></span>
+    <span x-text="!enabled ? 'Agente apagado'
+                  : state === 'ok' ? 'Agente en línea · ' + ms + ' ms'
+                  : state === 'down' ? 'Agente sin conexión'
+                  : 'Agente activo'">{% if enabled %}Agente activo{% else %}Agente apagado{% endif %}</span>
+    <svg class="h-3.5 w-3.5 opacity-70" :class="state === 'loading' && 'animate-spin'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 20v-5h-5M5.6 15A8 8 0 0 0 20 12M18.4 9A8 8 0 0 0 4 12"/>
+    </svg>
+</button>

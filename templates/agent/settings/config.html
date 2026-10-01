@@ -1,10 +1,10 @@
 {% extends 'agent/settings/_layout.html' %}
 
 {% block tab_heading %}Configuración de WhatsApp{% endblock %}
-{% block tab_subheading %}Conecta el número de tu clínica con la WhatsApp Cloud API de Meta. Se hace una vez: primero las credenciales, después el webhook.{% endblock %}
+{% block tab_subheading %}Sigue los pasos para conectar el número de tu clínica con la WhatsApp Cloud API de Meta.{% endblock %}
 
 {% block tab_content %}
-<div class="space-y-6" x-data="{ copied: '' }">
+<div class="space-y-6" x-data="{ copied: '', confirmSwitch: false }" @keydown.escape.window="confirmSwitch = false">
 
     {# ── 1. Credenciales de Meta ── #}
     <section aria-labelledby="config-meta" class="grid gap-6 [&>*]:min-w-0 lg:grid-cols-5 lg:items-start">
@@ -183,5 +183,59 @@
             </ol>
         </aside>
     </section>
+
+    {# ── Zona peligrosa: apagar / activar el agente (no es un paso de la conexión) ── #}
+    <section aria-labelledby="config-switch" class="grid gap-6 border-t border-line pt-6 [&>*]:min-w-0 lg:grid-cols-5 lg:items-start">
+        <div class="space-y-3 lg:col-span-3">
+            <h3 id="config-switch" class="flex items-center gap-2 text-sm font-semibold text-content">
+                Zona peligrosa
+            </h3>
+            <div class="flex flex-col gap-4 rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:flex-row sm:items-center sm:p-6">
+                <button type="button" @click="confirmSwitch = true"
+                        class="{% if clinic_obj.agent_enabled %}btn-danger{% else %}btn-primary{% endif %} inline-flex flex-shrink-0 items-center justify-center gap-2">
+                    {% if clinic_obj.agent_enabled %}
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+                    Apagar el agente
+                    {% else %}
+                    Activar el agente
+                    {% endif %}
+                </button>
+                <p class="text-sm text-content-subtle">
+                    {% if clinic_obj.agent_enabled %}
+                    Detiene las respuestas automáticas en todos los chats de la clínica. Los mensajes seguirán llegando al panel.
+                    {% else %}
+                    El agente está apagado: ningún chat recibe respuestas automáticas. Actívalo para que vuelva a responder.
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <div x-cloak x-show="confirmSwitch" class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="agent-switch-title">
+        <div x-show="confirmSwitch" x-transition.opacity @click="confirmSwitch = false" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <form method="post" action="{% url 'agent:agent-switch' %}" x-show="confirmSwitch" x-transition
+              class="relative w-full max-w-md rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            {% if clinic_obj.agent_enabled %}
+            <h3 id="agent-switch-title" class="text-base font-semibold text-content">¿Apagar el agente en toda la clínica?</h3>
+            <p class="mt-2 text-sm text-content-subtle">
+                Ningún chat recibirá respuestas automáticas mientras esté apagado: los pacientes que escriban
+                por WhatsApp no obtendrán contestación hasta que alguien del equipo la escriba a mano o lo vuelvas a activar.
+            </p>
+            {% else %}
+            <h3 id="agent-switch-title" class="text-base font-semibold text-content">¿Activar el agente en toda la clínica?</h3>
+            <p class="mt-2 text-sm text-content-subtle">
+                El agente volverá a responder automáticamente los chats de la clínica que no estén en modo humano.
+            </p>
+            {% endif %}
+            <div class="mt-5 flex justify-end gap-2">
+                <button type="button" @click="confirmSwitch = false" class="btn-secondary">Cancelar</button>
+                <button type="submit" class="{% if clinic_obj.agent_enabled %}btn-danger{% else %}btn-primary{% endif %}">
+                    {% if clinic_obj.agent_enabled %}Sí, apagar el agente{% else %}Sí, activar el agente{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
 </div>
 {% endblock %}

@@ -23,16 +23,7 @@ con su formulario; aquí solo se pinta, cada vista marca el suyo con `agent_tab`
             </div>
         </div>
         <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
-            {% include 'agent/_agent_badge.html' with enabled=clinic_obj.agent_enabled toggle=False %}
-            {% if is_connected %}
-            <span class="inline-flex items-center gap-2 rounded-full bg-success-soft px-3 py-1.5 text-sm font-semibold text-success ring-1 ring-success-line">
-                <span class="h-2 w-2 rounded-full bg-success"></span>WhatsApp conectado
-            </span>
-            {% else %}
-            <span class="inline-flex items-center gap-2 rounded-full bg-warning-soft px-3 py-1.5 text-sm font-semibold text-warning ring-1 ring-warning-line">
-                <span class="h-2 w-2 rounded-full bg-warning"></span>WhatsApp sin conectar
-            </span>
-            {% endif %}
+            {% include 'agent/_agent_badge.html' with enabled=clinic_obj.agent_enabled %}
         </div>
     </div>
 

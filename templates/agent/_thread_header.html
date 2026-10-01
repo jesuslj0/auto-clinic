@@ -19,7 +19,7 @@ Recibe `session` y `query`.
         {% endif %}
         {% comment %}WhatsApp no da presencia («en línea») ni «escribiendo» del paciente: solo lo que sí
         sabemos, la hora de su último mensaje y lo que queda de la ventana de 24 h.{% endcomment %}
-        <p x-text="inboundStatus" class="truncate text-xs text-content-subtle">{% if session.last_interaction %}Último mensaje del paciente: {{ session.last_interaction|timesince }}{% else %}El paciente aún no ha escrito{% endif %}</p>
+        <p x-text="inboundStatus" class="truncate text-xs text-content-subtle max-sm:hidden">{% if session.last_interaction %}Último mensaje hace {{ session.last_interaction|timesince }}{% else %}Aún sin mensajes del paciente{% endif %}</p>
     </div>
     <div class="flex flex-shrink-0 items-center gap-1.5 sm:gap-2">
         {% comment %}
