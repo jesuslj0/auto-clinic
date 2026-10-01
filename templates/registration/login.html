@@ -9,59 +9,131 @@
     <link rel="icon" type="image/png" sizes="16x16" href="{% static 'img/favicon/favicon-16x16.png' %}">
     <title>Iniciar sesión — Auto Clinic</title>
     {% include "partials/_head_theme.html" %}
+    <style>
+        /* Autorrelleno de Chrome/Safari: pinta el campo de azul claro con texto
+           negro, que sobre estos campos transparentes rompe la tarjeta. El texto
+           se fuerza a blanco y el fondo se «congela» con una transición eterna. */
+        .login-card input:-webkit-autofill,
+        .login-card input:-webkit-autofill:hover,
+        .login-card input:-webkit-autofill:focus {
+            -webkit-text-fill-color: #fff;
+            caret-color: #fff;
+            transition: background-color 600000s 0s, color 600000s 0s;
+        }
+    </style>
 </head>
-<body class="h-full antialiased text-content">
-    <div class="flex min-h-full">
+{% comment %}
+Toda la página es un degradado propio de esta pantalla (violeta oscuro a la
+izquierda → lila de marca → malva a la derecha), el mismo en los dos temas. Por
+eso aquí se usan blanco y la paleta `brand-*` literales y no los tokens de
+superficie: no hay superficie del tema, todo va sobre la marca.
+{% endcomment %}
+<body class="relative min-h-full overflow-x-hidden bg-[linear-gradient(120deg,#1e0b45_0%,#3b1580_30%,#6d28d9_62%,#8f4fd8_85%,#b06ccf_100%)] text-white antialiased">
+    <!-- Formas decorativas, detrás de todo -->
+    <div aria-hidden="true" class="pointer-events-none fixed inset-0 overflow-hidden">
+        <div class="absolute right-[-6rem] top-1/4 h-[30rem] w-[30rem] rounded-full bg-brand-400/25 blur-3xl"></div>
+        <div class="absolute -bottom-32 left-1/4 h-[26rem] w-[26rem] rounded-full bg-brand-600/20 blur-3xl"></div>
+    </div>
 
-        <!-- Panel de marca (izquierda) -->
-        <div class="relative hidden w-1/2 flex-col justify-between overflow-hidden bg-brand-gradient p-12 text-white lg:flex">
-            <!-- Formas decorativas -->
-            <div aria-hidden="true" class="pointer-events-none absolute -right-16 -top-16 h-72 w-72 rounded-full bg-white/10 blur-2xl"></div>
-            <div aria-hidden="true" class="pointer-events-none absolute -bottom-24 -left-10 h-80 w-80 rounded-full bg-brand-900/30 blur-3xl"></div>
+    {# Sin ancho máximo: cada columna es la mitad real de la pantalla. #}
+    <div class="relative flex min-h-screen flex-col lg:flex-row lg:items-stretch">
 
-            <div class="relative flex items-center gap-3">
+        {% comment %}
+        Esquinas derechas, solo en escritorio, a la misma altura que el logo y que
+        las cifras de la izquierda. Arriba, un aviso cierto (esta pantalla es solo
+        para el personal de la clínica) que equilibra el logo; abajo, la autoría.
+        {% endcomment %}
+        <div class="absolute right-12 top-12 z-10 hidden h-11 items-center lg:flex">
+            <span class="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-medium text-white/85 shadow-[inset_0_1px_0_rgb(255_255_255/0.2)] ring-1 ring-inset ring-white/20 backdrop-blur-md">
+                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                </svg>
+                Acceso solo para profesionales
+            </span>
+        </div>
+        <a href="https://propus.ink" target="_blank" rel="noopener noreferrer"
+           class="absolute bottom-12 right-12 z-10 hidden items-baseline gap-1.5 text-xs text-white/60 transition hover:text-white lg:flex">
+            Creado por <span class="text-sm font-semibold tracking-[0.18em] text-white/85">PROPUS</span>
+            <span class="sr-only">(se abre en una pestaña nueva)</span>
+        </a>
+
+        <!-- Marca y hero (izquierda, solo escritorio) -->
+        {% comment %}
+        El texto va centrado en vertical, igual que la tarjeta en su columna: las
+        dos columnas miden siempre lo mismo, así que sus centros coinciden a
+        cualquier tamaño. Logo y cifras van a las esquinas en posición absoluta,
+        fuera del cálculo; el `py-32` les guarda sitio en pantallas bajas.
+        {% endcomment %}
+        {# Desde xl mide media pantalla menos media tarjeta (14rem): la tarjeta empieza justo donde acaba esta columna y queda centrada en la pantalla. #}
+        <div class="relative hidden flex-shrink-0 items-center px-12 py-32 lg:flex lg:w-1/2 xl:w-[calc(50%-14rem)]">
+            <div class="absolute left-12 top-12 flex items-center gap-3">
                 <img src="{% static 'img/logo-autoclinic-sm.jpg' %}" alt="AutoClinic" class="h-11 w-11 rounded-2xl object-cover">
                 <span class="text-sm font-semibold uppercase tracking-[0.24em] text-white/80">Auto Clinic</span>
             </div>
 
-            <div class="relative max-w-md">
+            <div class="max-w-md">
                 <h2 class="text-4xl font-semibold leading-tight">Gestiona tu clínica con claridad.</h2>
-                <p class="mt-4 text-base text-white/80">Citas, pacientes y agenda en un solo lugar. El control completo de tu clínica de podología, desde la historia clínica hasta el seguimiento de cada lesión.</p>
+                <p class="mt-4 text-base text-white/80">Tu agente de WhatsApp atiende a pacientes a cualquier hora; tú mantienes el control total de la clínica. Citas, pacientes, chats, procedimientos y facturas en un solo lugar.</p>
+                {# Cristal sobre el degradado: blanco translúcido + desenfoque del fondo. #}
+                <a href="https://propus.ink/proyectos/agente-whatsapp" target="_blank" rel="noopener noreferrer"
+                   class="mt-8 inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-2.5 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.25),0_8px_24px_-12px_rgb(0_0_0/0.35)] ring-1 ring-inset ring-white/25 backdrop-blur-md transition duration-300 ease-out hover:-translate-y-0.5 hover:bg-white/20 hover:ring-white/40 hover:shadow-[inset_0_1px_0_rgb(255_255_255/0.35),0_12px_28px_-12px_rgb(0_0_0/0.45)] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70 active:translate-y-0">
+                    Ver más
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                    </svg>
+                    <span class="sr-only">(se abre en una pestaña nueva)</span>
+                </a>
             </div>
 
-            <div class="relative flex items-center gap-6 text-sm text-white/70">
+            <div class="absolute bottom-12 left-12 flex w-max items-center gap-5 whitespace-nowrap text-sm text-white/70">
                 <div>
-                    <p class="text-2xl font-semibold text-white">+24h</p>
-                    <p>Recordatorios automáticos</p>
+                    <p class="text-2xl font-semibold text-white">24h</p>
+                    <p>Agente operativo</p>
                 </div>
                 <div class="h-10 w-px bg-white/20"></div>
                 <div>
                     <p class="text-2xl font-semibold text-white">100%</p>
                     <p>Datos seguros y accesibles</p>
                 </div>
+                <div class="h-10 w-px bg-white/20"></div>
+                {# Recordatorios por WhatsApp 24 h y 3 h antes de la cita (flujos `WA-Reminder-*` de n8n; si se apagan, esto deja de ser verdad). #}
+                <div>
+                    <p class="text-2xl font-semibold text-white">24h y 3h</p>
+                    <p>Recordatorios antes de cada cita</p>
+                </div>
             </div>
         </div>
 
         <!-- Formulario (derecha) -->
-        <div class="relative flex w-full flex-col justify-center px-6 py-12 sm:px-12 lg:w-1/2">
-            <!-- Halo sutil solo en móvil -->
-            <div aria-hidden="true" class="pointer-events-none absolute -top-20 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-brand-gradient opacity-10 blur-3xl lg:hidden"></div>
+        <div class="flex w-full flex-1 flex-col items-center justify-center px-5 py-10 sm:px-12 lg:w-1/2 xl:w-auto xl:items-start xl:px-0">
+            <!-- Marca en móvil, donde no hay hero -->
+            <div class="mb-6 flex items-center gap-3 lg:hidden">
+                <img src="{% static 'img/logo-autoclinic-sm.jpg' %}" alt="AutoClinic" class="h-10 w-10 rounded-2xl object-cover">
+                <span class="text-sm font-semibold uppercase tracking-[0.24em] text-white/85">Auto Clinic</span>
+            </div>
 
-            <div class="relative mx-auto w-full max-w-sm">
-                <div class="mb-8 flex flex-col items-center text-center">
-                    <h1 class="text-2xl font-semibold tracking-tight text-content">Bienvenido de nuevo</h1>
-                    <p class="mt-1 text-sm text-content-subtle">Introduce tus credenciales para acceder.</p>
+            {% comment %}
+            Tarjeta de cristal neutro: blanco muy translúcido, sin tinte, con el
+            fondo desenfocado detrás. El brillo de arriba (sombra interior blanca)
+            es lo que la hace leer como cristal.
+            {% endcomment %}
+            {# En escritorio el © cuelga debajo en absoluto: así solo la tarjeta cuenta para centrar. #}
+            <div class="relative w-full max-w-md">
+            <div class="login-card w-full rounded-[2rem] bg-white/10 p-7 shadow-[inset_0_1px_0_rgb(255_255_255/0.3),0_30px_60px_-20px_rgb(46_16_101/0.45)] ring-1 ring-inset ring-white/25 backdrop-blur-2xl sm:p-9">
+                <div class="mb-7 text-center">
+                    <h1 class="text-2xl font-semibold tracking-tight text-white">Bienvenido de nuevo</h1>
+                    <p class="mt-1 text-sm text-white/75">Introduce tus credenciales para acceder.</p>
                 </div>
 
                 <!-- Errores generales -->
                 {% if form.non_field_errors %}
-                <div class="mb-5 flex items-start gap-2 rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line">
-                    <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-danger" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <div class="mb-5 flex items-start gap-2 rounded-2xl bg-rose-600/30 px-4 py-3 ring-1 ring-inset ring-rose-100/40" role="alert">
+                    <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
                     </svg>
                     <div>
                         {% for error in form.non_field_errors %}
-                        <p class="text-sm text-danger">{{ error }}</p>
+                        <p class="text-sm font-medium text-white">{{ error }}</p>
                         {% endfor %}
                     </div>
                 </div>
@@ -72,12 +144,12 @@
 
                     <!-- Email -->
                     <div>
-                        <label for="{{ form.username.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">
+                        <label for="{{ form.username.id_for_label }}" class="mb-1.5 block text-sm font-medium text-white/90">
                             {{ form.username.label }}
                         </label>
                         <div class="relative">
-                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-content-faint">
-                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-white/60">
+                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
                                 </svg>
                             </span>
@@ -90,60 +162,68 @@
                                 autofocus
                                 required
                                 placeholder="tucorreo@ejemplo.com"
-                                class="block w-full rounded-xl border {% if form.username.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface py-2.5 pl-11 pr-4 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                                class="block w-full rounded-xl border bg-transparent py-2.5 pl-11 pr-4 text-sm text-white placeholder-white/55 transition {% if form.username.errors %}border-rose-200{% else %}border-white/40 hover:border-white/60{% endif %} focus:border-white focus:outline-none focus:ring-2 focus:ring-white/30"
                             >
                         </div>
                         {% if form.username.errors %}
-                        <p class="mt-1.5 text-xs text-danger">{{ form.username.errors|join:", " }}</p>
+                        <p class="mt-1.5 text-xs font-medium text-rose-100">{{ form.username.errors|join:", " }}</p>
                         {% endif %}
                     </div>
 
                     <!-- Password -->
                     <div x-data="{ show: false }">
-                        <label for="{{ form.password.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">
+                        <label for="{{ form.password.id_for_label }}" class="mb-1.5 block text-sm font-medium text-white/90">
                             {{ form.password.label }}
                         </label>
                         <div class="relative">
-                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-content-faint">
-                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-white/60">
+                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 00-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
                                 </svg>
                             </span>
                             <input
                                 :type="show ? 'text' : 'password'"
+                                type="password"
                                 name="{{ form.password.html_name }}"
                                 id="{{ form.password.id_for_label }}"
                                 autocomplete="current-password"
                                 required
                                 placeholder="••••••••"
-                                class="block w-full rounded-xl border {% if form.password.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface py-2.5 pl-11 pr-11 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                                class="block w-full rounded-xl border bg-transparent py-2.5 pl-11 pr-11 text-sm text-white placeholder-white/55 transition {% if form.password.errors %}border-rose-200{% else %}border-white/40 hover:border-white/60{% endif %} focus:border-white focus:outline-none focus:ring-2 focus:ring-white/30"
                             >
-                            <button type="button" @click="show = !show" class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-content-faint hover:text-content-muted transition" :aria-label="show ? 'Ocultar contraseña' : 'Mostrar contraseña'">
-                                <svg x-show="!show" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                            <button type="button" @click="show = !show" class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-white/60 transition hover:text-white" :aria-label="show ? 'Ocultar contraseña' : 'Mostrar contraseña'" aria-label="Mostrar contraseña">
+                                <svg x-show="!show" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                 </svg>
-                                <svg x-show="show" x-cloak class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                                <svg x-show="show" x-cloak class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.243 4.243L9.88 9.88" />
                                 </svg>
                             </button>
                         </div>
                         {% if form.password.errors %}
-                        <p class="mt-1.5 text-xs text-danger">{{ form.password.errors|join:", " }}</p>
+                        <p class="mt-1.5 text-xs font-medium text-rose-100">{{ form.password.errors|join:", " }}</p>
                         {% endif %}
                     </div>
 
                     <!-- Submit -->
-                    <button type="submit" class="btn-primary mt-2 w-full">
+                    <button type="submit"
+                            class="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white/80 px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-[0_10px_24px_-10px_rgb(46_16_101/0.5)] backdrop-blur-sm transition duration-200 hover:-translate-y-0.5 hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-brand-700 active:translate-y-0">
                         Iniciar sesión
-                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                         </svg>
                     </button>
                 </form>
+            </div>
 
-                <p class="mt-8 text-center text-xs text-content-faint">© {% now "Y" %} Auto Clinic · Todos los derechos reservados</p>
-                </div>
+            <p class="mt-8 text-center text-xs text-white/65 lg:absolute lg:inset-x-0 lg:top-full">© {% now "Y" %} Auto Clinic · Todos los derechos reservados</p>
+            {# En móvil no hay esquinas libres: la autoría va bajo el ©. #}
+            <a href="https://propus.ink" target="_blank" rel="noopener noreferrer"
+               class="mt-2 flex items-baseline justify-center gap-1.5 text-xs text-white/60 transition hover:text-white lg:hidden">
+                Creado por <span class="text-sm font-semibold tracking-[0.18em] text-white/85">PROPUS</span>
+                <span class="sr-only">(se abre en una pestaña nueva)</span>
+            </a>
             </div>
         </div>
     </div>
