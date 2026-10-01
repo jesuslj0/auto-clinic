@@ -27,16 +27,19 @@ Una conversación en la lista. Recibe `session`, `query` y `active_session_id`
             <span class="truncate text-sm {% if session.unread_count %}font-medium text-content-muted{% else %}text-content-subtle{% endif %}">
                 {{ session.last_message_preview|default:"Sin mensajes todavía" }}
             </span>
+            {% comment %}A la derecha, junto al contador: lila de marca y el mismo
+            icono de persona que el conmutador de la cabecera del hilo.{% endcomment %}
+            {% if session.agent_paused %}
+            <span class="ml-auto inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand-fg ring-1 ring-inset ring-brand-line" title="Modo humano: el agente no responde en este chat">
+                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
+                Humano<span class="sr-only"> (modo humano: el agente no responde)</span>
+            </span>
+            {% endif %}
             {% if session.unread_count %}
             <span class="inline-flex h-5 min-w-5 flex-shrink-0 items-center justify-center rounded-full bg-brand-600 px-1.5 text-xs font-semibold text-white">
                 {{ session.unread_count }}
             </span>
             {% endif %}
         </span>
-        {% if session.agent_paused %}
-        <span class="mt-1 inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent-fg">
-            Modo humano
-        </span>
-        {% endif %}
     </span>
 </a>

@@ -138,15 +138,15 @@
                 <template x-for="(m, i) in messages" :key="i">
                     <div :class="m.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
                         <div :class="{
-                                 'bg-brand-gradient text-white chat-bubble-out rounded-tr-sm': m.role === 'user',
+                                 'bg-brand-600 text-white chat-bubble-out rounded-tr-sm': m.role === 'user',
                                  'bg-surface text-content-muted ring-1 ring-line chat-bubble-in rounded-tl-sm': m.role === 'agent',
                                  'bg-danger-soft text-danger ring-1 ring-danger-line chat-bubble-in chat-bubble-danger rounded-tl-sm': m.role === 'error'
                              }"
-                             {% comment %}Solo la enviada fija el pico aquí: el degradado no se hereda,
-                             así que toma el tono del gradiente a la altura de la esquina —y es el mismo
-                             en claro y en oscuro—. Las recibidas lo sacan de sus clases, que usan
-                             tokens; un hexadecimal aquí las dejaría blancas también en oscuro.{% endcomment %}
-                             :style="m.role === 'user' ? '--bubble-tail: #b25aca' : ''"
+                             {% comment %}Solo la enviada fija el pico aquí, con el mismo lila de
+                             marca que las burbujas del agente en la bandeja (brand-600, igual en claro y
+                             en oscuro). Las recibidas lo sacan de sus clases, que usan tokens; un
+                             hexadecimal aquí las dejaría blancas también en oscuro.{% endcomment %}
+                             :style="m.role === 'user' ? '--bubble-tail: #7c3aed' : ''"
                              class="chat-bubble max-w-[85%] rounded-2xl px-3.5 py-2 text-sm shadow-sm sm:max-w-[70%]">
                             {# Recién enviada: vista previa local. Del historial: se abre a petición #}
                             {# (vista protegida, deja AccessLog), igual que en la bandeja de chats. #}
@@ -161,9 +161,17 @@
                                 </a>
                             </template>
                             <p class="whitespace-pre-line" x-show="m.text" x-text="m.text"></p>
-                            <p class="mt-1 text-right text-[11px]"
-                               :class="m.role === 'user' ? 'text-white/70' : 'text-content-faint'"
-                               x-text="m.time"></p>
+                            <p class="mt-1 flex items-center justify-end gap-1 text-[11px]"
+                               :class="m.role === 'user' ? 'text-white/70' : 'text-content-faint'">
+                                {# Mismo icono que el agente en la bandeja de chats (chispas = agente IA). #}
+                                <template x-if="m.role === 'agent'">
+                                    <span class="mr-0.5 inline-flex" title="Agente IA">
+                                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" /></svg>
+                                        <span class="sr-only">Agente IA ·</span>
+                                    </span>
+                                </template>
+                                <span x-text="m.time"></span>
+                            </p>
                         </div>
                     </div>
                 </template>

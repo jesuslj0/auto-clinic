@@ -15,6 +15,12 @@
  */
 document.addEventListener('alpine:init', () => {
     const LIST_DEBOUNCE_MS = 400;
+    // Pantalla completa del hilo en móvil: sobrevive a las recargas de esta
+    // pestaña (cambiar de modo, enviar), no a cerrarla. Puede no haber storage
+    // (navegación privada, bloqueado): entonces simplemente no se recuerda.
+    const EXPANDED_KEY = 'ac-chat-expanded';
+    const readExpanded = () => { try { return sessionStorage.getItem(EXPANDED_KEY) === '1'; } catch (e) { return false; } };
+    const saveExpanded = (on) => { try { on ? sessionStorage.setItem(EXPANDED_KEY, '1') : sessionStorage.removeItem(EXPANDED_KEY); } catch (e) {} };
     const BOTTOM_THRESHOLD_PX = 80;
 
     Alpine.data('chatInbox', (config) => ({
@@ -34,6 +40,11 @@ document.addEventListener('alpine:init', () => {
         expanded: false,
 
         init() {
+            // Pantalla completa que venía de antes de recargar (p. ej. al cambiar
+            // de modo, que es un POST normal). Solo en móvil y con un hilo abierto.
+            if (this.sessionId && readExpanded() && window.matchMedia('(max-width: 1023.98px)').matches) {
+                this.toggleExpanded(true);
+            }
             this.scrollToBottom();
             if (!window.acChats) return;
 
@@ -80,6 +91,7 @@ document.addEventListener('alpine:init', () => {
         // La página de debajo no se desplaza mientras tanto, y Escape lo cierra.
         toggleExpanded(force) {
             this.expanded = typeof force === 'boolean' ? force : !this.expanded;
+            saveExpanded(this.expanded);
             document.documentElement.style.overflow = this.expanded ? 'hidden' : '';
             if (this.expanded && !this.onExpandedKey) {
                 this.onExpandedKey = (event) => {

@@ -164,7 +164,9 @@ opacidades sobre ellos (bg-surface/90, ring-line/70…).
         --shadow-soft: 0 12px 32px rgba(0, 0, 0, 0.45);
         --shadow-sidebar: 4px 0 24px rgba(0, 0, 0, 0.45);
         --shadow-glow: 0 8px 24px -6px rgba(124, 58, 237, 0.55);
-        --brand-gradient-soft: linear-gradient(135deg, #241d3d 0%, #33203a 100%);
+        /* Fondo de los hilos de chat: más claro que la superficie para que las burbujas
+           recibidas (superficie) se despeguen, sin llegar a deslumbrar. */
+        --brand-gradient-soft: linear-gradient(135deg, #342a58 0%, #4a2b52 100%);
     }
 
     /* El CSS de Tailwind llega por CDN (asíncrono): sin esto el fondo parpadea
