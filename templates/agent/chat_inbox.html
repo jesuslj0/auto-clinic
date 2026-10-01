@@ -21,23 +21,7 @@
     abierto. Por eso vive en la cabecera y no dentro del hilo.
     {% endcomment %}
     {% if request.user.clinic %}
-    <form method="post" action="{% url 'agent:agent-switch' %}">
-        {% csrf_token %}
-        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-        {% if request.user.clinic.agent_enabled %}
-        <button type="submit"
-                class="inline-flex items-center gap-2 rounded-full bg-brand-soft px-3 py-1.5 text-sm font-semibold text-brand-fg ring-1 ring-brand-line transition hover:bg-brand-soft-strong"
-                title="Desactivar el agente en toda la clínica">
-            <span class="h-2 w-2 rounded-full bg-brand-500"></span>Agente activo
-        </button>
-        {% else %}
-        <button type="submit"
-                class="inline-flex items-center gap-2 rounded-full bg-muted-strong px-3 py-1.5 text-sm font-semibold text-content-muted ring-1 ring-line-strong transition hover:bg-line"
-                title="Activar el agente en toda la clínica">
-            <span class="h-2 w-2 rounded-full bg-content-faint"></span>Agente apagado
-        </button>
-        {% endif %}
-    </form>
+    {% include 'agent/_agent_badge.html' with enabled=request.user.clinic.agent_enabled toggle=True next=request.get_full_path %}
     {% endif %}
 </div>
 {% endblock %}

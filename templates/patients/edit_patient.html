@@ -14,7 +14,31 @@
         </div>
 
         {# Formulario #}
-        <form method="post" enctype="multipart/form-data" novalidate class="px-4 py-7 sm:px-8 space-y-6">
+        {% comment %}
+        «Guardar datos» solo se activa cuando algo cambia respecto a lo que se
+        pintó al cargar: se compara una foto (serializada) del formulario con la
+        actual. Si la página vuelve con errores de validación se deja activo, para
+        poder reenviar. Sin JavaScript el botón queda activo como siempre.
+        {% endcomment %}
+        <form method="post" enctype="multipart/form-data" novalidate class="px-4 py-7 sm:px-8 space-y-6"
+              x-data="{
+                  initial: '',
+                  dirty: {{ form.errors|yesno:'true,false' }},
+                  keepDirty: {{ form.errors|yesno:'true,false' }},
+                  snapshot() {
+                      const parts = [];
+                      for (const [key, value] of new FormData(this.$el)) {
+                          if (key === 'csrfmiddlewaretoken') continue;
+                          parts.push(key + '=' + (value instanceof File ? (value.size ? value.name + ':' + value.size + ':' + value.lastModified : '') : value));
+                      }
+                      return parts.join('&');
+                  },
+                  check() {
+                      this.$nextTick(() => { this.dirty = this.keepDirty || this.snapshot() !== this.initial; });
+                  },
+              }"
+              x-init="$nextTick(() => { initial = snapshot(); })"
+              @input="check()" @change="check()" @click="check()">
             {% csrf_token %}
 
             {# Errores generales #}
@@ -162,7 +186,7 @@
                     type="date"
                     name="{{ form.date_of_birth.html_name }}"
                     id="{{ form.date_of_birth.id_for_label }}"
-                    value="{{ form.date_of_birth.value|default:'' }}"
+                    value="{% with dob=form.date_of_birth.value %}{% if dob.year %}{{ dob|date:'Y-m-d' }}{% else %}{{ dob|default:'' }}{% endif %}{% endwith %}"
                     class="block w-full rounded-xl border {% if form.date_of_birth.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
                 >
                 {% if form.date_of_birth.errors %}
@@ -192,8 +216,11 @@
                 <a href="{% url 'patients:detail' patient.id %}" class="btn-secondary">
                     Cancelar
                 </a>
-                <button type="submit" class="btn-primary">
-                    Guardar paciente
+                <button type="submit" class="btn-primary disabled:hover:bg-brand-600" :disabled="!dirty">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                    Guardar datos
                 </button>
             </div>
         </form>

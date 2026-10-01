@@ -9,6 +9,7 @@ from agent.views import (
     ChatToggleAgentView,
     ChatTypingView,
     ClinicAgentSwitchView,
+    N8nHealthView,
 )
 
 app_name = 'agent'
@@ -16,6 +17,7 @@ app_name = 'agent'
 urlpatterns = [
     path('', ChatInboxView.as_view(), name='chat-inbox'),
     path('agente/', ClinicAgentSwitchView.as_view(), name='agent-switch'),
+    path('n8n-estado/', N8nHealthView.as_view(), name='n8n-health'),
     path('lista/', ChatSessionListFragmentView.as_view(), name='chat-list-fragment'),
     path('adjuntos/<uuid:message_id>/', ChatMediaView.as_view(), name='chat-media'),
     path('<uuid:session_id>/', ChatInboxView.as_view(), name='chat-thread'),
