@@ -38,6 +38,13 @@ document.addEventListener('alpine:init', () => {
         viewerOpener: null,
         lastTypingAt: 0,
         expanded: false,
+        // «El agente está escribiendo…»: hasta cuándo (ms) o 0 si no.
+        agentTypingUntil: config.agentTypingSeconds ? Date.now() + config.agentTypingSeconds * 1000 : 0,
+        agentTypingTimer: null,
+        // Último mensaje del paciente (ISO) y reloj para refrescar el «hace…».
+        lastInboundAt: config.lastInboundAt || '',
+        now: Date.now(),
+        clockTimer: null,
 
         init() {
             // Pantalla completa que venía de antes de recargar (p. ej. al cambiar
@@ -46,6 +53,8 @@ document.addEventListener('alpine:init', () => {
                 this.toggleExpanded(true);
             }
             this.scrollToBottom();
+            this.armAgentTyping();
+            this.clockTimer = setInterval(() => { this.now = Date.now(); }, 30000);
             if (!window.acChats) return;
 
             this.unsubscribe = window.acChats.subscribe((event) => this.onEvent(event));
@@ -55,6 +64,8 @@ document.addEventListener('alpine:init', () => {
 
         destroy() {
             if (this.unsubscribe) this.unsubscribe();
+            clearInterval(this.clockTimer);
+            clearTimeout(this.agentTypingTimer);
             document.removeEventListener('ac-chats:state', this.onState);
         },
 
@@ -64,6 +75,7 @@ document.addEventListener('alpine:init', () => {
             switch (event.type) {
                 case 'message':
                     if (isActive) {
+                        this.trackAgentAndInbound(event);
                         // Un mensaje que ya está pintado ha cambiado (le ha llegado
                         // la foto, o su estado): se repinta solo esa burbuja.
                         if (this.findBubble(event.message_id)) this.refreshBubble(event.message_id);
@@ -83,6 +95,53 @@ document.addEventListener('alpine:init', () => {
                     this.scheduleListRefresh();
                     break;
             }
+        },
+
+        // --- Estado del paciente y del agente ---------------------------------
+
+        get agentTyping() {
+            return this.agentTypingUntil > this.now;
+        },
+
+        // Un entrante con el agente activo implica que va a contestar; cualquier
+        // saliente (el agente, o una persona) lo apaga.
+        trackAgentAndInbound(event) {
+            if (event.direction === 'inbound') {
+                if (event.last_interaction) this.lastInboundAt = event.last_interaction;
+                this.agentTypingUntil = event.agent_replying ? Date.now() + 60000 : 0;
+            } else if (event.direction === 'outbound') {
+                this.agentTypingUntil = 0;
+            }
+            this.now = Date.now();
+            this.armAgentTyping();
+        },
+
+        // `agentTyping` compara con `now`, que solo avanza cada 30 s: se programa
+        // un repintado justo al caducar para que el aviso no se quede de más.
+        armAgentTyping() {
+            clearTimeout(this.agentTypingTimer);
+            const left = this.agentTypingUntil - Date.now();
+            if (left > 0) this.agentTypingTimer = setTimeout(() => { this.now = Date.now(); }, left + 50);
+        },
+
+        get inboundStatus() {
+            if (!this.lastInboundAt) return 'El paciente aún no ha escrito';
+            const last = Date.parse(this.lastInboundAt);
+            if (Number.isNaN(last)) return '';
+            const ago = Math.max(0, this.now - last);
+            const min = Math.floor(ago / 60000);
+            let when;
+            if (min < 1) when = 'hace unos segundos';
+            else if (min < 60) when = `hace ${min} min`;
+            else if (min < 1440) when = `hace ${Math.floor(min / 60)} h`;
+            else when = `hace ${Math.floor(min / 1440)} d`;
+
+            const leftMin = Math.floor((last + 24 * 3600000 - this.now) / 60000);
+            let window;
+            if (leftMin <= 0) window = 'ventana de 24 h cerrada';
+            else if (leftMin < 60) window = `ventana abierta, quedan ${leftMin} min`;
+            else window = `ventana abierta, quedan ${Math.floor(leftMin / 60)} h`;
+            return `Último mensaje del paciente ${when} · ${window}`;
         },
 
         // --- Pantalla completa (móvil) --------------------------------------

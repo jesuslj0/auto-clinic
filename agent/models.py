@@ -13,6 +13,8 @@ from core.models import Clinic
 # WhatsApp solo permite texto libre dentro de las 24 h siguientes al último
 # mensaje del usuario. Fuera de esa ventana hay que usar plantillas aprobadas.
 CUSTOMER_SERVICE_WINDOW = timedelta(hours=24)
+# Cuánto se mantiene el aviso «el agente está escribiendo…» sin respuesta.
+AGENT_TYPING_WINDOW = timedelta(seconds=60)
 
 
 class AgentMemory(models.Model):
@@ -178,6 +180,25 @@ class ConversationSession(models.Model):
         if self.clinic is None or not self.clinic.agent_enabled:
             return False
         return not self.agent_paused and not self.is_handoff_active
+
+    # -- «El agente está escribiendo…» -------------------------------------
+
+    @property
+    def agent_typing_seconds(self):
+        """Segundos que le quedan al aviso «el agente está escribiendo», o 0.
+
+        No lo notifica n8n: se deduce. Si el último mensaje del hilo es del
+        paciente, el agente va a contestar (`agent_should_reply`) y ha pasado
+        poco, el agente está en ello. Pasado `AGENT_TYPING_WINDOW` se da por
+        perdido (n8n caído, error del modelo): mejor dejar de decirlo que
+        mostrar un «escribiendo…» eterno.
+        """
+        if self.last_interaction is None or self.last_message_at is None:
+            return 0
+        if self.last_message_at > self.last_interaction or not self.agent_should_reply:
+            return 0
+        remaining = (self.last_interaction + AGENT_TYPING_WINDOW - timezone.now()).total_seconds()
+        return max(0, int(remaining))
 
     # -- Ventana de servicio de WhatsApp ------------------------------------
 

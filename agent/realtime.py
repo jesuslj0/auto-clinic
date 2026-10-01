@@ -66,6 +66,10 @@ def broadcast_message(message):
             'status': message.status,
             'unread_count': session.unread_count,
             'last_message_at': _isoformat(session.last_message_at),
+            # Para pintar «el agente está escribiendo…» y «último mensaje hace…»
+            # sin pedir nada: un entrante con el agente activo implica respuesta.
+            'agent_replying': session.agent_should_reply,
+            'last_interaction': _isoformat(session.last_interaction),
         },
     )
 
