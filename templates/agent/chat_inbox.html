@@ -42,6 +42,8 @@ funcionando como antes, recargando al navegar.
         listUrl: '{% url 'agent:chat-list-fragment' %}',
         agentPaused: {{ active_session.agent_paused|yesno:'true,false' }},
         agentEnabled: {{ request.user.clinic.agent_enabled|yesno:'true,false' }},
+        agentTypingSeconds: {{ active_session.agent_typing_seconds|default:0 }},
+        lastInboundAt: '{{ active_session.last_interaction|date:'c' }}',
      })">
 
 <p x-cloak x-show="connection === 'polling'" role="status"
@@ -133,6 +135,18 @@ funcionando como antes, recargando al navegar.
                 class="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-brand-600 px-4 py-1.5 text-xs font-semibold text-white shadow-soft transition hover:bg-brand-700">
             <span x-text="unseen === 1 ? '1 mensaje nuevo' : unseen + ' mensajes nuevos'"></span> ↓
         </button>
+        </div>
+
+        {% comment %}Deducido por Django (agent_typing_seconds) y mantenido por los
+        avisos del socket; caduca solo si el agente nunca llega a contestar.{% endcomment %}
+        <div x-cloak x-show="agentTyping" role="status" aria-live="polite"
+             class="flex items-center gap-2 border-t border-line bg-surface px-4 py-2 text-xs text-content-subtle sm:px-6">
+            <span class="inline-flex items-center gap-1" aria-hidden="true">
+                <span class="h-1.5 w-1.5 animate-bounce rounded-full bg-brand-500"></span>
+                <span class="h-1.5 w-1.5 animate-bounce rounded-full bg-brand-500 [animation-delay:150ms]"></span>
+                <span class="h-1.5 w-1.5 animate-bounce rounded-full bg-brand-500 [animation-delay:300ms]"></span>
+            </span>
+            El agente está escribiendo…
         </div>
 
         {% include 'agent/_composer.html' with session=active_session %}
