@@ -6,15 +6,17 @@ coherentes la sesión, sus contadores denormalizados y el hilo de mensajes.
 """
 
 import logging
+import os
 
 from django.core.cache import cache
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 
-from agent.models import ChatMessage, ConversationSession
+from agent.models import ChatAttachment, ChatMessage, ConversationSession
 from agent.realtime import broadcast_message, broadcast_session
-from agent.whatsapp import WhatsAppError, send_text, send_typing
+from agent.files import is_chat_audio
+from agent.whatsapp import WhatsAppError, send_media, send_text, send_typing, upload_media
 from patients.models import Patient
 from patients.services import normalize_phone_safe
 
@@ -223,6 +225,87 @@ def send_staff_message(*, session: ConversationSession, body: str) -> ChatMessag
     except WhatsAppError as exc:
         # `save()` y no `queryset.update()`: el mensaje está en la auditoría y un
         # `update()` se saltaría las señales que la alimentan.
+        message.status = ChatMessage.Status.FAILED
+        message.error_message = str(exc)
+        message.save(update_fields=['status', 'error_message'])
+        broadcast_message(message)
+        raise
+
+    message.status = ChatMessage.Status.SENT
+    message.wa_message_id = wa_message_id or None
+    message.sent_at = timezone.now()
+    message.save(update_fields=['status', 'wa_message_id', 'sent_at'])
+    broadcast_message(message)
+    return message
+
+
+#: Lo que WhatsApp acepta como imagen (el WebP solo vale como sticker).
+_WHATSAPP_IMAGE_TYPES = {'image/jpeg', 'image/png'}
+
+#: Tope de Meta para el pie de una imagen.
+MEDIA_CAPTION_MAX_LENGTH = 1024
+
+
+def send_staff_media(*, session: ConversationSession, file, caption: str = '') -> ChatMessage:
+    """Envía por WhatsApp una imagen o un audio del staff y lo deja en el hilo.
+
+    Mismo criterio que `send_staff_message`: directo a la Cloud API, sin pasar
+    por n8n, y el mensaje queda registrado salga o no. Esto otro es lo que lo
+    distingue:
+
+    - El fichero pasa por la misma validación y limpieza que los que manda un
+      paciente (contenido, no extensión; imágenes sin metadatos) y se guarda en
+      el bucket privado como `ChatAttachment`. A Meta se le sube **lo guardado**,
+      así que lo que ve el paciente es lo que queda en el historial.
+    - Si el fichero no es válido no queda nada: mensaje y adjunto se crean en
+      la misma transacción.
+    - Solo las imágenes admiten texto (como pie de foto); un audio con texto se
+      rechaza en vez de perder el texto sin avisar.
+    - El agente no se entera: este mensaje no toca su memoria ni va a n8n.
+    """
+    caption = (caption or '').strip()
+
+    if session.clinic is None:
+        raise WhatsAppError('Esta conversación no está asociada a ninguna clínica.')
+    if not session.can_send_free_text:
+        raise WhatsAppError(
+            'Han pasado más de 24 horas desde el último mensaje del paciente. '
+            'WhatsApp ya no permite responder con texto libre en esta conversación.'
+        )
+
+    is_audio = is_chat_audio(file)
+    if is_audio and caption:
+        raise ValueError('Los audios no admiten texto. Envía el texto en un mensaje aparte.')
+    if len(caption) > MEDIA_CAPTION_MAX_LENGTH:
+        raise ValueError(f'El pie de foto admite como máximo {MEDIA_CAPTION_MAX_LENGTH} caracteres.')
+
+    kind = ChatAttachment.Kind.AUDIO if is_audio else ChatAttachment.Kind.IMAGE
+    message_type = ChatMessage.MessageType.AUDIO if is_audio else ChatMessage.MessageType.IMAGE
+
+    with transaction.atomic():
+        message = record_message(
+            clinic=session.clinic,
+            session=session,
+            direction=ChatMessage.Direction.OUTBOUND,
+            sender=ChatMessage.Sender.STAFF,
+            body=caption,
+            message_type=message_type,
+            status=ChatMessage.Status.QUEUED,
+        )
+        # Si el fichero no vale, `save()` lanza `ValidationError` y se deshace
+        # también el mensaje.
+        attachment = ChatAttachment(message=message, kind=kind, file=file)
+        attachment.save()
+        if kind == ChatAttachment.Kind.IMAGE and attachment.mime_type not in _WHATSAPP_IMAGE_TYPES:
+            raise ValueError('WhatsApp solo admite imágenes JPEG o PNG.')
+
+    try:
+        with attachment.file.open('rb') as stored:
+            content = stored.read()
+        extension = os.path.splitext(attachment.file.name)[1]
+        media_id = upload_media(session.clinic, content, attachment.mime_type, f'{kind}{extension}')
+        wa_message_id = send_media(session.clinic, session.phone, kind, media_id, caption)
+    except WhatsAppError as exc:
         message.status = ChatMessage.Status.FAILED
         message.error_message = str(exc)
         message.save(update_fields=['status', 'error_message'])
