@@ -330,6 +330,11 @@
                     {% endif %}
                 </li>
             </ul>
+            {% if not clinic_obj.agent_enabled %}
+            <p class="mt-4 rounded-xl bg-info-soft px-3.5 py-2.5 text-xs text-info ring-1 ring-info-line">
+                El chat de prueba responde aunque el agente esté apagado: el apagado solo afecta a los chats reales de pacientes.
+            </p>
+            {% endif %}
             {% if not is_connected %}
             <p class="mt-4 text-xs text-content-subtle">
                 El chat de prueba funciona aunque WhatsApp no esté conectado: ajusta la personalidad y prueba antes de dar el número a tus pacientes.

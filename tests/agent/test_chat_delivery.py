@@ -175,3 +175,18 @@ def test_mobile_menu_button_carries_the_unread_count(client, staff_user, session
     button = html[html.index('aria-label="Abrir menú"'):]
     button = button[: button.index('</button>')]
     assert 'data-chat-unread-count>1<' in button
+
+
+@pytest.mark.django_db
+def test_test_thread_bubbles_show_no_delivery_ticks(clinic_a):
+    from django.template.loader import render_to_string
+
+    session = ConversationSession.objects.create(clinic=clinic_a, phone='+34600000002', is_test=True)
+    message = record_message(
+        clinic=clinic_a, session=session, direction=ChatMessage.Direction.OUTBOUND,
+        sender=ChatMessage.Sender.AGENT, body='hola', status=ChatMessage.Status.SENT,
+    )
+    assert 'data-status' not in render_to_string('agent/_message_bubble.html', {'message': message})
+
+    session.is_test = False
+    assert 'data-status="sent"' in render_to_string('agent/_message_bubble.html', {'message': message})
