@@ -188,6 +188,14 @@ clinical-photo rules, plus a few of its own — see `agent/files.py` and
   image data ("Toca para ver"); the photo is only requested when opened in the
   viewer, so each `AccessLog` is a real view. Audio uses `preload="none"`.
 
+**Outbound (staff → patient).** The composer can attach an image (JPEG/PNG ≤ 5 MB,
+caption allowed) or an audio file (MP3/Ogg ≤ 16 MB, no text). `agent.services.send_staff_media()`
+goes straight to the Cloud API like staff text (no n8n): message + `ChatAttachment` are created in one
+transaction (an invalid file leaves nothing), the **stored** bytes are uploaded to Meta
+(`whatsapp.upload_media` → `send_media`), and the message ends `sent`/`failed`. `attach_media()`
+(the agent's intake) still refuses outbound messages. The agent is **not** told about these: nothing
+touches `AgentMemory` or n8n. Delivery receipts arrive through the usual `statuses` forward.
+
 `LesionAttachment.Source.PATIENT_WHATSAPP` already exists: promoting a chat photo
 to a lesion is a planned follow-up (same bucket, keep the checksum).
 

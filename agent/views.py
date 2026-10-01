@@ -41,6 +41,7 @@ from agent.realtime import broadcast_clinic, broadcast_session, clinic_unread_to
 from agent.services import (
     apply_delivery_status,
     mark_session_read,
+    send_staff_media,
     send_staff_message,
     signal_staff_typing,
 )
@@ -646,18 +647,29 @@ class ChatTypingView(ChatSessionActionMixin, View):
 
 
 class ChatSendMessageView(ChatSessionActionMixin, View):
-    """Envía un mensaje escrito por el staff desde el panel."""
+    """Envía un mensaje del staff desde el panel: texto, o imagen/audio con `file`.
+
+    Con archivo, `body` es el pie de foto (solo en imágenes).
+    """
 
     def post(self, request, session_id):
         session = self.get_session(session_id)
         body = (request.POST.get('body') or '').strip()
+        uploaded = request.FILES.get('file')
 
-        if not body:
+        if uploaded is None and not body:
             django_messages.error(request, 'Escribe un mensaje antes de enviarlo.')
         else:
             try:
-                send_staff_message(session=session, body=body)
+                if uploaded is not None:
+                    send_staff_media(session=session, file=uploaded, caption=body)
+                else:
+                    send_staff_message(session=session, body=body)
             except WhatsAppError as exc:
+                django_messages.error(request, str(exc))
+            except ValidationError as exc:
+                django_messages.error(request, ' '.join(exc.messages))
+            except ValueError as exc:
                 django_messages.error(request, str(exc))
 
         return redirect('agent:chat-thread', session_id=session.id)

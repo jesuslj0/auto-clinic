@@ -2,31 +2,59 @@
 Pie del hilo: el compositor o, con la ventana de 24 h cerrada, el aviso de por
 qué no se puede escribir. Recibe `session`.
 {% endcomment %}
+{% load agent_extras %}
 <footer class="border-t border-line bg-surface px-4 py-3 sm:px-6">
     {% if session.can_send_free_text %}
     {% comment %}
     Enviar aparta al agente automáticamente: no hace falta poner antes el
     hilo en modo humano, basta con escribir.
     {% endcomment %}
-    <form method="post" action="{% url 'agent:chat-send' session.id %}" class="flex items-end gap-2">
+    <form method="post" action="{% url 'agent:chat-send' session.id %}" enctype="multipart/form-data"
+          x-data="{ file: null }" class="space-y-2">
         {% csrf_token %}
-        <label class="sr-only" for="chat-body">Mensaje</label>
-        <textarea id="chat-body" name="body" rows="1" required maxlength="4096"
-                  placeholder="Escribe un mensaje…"
-                  data-typing-url="{% url 'agent:chat-typing' session.id %}"
-                  @input="onComposerInput($event)"
-                  class="min-h-[2.75rem] flex-1 resize-y rounded-2xl border-line text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"></textarea>
-        <button type="submit" class="btn-primary flex-shrink-0 px-4 py-2.5 text-sm">
-            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-            </svg>
-            <span class="ml-1.5 hidden sm:inline">Enviar</span>
-        </button>
+        {% comment %}
+        Imagen (JPEG/PNG, hasta 5 MB) o audio (MP3/OGG, hasta 16 MB). Con archivo,
+        el texto pasa a ser el pie de foto y deja de ser obligatorio. El servidor
+        valida por contenido; `accept` solo ayuda al selector.
+        {% endcomment %}
+        <div x-show="file" x-cloak
+             class="flex items-center gap-2 rounded-xl bg-muted px-3 py-2 text-xs text-content-muted ring-1 ring-line">
+            <span aria-hidden="true">📎</span>
+            <span class="min-w-0 flex-1 truncate" x-text="file ? file.name : ''"></span>
+            <button type="button" @click="file = null; $refs.file.value = ''"
+                    class="flex-shrink-0 rounded-md px-1.5 py-0.5 font-medium text-content-subtle hover:text-danger"
+                    aria-label="Quitar el archivo">Quitar</button>
+        </div>
+        <div class="flex items-end gap-2">
+            <input type="file" name="file" x-ref="file" class="sr-only" tabindex="-1"
+                   accept="image/jpeg,image/png,audio/ogg,audio/mpeg,.jpg,.jpeg,.png,.ogg,.opus,.mp3"
+                   @change="file = $refs.file.files[0] || null">
+            <button type="button" @click="$refs.file.click()" title="Adjuntar imagen o audio"
+                    class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-content-subtle transition hover:bg-muted hover:text-content focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                </svg>
+                <span class="sr-only">Adjuntar imagen o audio</span>
+            </button>
+            <label class="sr-only" for="chat-body">Mensaje</label>
+            <textarea id="chat-body" name="body" rows="1" maxlength="4096" :required="!file"
+                      :placeholder="file ? 'Pie de foto (opcional)…' : 'Escribe un mensaje…'"
+                      placeholder="Escribe un mensaje…"
+                      data-typing-url="{% url 'agent:chat-typing' session.id %}"
+                      @input="onComposerInput($event)"
+                      class="min-h-[2.75rem] flex-1 resize-y rounded-2xl border-line text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"></textarea>
+            <button type="submit" class="btn-primary flex-shrink-0 px-4 py-2.5 text-sm">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                </svg>
+                <span class="ml-1.5 hidden sm:inline">Enviar</span>
+            </button>
+        </div>
     </form>
     <p class="mt-2 text-xs text-content-faint">
         Al enviar, el agente deja de responder en este chat
         {% if session.clinic.agent_handoff_timeout_seconds %}
-        y lo retoma tras {{ session.clinic.agent_handoff_timeout_seconds }} segundos sin que escribas.
+        y lo retoma tras {{ session.clinic.agent_handoff_timeout_seconds|duration_label }} sin que envíes ningún mensaje.
         {% else %}
         hasta que lo reactives.
         {% endif %}

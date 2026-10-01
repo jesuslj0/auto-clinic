@@ -188,6 +188,18 @@ def _sniff_audio(header: bytes):
     return None
 
 
+def is_chat_audio(file) -> bool:
+    """`True` si el fichero parece audio por sus primeros bytes (no por el nombre).
+
+    Solo decide por dónde validarlo: la validación de verdad la hace luego
+    `prepare_chat_audio` o `prepare_chat_image`.
+    """
+    file.seek(0)
+    header = file.read(_HEADER_BYTES)
+    file.seek(0)
+    return _sniff_audio(header) is not None
+
+
 def prepare_chat_audio(file) -> PreparedMedia:
     """Valida una nota de voz o un audio de WhatsApp. Sin transformarlo."""
     content = _read_all(file)
