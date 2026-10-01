@@ -21,7 +21,7 @@
     abierto. Por eso vive en la cabecera y no dentro del hilo.
     {% endcomment %}
     {% if request.user.clinic %}
-    {% include 'agent/_agent_badge.html' with enabled=request.user.clinic.agent_enabled toggle=True next=request.get_full_path %}
+    {% include 'agent/_agent_badge.html' with enabled=request.user.clinic.agent_enabled %}
     {% endif %}
 </div>
 {% endblock %}

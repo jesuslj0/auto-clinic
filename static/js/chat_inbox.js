@@ -125,7 +125,7 @@ document.addEventListener('alpine:init', () => {
         },
 
         get inboundStatus() {
-            if (!this.lastInboundAt) return 'El paciente aún no ha escrito';
+            if (!this.lastInboundAt) return 'Aún sin mensajes del paciente';
             const last = Date.parse(this.lastInboundAt);
             if (Number.isNaN(last)) return '';
             const ago = Math.max(0, this.now - last);
@@ -137,11 +137,11 @@ document.addEventListener('alpine:init', () => {
             else when = `hace ${Math.floor(min / 1440)} d`;
 
             const leftMin = Math.floor((last + 24 * 3600000 - this.now) / 60000);
-            let window;
-            if (leftMin <= 0) window = 'ventana de 24 h cerrada';
-            else if (leftMin < 60) window = `ventana abierta, quedan ${leftMin} min`;
-            else window = `ventana abierta, quedan ${Math.floor(leftMin / 60)} h`;
-            return `Último mensaje del paciente ${when} · ${window}`;
+            let windowText;
+            if (leftMin <= 0) windowText = 'ventana cerrada';
+            else if (leftMin < 60) windowText = `ventana abierta (quedan ${leftMin} min)`;
+            else windowText = `ventana abierta (quedan ${Math.floor(leftMin / 60)}h)`;
+            return `Último mensaje ${when} · ${windowText}`;
         },
 
         // --- Pantalla completa (móvil) --------------------------------------

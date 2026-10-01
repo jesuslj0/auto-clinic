@@ -251,21 +251,33 @@
                 <a href="{% url 'agent_settings:persona' %}" class="text-sm font-medium text-brand-fg hover:underline">Editar</a>
             </div>
             <dl class="mt-4 space-y-2.5 text-sm">
-                <div class="flex justify-between gap-3">
-                    <dt class="text-content-subtle">Nombre</dt>
-                    <dd class="truncate font-medium text-content">{{ profile.agent_name|default:"Sin nombre propio" }}</dd>
+                <div class="flex items-center gap-3">
+                    <dt class="flex flex-shrink-0 items-center gap-2 text-content-subtle">
+                        <svg class="h-4 w-4 text-content-faint" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>Nombre
+                    </dt>
+                    <span class="h-px min-w-4 flex-1 bg-line" aria-hidden="true"></span>
+                    <dd class="min-w-0 truncate text-right font-medium text-content">{{ profile.agent_name|default:"Sin nombre propio" }}</dd>
                 </div>
-                <div class="flex justify-between gap-3">
-                    <dt class="text-content-subtle">Tono</dt>
-                    <dd class="font-medium text-content">{{ profile.get_tone_display }}</dd>
+                <div class="flex items-center gap-3">
+                    <dt class="flex flex-shrink-0 items-center gap-2 text-content-subtle">
+                        <svg class="h-4 w-4 text-content-faint" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM12 20.25c4.97 0 9-3.69 9-8.25s-4.03-8.25-9-8.25S3 7.44 3 12c0 1.86.67 3.57 1.8 4.95L3.75 20.25l3.6-1.05A9.77 9.77 0 0012 20.25z" /></svg>Tono
+                    </dt>
+                    <span class="h-px min-w-4 flex-1 bg-line" aria-hidden="true"></span>
+                    <dd class="flex-shrink-0 text-right font-medium text-content">{{ profile.get_tone_display }}</dd>
                 </div>
-                <div class="flex justify-between gap-3">
-                    <dt class="text-content-subtle">Trato</dt>
-                    <dd class="font-medium text-content">{{ profile.get_address_form_display }}</dd>
+                <div class="flex items-center gap-3">
+                    <dt class="flex flex-shrink-0 items-center gap-2 text-content-subtle">
+                        <svg class="h-4 w-4 text-content-faint" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.05 4.575a1.575 1.575 0 10-3.15 0v3m3.15-3v-1.5a1.575 1.575 0 013.15 0v1.5m-3.15 0l.075 5.925m3.075.75V4.575m0 0a1.575 1.575 0 013.15 0V15M6.9 7.575a1.575 1.575 0 10-3.15 0v8.175a6.75 6.75 0 006.75 6.75h2.018a5.25 5.25 0 003.712-1.538l1.732-1.732a5.25 5.25 0 001.538-3.712l.003-2.024a.668.668 0 01.198-.471 1.575 1.575 0 10-2.228-2.228 3.818 3.818 0 00-1.12 2.687M6.9 7.575V12m6.27 4.318A4.49 4.49 0 0116.35 15m.002 0h-.002" /></svg>Trato
+                    </dt>
+                    <span class="h-px min-w-4 flex-1 bg-line" aria-hidden="true"></span>
+                    <dd class="flex-shrink-0 text-right font-medium text-content">{{ profile.get_address_form_display }}</dd>
                 </div>
-                <div class="flex justify-between gap-3">
-                    <dt class="text-content-subtle">Emojis</dt>
-                    <dd class="font-medium text-content">{{ profile.get_emoji_usage_display }}</dd>
+                <div class="flex items-center gap-3">
+                    <dt class="flex flex-shrink-0 items-center gap-2 text-content-subtle">
+                        <svg class="h-4 w-4 text-content-faint" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm-.375 0h.008v.015h-.008V9.75zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75zm-.375 0h.008v.015h-.008V9.75z" /></svg>Emojis
+                    </dt>
+                    <span class="h-px min-w-4 flex-1 bg-line" aria-hidden="true"></span>
+                    <dd class="flex-shrink-0 text-right font-medium text-content">{{ profile.get_emoji_usage_display }}</dd>
                 </div>
             </dl>
             {% if not profile.pk %}
@@ -311,13 +323,11 @@
                         <span class="h-2 w-2 rounded-full {% if clinic_obj.agent_enabled %}bg-success{% else %}bg-content-faint{% endif %}"></span>
                         Respuestas automáticas
                     </span>
-                    <form method="post" action="{% url 'agent:agent-switch' %}">
-                        {% csrf_token %}
-                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                        <button type="submit" class="text-xs font-medium text-brand-fg hover:underline">
-                            {% if clinic_obj.agent_enabled %}Pausar{% else %}Activar{% endif %}
-                        </button>
-                    </form>
+                    {% if clinic_obj.agent_enabled %}
+                    <span class="text-xs font-medium text-success">Activadas</span>
+                    {% else %}
+                    <span class="text-xs font-medium text-content-subtle">Apagadas</span>
+                    {% endif %}
                 </li>
             </ul>
             {% if not is_connected %}
