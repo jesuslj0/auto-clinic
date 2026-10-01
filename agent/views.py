@@ -18,6 +18,7 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from agent.filters import ConversationSessionFilter
 from agent.media import MediaAlreadyAttached, attach_media, log_media_view, signed_media_url
 from agent.models import (
     AgentMemory,
@@ -134,7 +135,7 @@ class AgentProfileView(APIView):
 class ConversationSessionViewSet(ExportMixin, viewsets.ModelViewSet):
     serializer_class = ConversationSessionSerializer
     permission_classes = [IsStaffOrAdmin | IsAgentClinicKey]
-    filterset_fields = ['clinic', 'phone', 'agent_paused']
+    filterset_class = ConversationSessionFilter
     search_fields = ['phone']
     ordering_fields = ['phone', 'last_interaction', 'last_message_at', 'updated_at']
     ordering = ['-last_message_at']
