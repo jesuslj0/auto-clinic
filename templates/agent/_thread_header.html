@@ -2,6 +2,7 @@
 Cabecera del hilo abierto con el conmutador de modo y los avisos de estado.
 Recibe `session` y `query`.
 {% endcomment %}
+{% load patient_extras %}
 <header class="flex items-center gap-3 border-b border-line px-4 py-3 sm:px-5">
     {# «Volver a los chats» va fuera, encima de la tarjeta (chat_inbox.html): aquí no cabía con el conmutador y el botón de expandir. #}
     {% if session.patient %}
@@ -14,7 +15,7 @@ Recibe `session` y `query`.
         <a href="{% url 'patients:detail' session.patient.id %}" title="Ver la ficha de {{ session.patient }}"
            class="block truncate text-sm font-semibold text-content transition hover:text-brand-fg hover:underline underline-offset-2">{{ session.patient }}</a>
         {% else %}
-        <p class="truncate text-sm font-semibold text-content">{{ session.phone }}</p>
+        <p class="truncate text-sm font-semibold text-content">{% with tel=session.phone|phone_parts %}{% if tel.prefix %}<span class="font-normal text-content-faint">{{ tel.prefix }}</span> {% endif %}{{ tel.number }}{% endwith %}</p>
         {% endif %}
     </div>
     <div class="flex flex-shrink-0 items-center gap-1.5 sm:gap-2">

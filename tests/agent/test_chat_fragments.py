@@ -6,6 +6,7 @@ from django.urls import reverse
 
 from agent.models import ChatMessage, ConversationSession
 from agent.services import record_message
+from patients.templatetags.patient_extras import split_phone
 
 
 def _inbound(session, body):
@@ -144,15 +145,15 @@ class TestSessionListFragment:
     def test_lists_only_own_clinic(self, client, staff_user, session_a, thread_a, session_b):
         client.force_login(staff_user)
         html = client.get(self.url()).content.decode()
-        assert session_a.phone in html
-        assert session_b.phone not in html
+        assert split_phone(session_a.phone)['number'] in html
+        assert split_phone(session_b.phone)['number'] not in html
 
     def test_respects_filters(self, client, staff_user, session_a, thread_a, clinic_a):
         read = ConversationSession.objects.create(clinic=clinic_a, phone='+34611000222')
         client.force_login(staff_user)
         html = client.get(self.url(), {'unread': '1'}).content.decode()
-        assert session_a.phone in html
-        assert read.phone not in html
+        assert split_phone(session_a.phone)['number'] in html
+        assert split_phone(read.phone)['number'] not in html
 
     def test_total_unread_header_ignores_filters(self, client, staff_user, session_a, thread_a):
         client.force_login(staff_user)

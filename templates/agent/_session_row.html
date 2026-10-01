@@ -2,6 +2,7 @@
 Una conversación en la lista. Recibe `session`, `query` y `active_session_id`
 (este último puede faltar: fuera del hilo abierto ninguna fila va marcada).
 {% endcomment %}
+{% load patient_extras %}
 <a href="{% url 'agent:chat-thread' session.id %}{% if query %}?q={{ query }}{% endif %}"
    data-session-id="{{ session.id }}"{% if active_session_id == session.id %} aria-current="true"{% endif %}
    class="flex items-start gap-3 px-4 py-3 transition hover:bg-muted {% if active_session_id == session.id %}bg-brand-soft{% endif %}">
@@ -17,7 +18,7 @@ Una conversación en la lista. Recibe `session`, `query` y `active_session_id`
     <span class="min-w-0 flex-1">
         <span class="flex items-baseline justify-between gap-2">
             <span class="truncate text-sm font-semibold text-content">
-                {{ session.patient|default:session.phone }}
+                {% if session.patient %}{{ session.patient }}{% else %}{% with tel=session.phone|phone_parts %}{% if tel.prefix %}<span class="font-normal text-content-faint">{{ tel.prefix }}</span> {% endif %}{{ tel.number }}{% endwith %}{% endif %}
             </span>
             <span class="flex-shrink-0 text-xs text-content-faint">
                 {% if session.last_message_at %}{{ session.last_message_at|date:"j M" }}{% endif %}

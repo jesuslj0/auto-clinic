@@ -9,6 +9,7 @@ from agent.persona import build_persona_prompt
 from agent.services import DELIVERY_STATUSES, record_message
 from core.models import Clinic
 from core.serializers import ClinicScopedSerializerMixin
+from patients.services import normalize_phone
 
 
 class AgentMemorySerializer(ClinicScopedSerializerMixin, serializers.ModelSerializer):
@@ -85,6 +86,12 @@ class ConversationSessionSerializer(ClinicScopedSerializerMixin, serializers.Mod
             # escribirlo, un fallo suyo escondería hilos reales de la bandeja.
             'is_test',
         )
+
+    def validate_phone(self, value):
+        try:
+            return normalize_phone(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
 
     def validate(self, attrs):
         # La unicidad es (clinic, phone), pero `clinic` no viaja en el payload
