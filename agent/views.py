@@ -1,10 +1,15 @@
+import json
+import time
+import urllib.error
+import urllib.request
 import uuid
 
+from django.conf import settings
 from django.contrib import messages as django_messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.db.models import F, Q, Sum
-from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
+from django.http import HttpResponse, JsonResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
 from django.utils import timezone
@@ -693,6 +698,43 @@ class ChatToggleAgentView(ChatSessionActionMixin, View):
         broadcast_session(session)
 
         return redirect('agent:chat-thread', session_id=session.id)
+
+
+class N8nHealthView(LoginRequiredMixin, View):
+    """Comprueba en vivo que n8n responde (`/healthz`) y devuelve el veredicto.
+
+    Lo hace el servidor, no el navegador: así no hay CORS y la URL interna no
+    se expone. Nunca se cachea: la gracia es ver el estado real ahora.
+    """
+
+    timeout = 5
+
+    def get(self, request):
+        started = time.monotonic()
+        ok, detail = False, 'No se pudo contactar con n8n.'
+        try:
+            req = urllib.request.Request(settings.N8N_HEALTHZ_URL, headers={'Accept': 'application/json'})
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                body = resp.read(1024).decode('utf-8', errors='replace')
+            try:
+                ok = json.loads(body).get('status') == 'ok'
+            except (ValueError, AttributeError):
+                ok = False
+            detail = 'n8n responde correctamente.' if ok else 'n8n respondió, pero no con estado «ok».'
+        except urllib.error.HTTPError as exc:
+            detail = f'n8n respondió con el error {exc.code}.'
+        except TimeoutError:
+            detail = 'n8n no respondió a tiempo.'
+        except (urllib.error.URLError, OSError):
+            detail = 'No se pudo contactar con n8n.'
+
+        response = JsonResponse({
+            'ok': ok,
+            'detail': detail,
+            'latency_ms': round((time.monotonic() - started) * 1000),
+        })
+        response['Cache-Control'] = 'no-store'
+        return response
 
 
 class ClinicAgentSwitchView(LoginRequiredMixin, View):

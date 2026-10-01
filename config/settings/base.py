@@ -257,6 +257,10 @@ WHATSAPP_TEST_WEBHOOK_URL = config(
     default='https://n8n.alt4ir.online/webhook/whatsapp-test',
 )
 
+# Healthcheck de n8n, para el botón «comprobar» junto al estado del agente.
+# Solo dice que el proceso de n8n responde, no que un workflow concreto esté activo.
+N8N_HEALTHZ_URL = config('N8N_HEALTHZ_URL', default='https://n8n.alt4ir.online/healthz')
+
 # Qué hacer si no se puede escribir un registro de auditoría (app `audit`).
 #   fail_closed → se aborta la operación auditada. Es el valor por defecto:
 #     son datos de salud, y un cambio que después no se puede justificar es peor
