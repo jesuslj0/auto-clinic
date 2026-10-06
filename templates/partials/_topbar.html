@@ -1,6 +1,6 @@
 {% with professional=request.user.professional_profile %}
 <div class="border-b border-line bg-surface">
-    <div class="mx-auto flex max-w-7xl items-center gap-4 px-4 py-2.5 sm:px-6 lg:px-8">
+    <div class="mx-auto flex max-w-7xl items-center gap-3 px-4 py-1.5 sm:gap-4 sm:px-6 sm:py-2.5 lg:px-8">
         <!-- Buscador de pacientes -->
         <form method="get" action="{% url 'core:search' %}" role="search" class="relative flex-1">
             <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-content-faint">
@@ -14,12 +14,12 @@
                 value="{{ request.GET.q|default:'' }}"
                 placeholder="Buscar pacientes y citas…"
                 autocomplete="off"
-                class="block w-full rounded-xl border-0 bg-muted py-2 pl-10 pr-4 text-sm text-content placeholder-content-faint transition focus:bg-surface focus:outline-none focus:ring-2 focus:ring-brand-500"
+                class="block w-full rounded-xl border-0 bg-muted py-1.5 pl-10 sm:py-2 pr-4 text-sm text-content placeholder-content-faint transition focus:bg-surface focus:outline-none focus:ring-2 focus:ring-brand-500"
             >
         </form>
 
         <!-- Separador -->
-        <div class="h-8 w-px flex-shrink-0 bg-line" aria-hidden="true"></div>
+        <div class="h-6 w-px flex-shrink-0 bg-line sm:h-8" aria-hidden="true"></div>
 
         {% comment %}Perfil del usuario. Un solo destino para todos: «Mi cuenta»
         reúne los datos de acceso, la ficha profesional y el horario, así que ya
@@ -28,9 +28,9 @@
            class="flex flex-shrink-0 items-center gap-3 rounded-xl transition hover:opacity-80"
            title="Ver mi cuenta">
             {% if professional.photo %}
-                <img src="{{ professional.photo.url }}" alt="Foto de perfil" class="h-9 w-9 flex-shrink-0 rounded-xl object-cover ring-2 ring-brand-line">
+                <img src="{{ professional.photo.url }}" alt="Foto de perfil" class="h-8 w-8 flex-shrink-0 rounded-xl object-cover ring-2 sm:h-9 sm:w-9 ring-brand-line">
             {% else %}
-                <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-gradient text-sm font-semibold text-white shadow-glow">
+                <span class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-brand-gradient text-sm sm:h-9 sm:w-9 font-semibold text-white shadow-glow">
                     {{ request.user.get_full_name|default:request.user.email|make_list|first|upper }}
                 </span>
             {% endif %}

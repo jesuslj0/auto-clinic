@@ -44,7 +44,7 @@ from core.forms import (
     ClinicForm,
     EmailAuthenticationForm,
 )
-from core.mixins import ClinicAdminRequiredMixin, ExportMixin
+from core.mixins import ClinicAdminRequiredMixin, ExportMixin, is_clinic_admin
 from core.models import Clinic, User
 from core.permissions import IsAgentMasterKey, IsClinicAdminOrReadOnly, IsStaffOrAdmin
 from core.serializers import AgentConfigSerializer, ClinicSerializer, UserSerializer
@@ -97,11 +97,15 @@ class ClinicInfoView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['clinic_obj'] = self.request.user.clinic
+        # Solo administración edita la clínica: sin esto, el botón llevaría a un 403.
+        context['can_manage'] = is_clinic_admin(self.request.user)
         context['section'] = 'clinic'
         return context
 
 
-class ClinicEditView(LoginRequiredMixin, UpdateView):
+class ClinicEditView(ClinicAdminRequiredMixin, UpdateView):
+    # Los plazos de reserva y la integración condicionan lo que ofrece el agente
+    # a los pacientes: es configuración, no un dato de perfil.
     model = Clinic
     form_class = ClinicForm
     template_name = 'clinics/clinic_edit.html'

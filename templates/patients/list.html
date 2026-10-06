@@ -22,11 +22,11 @@ filtrar vuelva siempre a la primera página.
 {% endcomment %}
 <div class="space-y-6">
 <section class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
-    <div class="space-y-4 border-b border-line px-6 py-5">
+    <div class="space-y-3 border-b border-line px-4 py-3 sm:space-y-4 sm:px-6 sm:py-5">
         <div class="flex flex-wrap items-baseline justify-between gap-2">
             <div>
-                <h3 class="text-lg font-semibold text-content">Directorio de pacientes</h3>
-                <p class="mt-1 text-sm text-content-subtle">Consulta a todas las personas registradas en tu clínica.</p>
+                <h3 class="text-base font-semibold text-content sm:text-lg">Directorio de pacientes</h3>
+                <p class="mt-1 hidden text-sm text-content-subtle sm:block">Consulta a todas las personas registradas en tu clínica.</p>
             </div>
             <p class="text-sm text-content-subtle" role="status">
                 <span class="font-semibold text-content-muted">{{ paginator.count }}</span> paciente{{ paginator.count|pluralize }}{% if has_filters %} con estos filtros{% endif %}

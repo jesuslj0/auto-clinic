@@ -308,17 +308,17 @@ sería marcado inválido.
 
             </div>
         </div>
+        {# Pie de la tarjeta, siempre visible: la rejilla ocupa el alto de pantalla y un aviso debajo quedaría fuera de vista. #}
+        {% if hidden_days_info %}
+        <p class="flex flex-shrink-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 border-t border-line bg-muted px-4 py-2 text-xs text-content-subtle">
+            <svg aria-hidden="true" class="h-4 w-4 flex-shrink-0 text-content-faint" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+            </svg>
+            <span class="font-medium text-content-muted">Días no laborables ocultos:</span>
+            {% for d in hidden_days_info %}<span>{{ d.date|date:"l j M" }}{% if not forloop.last %},{% endif %}</span>{% endfor %}
+        </p>
+        {% endif %}
     </section>
-
-    {% if hidden_days_info %}
-    <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-2xl bg-muted px-4 py-2.5 text-xs text-content-subtle ring-1 ring-line">
-        <svg aria-hidden="true" class="h-4 w-4 flex-shrink-0 text-content-faint" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
-        </svg>
-        <span class="font-medium text-content-muted">Días no laborables ocultos:</span>
-        {% for d in hidden_days_info %}<span>{{ d.date|date:"l j M" }}{% if not forloop.last %},{% endif %}</span>{% endfor %}
-    </p>
-    {% endif %}
 
     {% comment %}
     El único panel lateral. Enseña el detalle de una cita o el formulario de una

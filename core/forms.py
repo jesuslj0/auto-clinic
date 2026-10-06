@@ -54,11 +54,26 @@ class ClinicForm(forms.ModelForm):
         label='Zona horaria',
     )
 
+    # Tope de una semana (hold) y de un mes (antelación): más allá no es una
+    # regla de negocio sino un error de teclado (un 0 de más), y un hold de años
+    # equivale a no caducar nunca.
+    hold_ttl_minutes = forms.IntegerField(
+        label='Plazo para validar una reserva (minutos)',
+        min_value=0, max_value=7 * 24 * 60,
+        help_text='Cuánto se guarda el hueco de una cita reservada por el agente mientras esperas validarla. Pasado el plazo se cancela y el hueco se libera. 0 = no caduca.',
+    )
+    min_booking_notice_minutes = forms.IntegerField(
+        label='Antelación mínima de reserva (minutos)',
+        min_value=0, max_value=30 * 24 * 60,
+        help_text='Con menos antelación que esta, el agente no ofrece ni acepta citas. No afecta a las que creas tú desde el panel. 0 = sin mínimo.',
+    )
+
     class Meta:
         model = Clinic
         fields = [
             'name', 'phone', 'email', 'website', 'address', 'city', 'province',
             'postal_code', 'timezone', 'description', 'logo', 'api_type', 'api_url',
+            'hold_ttl_minutes', 'min_booking_notice_minutes',
         ]
         widgets = {
             'description': forms.Textarea(attrs={'rows': 3}),

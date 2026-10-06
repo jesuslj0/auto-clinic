@@ -142,3 +142,25 @@ class TestOnlineBooking:
         validate_appointment_update(
             cita, {'status': Appointment.Status.CONFIRMED}, require_online_booking=True,
         )
+
+
+@pytest.mark.django_db
+class TestEarliestBookableEnLaApi:
+    """La API de huecos dice cuál es el primer instante reservable.
+
+    El agente lo usa para avisar de la antelación SOLO cuando lo que pide el
+    paciente se queda fuera por ella, no como aviso general en cada consulta.
+    """
+
+    def test_devuelve_el_limite_en_la_zona_de_la_clinica(self, admin_client, prof, clinic_a, lunes, madrid):
+        clinic_a.min_booking_notice_minutes = 120
+        clinic_a.save()
+        antes = timezone.now() + datetime.timedelta(minutes=120)
+
+        response = admin_client.get(f'/api/professionals/{prof.pk}/available-slots/?date={lunes.isoformat()}')
+
+        assert response.status_code == 200
+        earliest = datetime.datetime.fromisoformat(response.data['earliest_bookable'])
+        assert earliest.utcoffset() == antes.astimezone(madrid).utcoffset()
+        assert abs((earliest - antes).total_seconds()) < 60
+        assert response.data['min_notice_minutes'] == 120

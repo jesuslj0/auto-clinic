@@ -7,16 +7,12 @@ hueco para siempre.
 
 Cómo programarlo. El proyecto ya trae `CELERY_BEAT_SCHEDULE`
 (config/settings/base.py) para los recordatorios, así que lo natural es añadir
-ahí una entrada que llame a `appointments.tasks.expire_appointment_holds`:
+ahí la entrada `expire-appointment-holds`, que llama a
+`appointments.tasks.expire_appointment_holds`.
 
-    'expire-appointment-holds': {
-        'task': 'appointments.tasks.expire_appointment_holds',
-        'schedule': 600.0,   # cada 10 minutos
-    },
-
-OJO: hoy `docker-compose.yml` solo levanta un worker (`celery -A config worker`),
-NO hay servicio `beat`, así que ese schedule no se ejecuta en local. Mientras no
-lo haya, esto se lanza a mano o por cron:
+Ya está programado: `CELERY_BEAT_SCHEDULE` lo lanza cada 10 minutos y el
+servicio `celery-beat` del `docker-compose.yml` lo ejecuta. Sin beat (p. ej. al
+correr `runserver` a pelo), se lanza a mano o por cron:
 
     python manage.py expire_appointment_holds
 """
