@@ -15,19 +15,19 @@
 
 {% block content %}
 <section class="space-y-6">
-    <form method="get" class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line">
+    <form method="get" class="rounded-3xl bg-surface p-4 shadow-soft ring-1 ring-line sm:p-5">
         <input type="hidden" name="sort" value="{{ filters.sort }}">
-        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div class="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-5">
             <label class="block">
-                <span class="mb-2 block text-sm font-medium text-content-muted">Desde</span>
+                <span class="mb-1 block text-xs font-medium text-content-muted sm:mb-2 sm:text-sm">Desde</span>
                 <input type="date" name="desde" value="{{ filters.date_from|date:'Y-m-d' }}" class="block w-full rounded-2xl border-line text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
             </label>
             <label class="block">
-                <span class="mb-2 block text-sm font-medium text-content-muted">Hasta</span>
+                <span class="mb-1 block text-xs font-medium text-content-muted sm:mb-2 sm:text-sm">Hasta</span>
                 <input type="date" name="hasta" value="{{ filters.date_to|date:'Y-m-d' }}" class="block w-full rounded-2xl border-line text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
             </label>
             <label class="block">
-                <span class="mb-2 block text-sm font-medium text-content-muted">Asignado a</span>
+                <span class="mb-1 block text-xs font-medium text-content-muted sm:mb-2 sm:text-sm">Asignado a</span>
                 <select name="profesional" class="block w-full rounded-2xl border-line text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
                     <option value="">Todos los profesionales</option>
                     {% for professional in professionals %}
@@ -36,7 +36,7 @@
                 </select>
             </label>
             <label class="block">
-                <span class="mb-2 block text-sm font-medium text-content-muted">Estado</span>
+                <span class="mb-1 block text-xs font-medium text-content-muted sm:mb-2 sm:text-sm">Estado</span>
                 <select name="status" class="block w-full rounded-2xl border-line text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
                     <option value="">Todos los estados</option>
                     {% for value, label in status_choices %}
@@ -45,7 +45,7 @@
                 </select>
             </label>
             <label class="block">
-                <span class="mb-2 block text-sm font-medium text-content-muted">Procedimiento</span>
+                <span class="mb-1 block text-xs font-medium text-content-muted sm:mb-2 sm:text-sm">Procedimiento</span>
                 <select name="procedimiento" class="block w-full rounded-2xl border-line text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
                     <option value="">Con y sin</option>
                     {% for value, label in procedure_choices %}

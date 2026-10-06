@@ -1,0 +1,17 @@
+{# Campo numérico de plazo (minutos) con su ayuda. Recibe `field`. #}
+<div>
+    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">{{ field.label }}</label>
+    <input
+        type="number"
+        inputmode="numeric"
+        min="{{ field.field.min_value }}"
+        max="{{ field.field.max_value }}"
+        step="1"
+        name="{{ field.html_name }}"
+        id="{{ field.id_for_label }}"
+        value="{{ field.value|default_if_none:'' }}"
+        class="block w-full rounded-xl border {% if field.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:outline-none focus:ring-2"
+    >
+    {% if field.errors %}<p class="mt-1.5 text-xs text-danger">{{ field.errors|join:", " }}</p>{% endif %}
+    <p class="mt-1.5 text-xs text-content-subtle">{{ field.help_text }}</p>
+</div>

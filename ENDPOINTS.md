@@ -101,7 +101,7 @@ El recurso `/api/professionals/` devuelve:
 > (120 por defecto, 0 = sin mínimo) no se devuelven, y crear o reprogramar por la API una cita
 > dentro de ese plazo responde 400 con `code: booking_too_soon`. El staff desde el panel no está sujeto.
 
-**Ejemplo de respuesta `available-slots`:**
+**Ejemplo de respuesta `available-slots`** (`earliest_bookable` es el primer instante reservable por la vía online, en la zona de la clínica: `ahora + min_notice_minutes`; el agente lo usa para mencionar la antelación solo cuando es la causa de que una hora no se pueda reservar):
 ```json
 {
   "professional_id": 1,
@@ -109,6 +109,7 @@ El recurso `/api/professionals/` devuelve:
   "date": "2026-04-20",
   "duration_minutes": 30,
   "min_notice_minutes": 120,
+  "earliest_bookable": "2026-04-20T10:12:00+02:00",
   "available_slots": ["2026-04-20T08:00:00+02:00", "2026-04-20T08:30:00+02:00"]
 }
 ```

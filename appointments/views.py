@@ -31,6 +31,7 @@ from appointments.forms import (
 )
 from appointments.models import Appointment, AppointmentStatusHistory, Professional, ProfessionalSchedule
 from appointments.services import (
+    booking_cutoff,
     AppointmentDomainError,
     cancel_appointment,
     confirm_by_clinic,
@@ -314,13 +315,20 @@ class ProfessionalViewSet(viewsets.ModelViewSet):
             end_hour=end_hour,
         )
 
+        clinic = professional.clinic
+        # Primer instante reservable, en la zona de la clínica (como los huecos).
+        # El agente lo usa para saber si lo que pide el paciente se queda fuera
+        # SOLO por la antelación mínima, y avisar únicamente entonces.
+        earliest = booking_cutoff(clinic).astimezone(ZoneInfo(clinic.timezone)).isoformat()
+
         if not availability.works_this_day:
             return Response({
                 'professional_id': professional.pk,
                 'professional_name': str(professional),
                 'date': date_str,
                 'works_this_day': False,
-                'min_notice_minutes': professional.clinic.min_booking_notice_minutes,
+                'min_notice_minutes': clinic.min_booking_notice_minutes,
+                'earliest_bookable': earliest,
                 'available_slots': [],
             })
 
@@ -334,7 +342,8 @@ class ProfessionalViewSet(viewsets.ModelViewSet):
                 'end_time': availability.schedule_end.strftime('%H:%M'),
             },
             'duration_minutes': duration,
-            'min_notice_minutes': professional.clinic.min_booking_notice_minutes,
+            'min_notice_minutes': clinic.min_booking_notice_minutes,
+            'earliest_bookable': earliest,
             'available_slots': [slot.isoformat() for slot in availability.slots],
         })
 
