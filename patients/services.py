@@ -12,7 +12,13 @@ def create_patient(*, clinic, phone, **fields):
     from patients.models import Patient
 
     normalized = normalize_phone(phone)
-    return Patient.objects.create(clinic=clinic, phone=normalized, **fields)
+    patient = Patient.objects.create(clinic=clinic, phone=normalized, **fields)
+    # Las citas que se reservaron sin ficha con este teléfono pasan a ser suyas.
+    # Llamada explícita y no señal, como el resto de derivaciones del proyecto.
+    from appointments.services import link_orphan_appointments
+
+    link_orphan_appointments(patient)
+    return patient
 
 
 def normalize_phone(phone: str) -> str:

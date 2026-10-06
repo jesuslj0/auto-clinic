@@ -21,7 +21,12 @@ from rest_framework.views import APIView
 from appointments.forms import ProfessionalProfileForm, build_schedule_formsets
 from appointments.filters import month_bounds
 from appointments.models import Appointment, AppointmentStatusHistory
-from appointments.services import AppointmentDomainError, cancel_appointment, confirm_by_clinic
+from appointments.services import (
+    AppointmentDomainError,
+    cancel_appointment,
+    confirm_by_clinic,
+    create_patient_from_appointment,
+)
 from audit.mixins import log_access
 from audit.models import AccessLog
 from billing.metrics import dashboard_revenue
@@ -584,6 +589,15 @@ class DashboardAppointmentActionView(LoginRequiredMixin, View):
                 messages.error(request, 'Esta cita no puede marcarse como completada.')
                 next_url = request.POST.get('next') or 'core:dashboard'
                 return redirect(next_url)
+            if not appointment.patient_id:
+                # Una cita se completa porque se atendió, y atender es abrir
+                # historia: sin ficha no hay a quién colgársela. Se pide crearla
+                # (o vincularla) antes, desde esta misma pantalla.
+                messages.error(
+                    request,
+                    'Antes de completar la cita hay que crear o vincular la ficha del paciente.',
+                )
+                return redirect('core:dashboard-manage-appointment', appointment_id=appointment.pk)
             prev = appointment.status
             appointment.status = Appointment.Status.COMPLETED
             appointment.save(update_fields=['status', 'updated_at'])
@@ -611,6 +625,23 @@ class DashboardAppointmentActionView(LoginRequiredMixin, View):
                 actor_label=actor_label,
             )
             success_message = 'Cita marcada como no presentada.'
+        elif action in ('create_patient', 'link_patient'):
+            # Cita de una primera visita: el contacto pasa a ser ficha, o se
+            # vincula con la que ya exista con ese teléfono.
+            if appointment.patient_id:
+                messages.info(request, 'Esta cita ya tiene ficha de paciente.')
+            else:
+                try:
+                    patient, created = create_patient_from_appointment(appointment)
+                except ValueError as exc:
+                    messages.error(request, str(exc))
+                else:
+                    messages.success(
+                        request,
+                        f'Ficha de {patient} creada y vinculada a la cita.' if created
+                        else f'Cita vinculada a la ficha existente de {patient}.',
+                    )
+            return redirect('core:dashboard-manage-appointment', appointment_id=appointment.pk)
         elif action == 'save_notes':
             # Nota de agenda, no de historia clínica: ver el docstring de
             # `DashboardAppointmentManageView` para dónde está esa frontera. El

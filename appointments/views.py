@@ -961,6 +961,10 @@ class AppointmentCreateView(LoginRequiredMixin, FormView):
             self.appointment = create_appointment(
                 clinic=self.request.user.clinic,
                 patient=data['patient'],
+                # Solo con «sin ficha»: el form deja vacíos estos tres si hay paciente.
+                patient_name=data['patient_name'],
+                patient_phone=data['patient_phone'],
+                contact_email=data['contact_email'],
                 service=data['service'],
                 professional=data.get('professional'),
                 scheduled_at=data['scheduled_at'],

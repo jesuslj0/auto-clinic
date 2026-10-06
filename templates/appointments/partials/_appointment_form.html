@@ -61,22 +61,61 @@ Lo que sí sale de aquí son **los datos**: las dos listas precargadas, en sendo
     {% endif %}
 
     {# --- Paciente ------------------------------------------------------- #}
-    <div
-        x-data="appointmentPatientPicker({
-            truncada: {{ patients_truncated|yesno:'true,false' }},
-            busquedaUrl: '{{ patients_search_url }}',
-            idInicial: '{{ form.patient.value|default:''|escapejs }}',
-            etiquetaInicial: '{{ initial_patient_label|default:''|escapejs }}'
-        })"
-        @click.outside="cerrar()"
-        class="relative"
-    >
-        <div class="mb-1.5 flex items-center justify-between">
-            <label for="{{ form.patient.id_for_label }}" class="block text-sm font-medium text-content-muted">{{ form.patient.label }}</label>
-            <a href="{{ new_patient_url }}" class="text-xs font-medium text-brand-fg hover:text-brand-fg">+ Nuevo paciente</a>
+    {# Con ficha (desplegable) o primera visita sin ficha (nombre y teléfono). #}
+    <div x-data="{ sinFicha: {{ form.no_record.value|yesno:'true,false' }} }" class="space-y-4">
+        <input type="hidden" name="{{ form.no_record.html_name }}" :value="sinFicha ? 'true' : 'false'">
+        <div class="inline-flex w-full rounded-xl bg-muted p-1 text-sm font-medium" role="tablist" aria-label="Tipo de paciente">
+            <button type="button" role="tab" :aria-selected="!sinFicha" @click="sinFicha = false"
+                :class="!sinFicha ? 'bg-surface text-content shadow-sm ring-1 ring-line' : 'text-content-muted hover:text-content'"
+                class="flex-1 rounded-lg px-3 py-2 transition">Paciente con ficha</button>
+            <button type="button" role="tab" :aria-selected="sinFicha" @click="sinFicha = true"
+                :class="sinFicha ? 'bg-surface text-content shadow-sm ring-1 ring-line' : 'text-content-muted hover:text-content'"
+                class="flex-1 rounded-lg px-3 py-2 transition">Primera visita (sin ficha)</button>
         </div>
-        {% include 'appointments/partials/_appointment_picker_field.html' with field=form.patient placeholder="Selecciona o escribe para filtrar…" %}
-        {% if form.patient.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.patient.errors|join:", " }}</p>{% endif %}
+
+        <div x-show="!sinFicha">
+        <div
+            x-data="appointmentPatientPicker({
+                truncada: {{ patients_truncated|yesno:'true,false' }},
+                busquedaUrl: '{{ patients_search_url }}',
+                idInicial: '{{ form.patient.value|default:''|escapejs }}',
+                etiquetaInicial: '{{ initial_patient_label|default:''|escapejs }}'
+            })"
+            @click.outside="cerrar()"
+            class="relative"
+        >
+            <div class="mb-1.5 flex items-center justify-between">
+                <label for="{{ form.patient.id_for_label }}" class="block text-sm font-medium text-content-muted">{{ form.patient.label }}</label>
+                <a href="{{ new_patient_url }}" class="text-xs font-medium text-brand-fg hover:text-brand-fg">+ Nuevo paciente</a>
+            </div>
+            {% include 'appointments/partials/_appointment_picker_field.html' with field=form.patient placeholder="Selecciona o escribe para filtrar…" %}
+            {% if form.patient.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.patient.errors|join:", " }}</p>{% endif %}
+        </div>
+        </div>
+
+        <div x-show="sinFicha" x-cloak class="space-y-4">
+            <p class="text-xs text-content-subtle">No se crea ninguna ficha: la cita guarda solo el contacto. La ficha se abre desde la cita cuando el paciente se presenta.</p>
+            <div>
+                <label for="{{ form.patient_name.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.patient_name.label }}</label>
+                <input type="text" name="{{ form.patient_name.html_name }}" id="{{ form.patient_name.id_for_label }}" value="{{ form.patient_name.value|default:'' }}" autocomplete="off"
+                    class="block w-full rounded-xl border {% if form.patient_name.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                {% if form.patient_name.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.patient_name.errors|join:", " }}</p>{% endif %}
+            </div>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                    <label for="{{ form.patient_phone.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.patient_phone.label }}</label>
+                    <input type="tel" name="{{ form.patient_phone.html_name }}" id="{{ form.patient_phone.id_for_label }}" value="{{ form.patient_phone.value|default:'' }}" placeholder="+34 600 000 000"
+                        class="block w-full rounded-xl border {% if form.patient_phone.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                    {% if form.patient_phone.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.patient_phone.errors|join:", " }}</p>{% endif %}
+                </div>
+                <div>
+                    <label for="{{ form.contact_email.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.contact_email.label }} <span class="font-normal text-content-faint">(opcional)</span></label>
+                    <input type="email" name="{{ form.contact_email.html_name }}" id="{{ form.contact_email.id_for_label }}" value="{{ form.contact_email.value|default:'' }}"
+                        class="block w-full rounded-xl border {% if form.contact_email.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                    {% if form.contact_email.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.contact_email.errors|join:", " }}</p>{% endif %}
+                </div>
+            </div>
+        </div>
     </div>
 
     {# --- Servicio ------------------------------------------------------- #}

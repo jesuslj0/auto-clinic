@@ -190,6 +190,26 @@
         </div>
         {% endif %}
 
+        {% if not appointment.patient_id and appointment.status != 'cancelled' %}
+        {% comment %}Primera visita: la cita lleva solo el contacto. La ficha se abre
+        cuando la clínica sabe que es su paciente; hasta entonces no hay historia
+        clínica ni procedimientos, y no se puede completar la cita.{% endcomment %}
+        <div class="mt-6 rounded-2xl bg-info-soft px-4 py-4 ring-1 ring-info-line">
+            <p class="text-sm font-semibold text-info">Cita sin ficha de paciente</p>
+            <p class="mt-1 text-sm text-content-muted">
+                {{ appointment.patient_name|default:'Sin nombre' }}
+                {% if appointment.patient_phone %}· {{ appointment.patient_phone }}{% endif %}
+                {% if appointment.contact_email %}· {{ appointment.contact_email }}{% endif %}
+            </p>
+            <p class="mt-1 text-xs text-content-subtle">Crea la ficha cuando se presente para poder registrar procedimientos y completar la cita.</p>
+            <form method="post" action="{% url 'core:dashboard-appointment-action' appointment.id %}" class="mt-3">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create_patient">
+                <button type="submit" class="btn-primary px-4 py-2 text-sm">Crear ficha de paciente</button>
+            </form>
+        </div>
+        {% endif %}
+
         {% comment %}Procedimientos de esta cita: solo CUÁNTOS hay.
 
         Esta pantalla no enseña historia clínica a propósito, y por eso no
