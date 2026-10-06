@@ -17,7 +17,6 @@ Base de Django lista para producción: un SaaS de gestión de citas para clínic
 - `appointments`: reservas, profesionales y acciones públicas por token
 - `notifications`: recordatorios y tareas de Celery
 - `billing`: suscripción de la clínica (opcional)
-- `booking`: reserva pública (solo plantillas)
 - `portal`: portal del paciente para confirmar o cancelar por token (solo plantillas)
 - `agent`: estado del bot de WhatsApp (AgentMemory, ConversationSession, WorkflowError)
 - `knowledge`: base de conocimiento de la clínica (entradas, consultas, caché)

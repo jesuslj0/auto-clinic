@@ -1,0 +1,97 @@
+{% load appointment_extras %}
+{% comment %}
+Agenda de hoy. Cada fila dice en qué punto del día está la cita —en curso, la
+siguiente, ya pasada o sin cerrar— y qué se sabe del paciente (primera visita,
+deuda, chat abierto), y ofrece la acción que toca sin entrar al detalle.
+
+Todo viene calculado de `core.dashboard.today_agenda()`. Las acciones son POST a
+`core:dashboard-appointment-action`, que ya valida clínica y estado y vuelve al
+panel. Solo se ofrece la que tiene sentido (confirmar lo pendiente, completar lo
+confirmado que ya empezó); lo demás está en «Gestionar».
+{% endcomment %}
+<section class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6 sm:py-5">
+        <div class="min-w-0">
+            <h3 class="text-base font-semibold text-content sm:text-lg">Agenda de hoy</h3>
+            <p class="mt-1 hidden text-sm text-content-subtle sm:block">{{ today|date:"l j \d\e F" }} · {{ agenda|length }} cita{{ agenda|length|pluralize }}.</p>
+        </div>
+        <div class="flex items-center gap-2">
+            {% if agenda_professionals|length > 1 %}
+            <form method="get" class="flex items-center">
+                <label for="agenda-profesional" class="sr-only">Profesional</label>
+                <select id="agenda-profesional" name="profesional" onchange="this.form.submit()"
+                        class="rounded-xl border-line bg-surface py-1.5 pl-3 pr-8 text-xs font-medium text-content focus:border-brand-500 focus:ring-brand-500">
+                    <option value="">Todos los profesionales</option>
+                    {% for p in agenda_professionals %}
+                    <option value="{{ p.pk }}"{% if p.pk == agenda_professional %} selected{% endif %}>{{ p }}</option>
+                    {% endfor %}
+                </select>
+                <noscript><button class="btn-secondary ml-2" type="submit">Filtrar</button></noscript>
+            </form>
+            {% endif %}
+            <a href="{% url 'appointments:list' %}" class="btn-secondary flex-shrink-0 max-sm:px-3 max-sm:text-xs">Ver todo</a>
+        </div>
+    </div>
+    <div class="divide-y divide-line">
+        {% for a in agenda %}
+        <article class="relative flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-5
+                        {% if a.is_current %}bg-brand-soft/60{% endif %}{% if a.is_past %} opacity-60{% endif %}">
+            {% if a.is_current or a.is_next %}
+            <span aria-hidden="true" class="absolute inset-y-3 left-0 w-1 rounded-r-full {% if a.is_current %}bg-brand-500{% else %}bg-info{% endif %}"></span>
+            {% endif %}
+            <div class="flex min-w-0 items-start gap-3 sm:gap-4">
+                <div class="w-12 flex-shrink-0 text-center sm:w-14">
+                    <p class="text-base font-semibold tabular-nums text-content">{{ a.scheduled_at|date:"H:i" }}</p>
+                    <p class="text-[11px] tabular-nums text-content-faint">{{ a.get_end_datetime|date:"H:i" }}</p>
+                </div>
+                <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <p class="truncate text-base font-semibold text-content">{{ a.patient|default:a.patient_name }}</p>
+                        {% if a.is_current %}
+                            <span class="inline-flex items-center gap-1 rounded-full bg-brand-soft-strong px-2 py-0.5 text-[11px] font-semibold text-brand-fg"><span class="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500"></span>En curso</span>
+                        {% elif a.is_next %}
+                            <span class="inline-flex items-center rounded-full bg-info-soft px-2 py-0.5 text-[11px] font-semibold text-info">Siguiente · {% if a.minutes_until < 60 %}en {{ a.minutes_until }} min{% else %}a las {{ a.scheduled_at|date:"H:i" }}{% endif %}</span>
+                        {% elif a.is_overdue %}
+                            <span class="inline-flex items-center rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-semibold text-warning">Sin cerrar</span>
+                        {% endif %}
+                        {% if a.is_first_visit %}<span class="inline-flex items-center rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent-fg">Primera visita</span>{% endif %}
+                        {% if a.has_debt %}<span class="inline-flex items-center rounded-full bg-danger-soft px-2 py-0.5 text-[11px] font-semibold text-danger">Saldo pendiente</span>{% endif %}
+                    </div>
+                    <p class="mt-1 truncate text-sm text-content-subtle">
+                        {{ a.service|default:a.service_name }}{% if agenda_professionals|length > 1 and a.professional %} · {{ a.professional }}{% endif %}
+                    </p>
+                </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 sm:flex-shrink-0 sm:justify-end">
+                <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold {{ a.status|status_badge }}">
+                    {{ a.status|status_icon:"h-3.5 w-3.5" }}
+                    {{ a.get_status_display|default:a.status|title }}
+                </span>
+                {% if a.quick_action %}
+                <form method="post" action="{% url 'core:dashboard-appointment-action' a.id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="{{ a.quick_action.0 }}">
+                    <button type="submit" class="btn-primary px-3 py-1.5 text-xs">{{ a.quick_action.1 }}</button>
+                </form>
+                {% endif %}
+                {% if a.patient_id %}
+                <a href="{% url 'patients:detail' a.patient_id %}" class="icon-btn" title="Ver ficha del paciente" aria-label="Ver ficha de {{ a.patient }}">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
+                </a>
+                {% endif %}
+                {% if a.chat_session_id %}
+                <a href="{% url 'agent:chat-thread' a.chat_session_id %}" class="icon-btn" title="Abrir chat" aria-label="Abrir chat con {{ a.patient }}">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" /></svg>
+                </a>
+                {% endif %}
+                <a href="{% url 'core:dashboard-manage-appointment' a.id %}" class="btn-outlined px-3 py-1.5">Gestionar</a>
+            </div>
+        </article>
+        {% empty %}
+        <div class="px-6 py-12 text-center">
+            <p class="text-base font-medium text-content">{% if agenda_professional %}Este profesional no tiene citas hoy.{% else %}Todavía no hay citas programadas.{% endif %}</p>
+            <p class="mt-2 text-sm text-content-subtle">Tu calendario está abierto para nuevas reservas hoy.</p>
+        </div>
+        {% endfor %}
+    </div>
+</section>

@@ -117,6 +117,14 @@ class Clinic(models.Model):
             "y el hueco se libera. 0 = sin caducidad."
         ),
     )
+    min_booking_notice_minutes = models.PositiveIntegerField(
+        default=120,
+        help_text=(
+            "Antelación mínima, en minutos, para reservar por la vía online (agente "
+            "y API): no se ofrecen ni se aceptan citas que empiecen antes de "
+            "ahora + este plazo. El staff desde el panel no está sujeto. 0 = sin mínimo."
+        ),
+    )
     description = models.TextField(blank=True)
     logo_url = models.URLField(blank=True)
     logo = models.ImageField(upload_to='clinic_logos/', blank=True)

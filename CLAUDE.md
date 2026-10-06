@@ -46,7 +46,6 @@ python manage.py runserver    # Uses config.settings.dev by default
 | `appointments` | Appointment lifecycle, WebSocket signals, token-based public actions |
 | `notifications` | Celery beat tasks for reminder dispatch |
 | `billing` | `Subscription` (planes de la clínica) y `PatientInvoice`: factura de paciente que agrupa `PerformedProcedure`. Borrador editable; al emitir copia sus líneas (`lines`), congela `total`, toma número de la serie de su clínica (`InvoiceSequence`) y no vuelve a mirar los procedimientos. No se corrige: se anula (`void()`) y se emite otra |
-| `booking` | Template-only public booking flow (no models) |
 | `agent` | WhatsApp bot state: `AgentMemory` (contexto del LLM), `ConversationSession` (hilo), `ChatMessage` (historial append-only, auditado), `ChatAttachment` (foto/nota de voz del paciente, irremplazable), `WorkflowError`, `AgentProfile` (personalidad del agente por clínica) |
 | `knowledge` | Clinic knowledge base: `ClinicKnowledgeBase`, `ClinicInfoQuery`, `ClinicInfoCache` |
 | `audit` | Append-only audit trail: `ChangeLog` (writes, via signals) and `AccessLog` (reads, instrumented per view) |
@@ -233,7 +232,6 @@ Panel map (namespace in brackets):
 | `/agente/` (`agent_settings`, admins only) | test chat at the root («Chat»), `probar/enviar/`, `personalidad/`, `configuracion/` (Meta credentials + webhook, two forms told apart by a hidden `form` field) — views in `agent/settings_views.py` |
 | `/facturacion/` (`billing`) | `nueva/`, `pendientes/`, `<pk>/` (`emitir/`, `anular/`, `cobrar/`, `procedimientos/`, `eliminar/`) |
 | `/clinico/` (`clinical`) | `adjuntos/<uuid>/`, `consentimientos/<uuid>/firma/` |
-| `/reservar/` (`booking`, public) | `fecha/`, `confirmar/`, `confirmada/` |
 
 ### Agent personality (`agent.AgentProfile`)
 
@@ -317,6 +315,16 @@ Configured in `config/celery.py`. Beat schedule runs:
 - `dispatch_2h_reminders` — every 15 minutes, for appointments in 2h
 
 Broker: Redis DB 1. Result backend: Redis DB 2. Channel layer: Redis DB 0.
+
+### Antelación mínima de reserva
+
+`Clinic.min_booking_notice_minutes` (default 120, 0 = sin mínimo). Solo rige la vía
+online (`require_online_booking=True`: agente y API); el staff del panel y el admin
+quedan exentos. Se aplica en tres sitios de `appointments/services.py`: el motor de
+huecos (`_generate_slots(not_before=…)`, tanto el del profesional como el de la
+clínica), `create_appointment()` y `validate_appointment_update()` (solo si la hora
+realmente se mueve, así que confirmar/cancelar una cita cercana no se bloquea). El
+error es `BookingTooSoon` (`booking_too_soon`, 400).
 
 ### Token-based public actions
 

@@ -4,7 +4,7 @@
 {% block title %}Panel · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
 {% block page_heading %}Panel de Control{% endblock %}
 {% block page_subheading %}
-<p class="mt-0.5 hidden text-sm text-content-subtle sm:block">Bienvenido, aquí tienes el resumen de hoy.</p>
+<p class="mt-0.5 hidden text-sm text-content-subtle sm:block">{{ today|date:"l j \d\e F" }} · esto es lo que necesita tu atención.</p>
 {% endblock %}
 
 {% block page_actions %}
@@ -24,150 +24,29 @@
 
 {% block content %}
 {% comment %}
-El panel está partido en dos mitades que responden a dos preguntas distintas: a
-la izquierda, qué hay que hacer hoy (citas y pacientes); a la derecha, cómo va el
-dinero. La agenda del día va debajo, a lo ancho, porque es una lista y no una
-cifra.
+El panel responde a preguntas en orden de urgencia: qué requiere atención ahora
+(franja de alertas, solo si hay algo), cómo va el día (citas por estado y
+pacientes a la izquierda; el dinero a la derecha), qué viene (próximos días y
+ocupación), la agenda de hoy con sus acciones y, al final, cómo va el mes.
+
+Los datos salen de `core.dashboard` y `billing.metrics`; las plantillas solo
+pintan. La tarjeta de citas se refresca sola por htmx al cambiar de periodo.
 {% endcomment %}
 <section class="space-y-6">
-    <div class="grid gap-4 lg:grid-cols-2">
-        <!-- Columna izquierda: actividad (citas y pacientes) -->
-        <div class="grid content-start gap-4">
-            <!-- Citas de hoy (destacada) -->
-            <a href="{% url 'appointments:list' %}?desde={{ today|date:'Y-m-d' }}&hasta={{ today|date:'Y-m-d' }}&profesional="
-               aria-label="Ver las citas de hoy"
-               class="group block rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line transition hover:-translate-y-0.5 hover:shadow-lg hover:ring-brand-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:p-6">
-                <div class="flex items-start justify-between">
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <p class="text-sm font-medium text-content-subtle">Citas de hoy</p>
-                            <span class="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-xs font-semibold text-success">
-                                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                                </svg>
-                                {{ today_completed_pct|default:0 }}%
-                            </span>
-                        </div>
-                        <p class="mt-3 text-3xl font-semibold text-content sm:text-4xl">{{ today_appointments|default:0 }}</p>
-                        <p class="mt-2 text-sm text-content-subtle">{{ today_completed|default:0 }} completada{{ today_completed|pluralize }} de {{ today_appointments|default:0 }} programada{{ today_appointments|pluralize }} hoy.</p>
-                    </div>
-                    <div class="flex flex-col items-end gap-3">
-                        <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-brand-fg">
-                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-                            </svg>
-                        </span>
-                        <svg aria-hidden="true" class="h-4 w-4 flex-shrink-0 text-content-faint transition group-hover:translate-x-0.5 group-hover:text-brand-fg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                        </svg>
-                    </div>
-                </div>
-            </a>
-            <!-- Pendientes + Canceladas -->
-            <div class="grid grid-cols-2 gap-4">
-                <a href="{% url 'appointments:list' %}?desde=&hasta=&profesional=&status=pending&sort=asc"
-                   aria-label="Ver las citas pendientes de confirmación"
-                   class="group block rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line transition hover:-translate-y-0.5 hover:shadow-lg hover:ring-warning-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning sm:p-6">
-                    <div class="flex items-start justify-between">
-                        <div>
-                            <p class="text-sm font-medium text-content-subtle">Pendientes</p>
-                            <p class="mt-3 text-2xl font-semibold sm:text-3xl text-warning">{{ pending_appointments|default:0 }}</p>
-                            <p class="mt-2 text-sm text-content-subtle">En espera de confirmación, de cualquier fecha.</p>
-                        </div>
-                        <div class="flex flex-col items-end gap-3">
-                            <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-warning-soft text-warning">
-                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                            </span>
-                            <svg aria-hidden="true" class="h-4 w-4 flex-shrink-0 text-content-faint transition group-hover:translate-x-0.5 group-hover:text-warning" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                            </svg>
-                        </div>
-                    </div>
-                </a>
-                <a href="{% url 'appointments:list' %}?desde={{ month_start|date:'Y-m-d' }}&hasta={{ month_end|date:'Y-m-d' }}&profesional=&status=cancelled&sort=desc"
-                   aria-label="Ver las citas canceladas"
-                   class="group block rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line transition hover:-translate-y-0.5 hover:shadow-lg hover:ring-danger-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger sm:p-6">
-                    <div class="flex items-start justify-between">
-                        <div>
-                            <p class="text-sm font-medium text-content-subtle">Canceladas</p>
-                            <p class="mt-3 text-2xl font-semibold sm:text-3xl text-danger">{{ cancelled_appointments|default:0 }}</p>
-                            <p class="mt-2 text-sm text-content-subtle">Citas de {{ today|date:"F" }} anuladas.</p>
-                        </div>
-                        <div class="flex flex-col items-end gap-3">
-                            <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-danger-soft text-danger">
-                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                            </span>
-                            <svg aria-hidden="true" class="h-4 w-4 flex-shrink-0 text-content-faint transition group-hover:translate-x-0.5 group-hover:text-danger" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                            </svg>
-                        </div>
-                    </div>
-                </a>
-            </div>
-            <!-- Nuevos pacientes (este mes) -->
-            <a href="{% url 'patients:list' %}"
-               aria-label="Ver la lista de pacientes"
-               class="group block rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line transition hover:-translate-y-0.5 hover:shadow-lg hover:ring-info-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info sm:p-6">
-                <div class="flex items-start justify-between">
-                    <div>
-                        <p class="text-sm font-medium text-content-subtle">Nuevos pacientes</p>
-                        <p class="mt-3 text-2xl font-semibold sm:text-3xl text-content">{{ new_patients_month|default:0 }}</p>
-                        <p class="mt-2 text-sm text-content-subtle">Registrados en {{ today|date:"F" }}.</p>
-                    </div>
-                    <div class="flex flex-col items-end gap-3">
-                        <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-info-soft text-info">
-                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
-                            </svg>
-                        </span>
-                        <svg aria-hidden="true" class="h-4 w-4 flex-shrink-0 text-content-faint transition group-hover:translate-x-0.5 group-hover:text-info" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                        </svg>
-                    </div>
-                </div>
-            </a>
-        </div>
+    {% include 'dashboard/_alerts.html' %}
 
-        <!-- Columna derecha: el dinero -->
+    <div class="grid gap-4 lg:grid-cols-2">
+        <div class="grid content-start gap-4">
+            {% include 'dashboard/_appointments_status.html' %}
+            {% include 'dashboard/_new_patients.html' %}
+        </div>
         {% include 'dashboard/_revenue_card.html' %}
     </div>
 
-    <section class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
-        <div class="flex items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6 sm:py-5">
-            <div class="min-w-0">
-                <h3 class="text-base font-semibold text-content sm:text-lg">Citas de hoy</h3>
-                <p class="mt-1 hidden text-sm text-content-subtle sm:block">Una vista rápida de lo que sigue en agenda.</p>
-            </div>
-            <a href="{% url 'appointments:list' %}" class="btn-secondary flex-shrink-0 max-sm:px-3 max-sm:text-xs">Ver todo</a>
-        </div>
-        <div class="divide-y divide-line">
-            {% for appointment in today_schedule %}
-                <article class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-5">
-                    <div>
-                        <p class="text-base font-semibold text-content">{{ appointment.patient }}</p>
-                        <p class="mt-1 text-sm text-content-subtle">{{ appointment.service }} · {{ appointment.scheduled_at|date:"H:i" }} – {{ appointment.end_at|date:"H:i" }}</p>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold {{ appointment.status|status_badge }}">
-                            {{ appointment.status|status_icon:"h-3.5 w-3.5" }}
-                            {{ appointment.get_status_display|default:appointment.status|title }}
-                        </span>
-                        <a href="{% url 'core:dashboard-manage-appointment' appointment.id %}" class="btn-outlined px-3 py-1.5">
-                            Gestionar
-                        </a>
-                    </div>
-                </article>
-            {% empty %}
-                <div class="px-6 py-12 text-center">
-                    <p class="text-base font-medium text-content">Todavía no hay citas programadas.</p>
-                    <p class="mt-2 text-sm text-content-subtle">Tu calendario está abierto para nuevas reservas hoy.</p>
-                </div>
-            {% endfor %}
-        </div>
-    </section>
+    {% include 'dashboard/_outlook.html' %}
+
+    {% include 'dashboard/_agenda.html' %}
+
+    {% include 'dashboard/_insights.html' %}
 </section>
 {% endblock %}

@@ -459,7 +459,8 @@ class TestAvailableSlotsContract:
         assert response.status_code == 200
         assert set(response.data) == {
             'professional_id', 'professional_name', 'date',
-            'works_this_day', 'schedule', 'duration_minutes', 'available_slots',
+            'works_this_day', 'schedule', 'duration_minutes', 'min_notice_minutes',
+            'available_slots',
         }
         assert response.data['professional_id'] == professional.pk
         assert response.data['professional_name'] == str(professional)

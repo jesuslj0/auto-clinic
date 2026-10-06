@@ -31,7 +31,6 @@ INSTALLED_APPS = [
     'patients',
     'services',
     'appointments',
-    'booking',
     'notifications',
     'billing',
     'knowledge',
