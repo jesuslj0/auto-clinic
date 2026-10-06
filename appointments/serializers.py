@@ -140,8 +140,6 @@ class ProfessionalSerializer(ClinicScopedSerializerMixin, serializers.ModelSeria
 
 
 class AppointmentSerializer(ClinicScopedSerializerMixin, serializers.ModelSerializer):
-    patient_phone = serializers.CharField(source='patient.phone', read_only=True, default='')
-    patient_name = serializers.SerializerMethodField()
     service_name = serializers.CharField(source='service.name', read_only=True, default='')
     professional_name = serializers.SerializerMethodField()
     professional_type = serializers.CharField(
@@ -151,10 +149,15 @@ class AppointmentSerializer(ClinicScopedSerializerMixin, serializers.ModelSerial
         source='professional.get_professional_type_display', read_only=True, default=''
     )
 
-    def get_patient_name(self, obj):
-        if obj.patient:
-            return f"{obj.patient.first_name} {obj.patient.last_name}".strip()
-        return ''
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Con ficha, nombre y teléfono salen de la ficha (la fuente de verdad);
+        # sin ella —primera visita, reserva del agente sin onboarding—, del
+        # contacto que lleva la propia cita.
+        if instance.patient_id:
+            data['patient_name'] = f'{instance.patient.first_name} {instance.patient.last_name}'.strip()
+            data['patient_phone'] = instance.patient.phone
+        return data
 
     def get_professional_name(self, obj):
         if obj.professional:
@@ -209,6 +212,18 @@ class AppointmentSerializer(ClinicScopedSerializerMixin, serializers.ModelSerial
                     'manda la hora nueva en "scheduled_at" y el estado se pone solo.'
                 )
             })
+
+        # Sin ficha, la cita necesita el contacto: nombre para que la clínica sepa
+        # quién viene y teléfono para enlazarla con la ficha cuando exista. Solo en
+        # el alta: editar una cita sin ficha no tiene por qué repetirlos.
+        if self.instance is None and not attrs.get('patient'):
+            faltan = {
+                campo: 'Obligatorio si la cita no tiene paciente.'
+                for campo in ('patient_name', 'patient_phone')
+                if not (attrs.get(campo) or '').strip()
+            }
+            if faltan:
+                raise serializers.ValidationError(faltan)
 
         # Bug 4: La cita no puede ser en el pasado
         if scheduled_at and scheduled_at < timezone.now():

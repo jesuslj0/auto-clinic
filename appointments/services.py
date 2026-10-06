@@ -35,6 +35,9 @@ __all__ = [
     'SlotUnavailable',
     'BookingTooSoon',
     'create_appointment',
+    'link_patient_by_contact',
+    'link_orphan_appointments',
+    'create_patient_from_appointment',
     'lock_agenda',
     'validate_appointment_update',
     'select_professional_for_appointment',
@@ -467,6 +470,9 @@ def create_appointment(
                 require_online_booking=require_online_booking,
             )
 
+        if extra_fields.get('patient') is None:
+            extra_fields = _resolve_contact(clinic, extra_fields)
+
         appointment = Appointment.objects.create(
             clinic=clinic,
             scheduled_at=scheduled_at,
@@ -488,6 +494,125 @@ def create_appointment(
         )
 
     return appointment
+
+
+# ---------------------------------------------------------------------------
+# Citas sin ficha de paciente
+# ---------------------------------------------------------------------------
+#
+# Una cita puede existir antes que el paciente: primera visita dada de alta por
+# el staff o reservada por el agente sin onboarding. Lleva entonces su contacto
+# (`patient_name`, `patient_phone`, `contact_email`) y `patient` vacío. La ficha
+# nace cuando la clínica decide que esa persona es paciente suyo, y el teléfono es
+# lo que une ambas cosas: es lo único que el agente tiene seguro por WhatsApp.
+
+
+def _resolve_contact(clinic, fields):
+    """Normaliza el teléfono de una cita sin ficha y la enlaza si ya existe una.
+
+    Devuelve los `fields` con `patient_phone` normalizado (E.164, o tal cual si no
+    se puede) y, si la clínica ya tiene un paciente con ese número, `patient`
+    puesto: así el agente no deja una cita «huérfana» de alguien ya registrado.
+    """
+    from patients.models import Patient
+    from patients.services import normalize_phone_safe
+
+    fields = dict(fields)
+    raw = (fields.get('patient_phone') or '').strip()
+    if not raw:
+        return fields
+    normalized = normalize_phone_safe(raw) or raw
+    fields['patient_phone'] = normalized
+    patient = Patient.objects.filter(clinic=clinic, phone=normalized).first()
+    if patient is not None:
+        fields['patient'] = patient
+    return fields
+
+
+def link_patient_by_contact(appointment):
+    """Enlaza una cita sin ficha con el paciente de su clínica que tenga su teléfono.
+
+    Devuelve el paciente enlazado o `None`. Escribe con `save()`, no con
+    `queryset.update()`: las operaciones masivas se saltan las señales.
+    """
+    from patients.models import Patient
+    from patients.services import normalize_phone_safe
+
+    if appointment.patient_id or not appointment.patient_phone:
+        return None
+    normalized = normalize_phone_safe(appointment.patient_phone) or appointment.patient_phone
+    patient = Patient.objects.filter(clinic_id=appointment.clinic_id, phone=normalized).first()
+    if patient is None:
+        return None
+    appointment.patient = patient
+    appointment.save(update_fields=['patient', 'updated_at'])
+    return patient
+
+
+def link_orphan_appointments(patient):
+    """Enlaza al paciente recién creado las citas sin ficha de su mismo teléfono.
+
+    Una a una con `save()` (ver `link_patient_by_contact`). Devuelve cuántas enlazó.
+    """
+    if not patient.phone:
+        return 0
+    orphans = Appointment.objects.filter(
+        clinic_id=patient.clinic_id, patient__isnull=True, patient_phone=patient.phone
+    )
+    linked = 0
+    for appointment in orphans:
+        appointment.patient = patient
+        appointment.save(update_fields=['patient', 'updated_at'])
+        linked += 1
+    return linked
+
+
+def create_patient_from_appointment(appointment):
+    """Da de alta la ficha del contacto de una cita sin ficha y la enlaza.
+
+    Si ya existe un paciente de la clínica con ese teléfono se vincula en vez de
+    duplicar. El nombre se parte en nombre y apellidos por la primera palabra; el
+    staff puede corregirlo luego desde la ficha.
+
+    Devuelve `(paciente, creado)`. Lanza `ValueError` si el contacto no basta
+    (sin nombre, sin teléfono o con un teléfono inválido).
+    """
+    from patients.models import Patient
+    from patients.services import create_patient, normalize_phone
+
+    if appointment.patient_id:
+        return appointment.patient, False
+
+    existing = link_patient_by_contact(appointment)
+    if existing is not None:
+        return existing, False
+
+    name = (appointment.patient_name or '').strip()
+    if not name:
+        raise ValueError('La cita no tiene nombre de contacto para crear la ficha.')
+    if not appointment.patient_phone:
+        raise ValueError('La cita no tiene teléfono de contacto para crear la ficha.')
+    phone = normalize_phone(appointment.patient_phone)
+
+    email = appointment.contact_email
+    if email and Patient.objects.filter(clinic_id=appointment.clinic_id, email=email, phone=phone).exists():
+        email = ''
+    first, _, last = name.partition(' ')
+    with transaction.atomic():
+        patient = create_patient(
+            clinic=appointment.clinic,
+            phone=phone,
+            first_name=first,
+            last_name=last.strip(),
+            email=email,
+        )
+        # `create_patient()` ya enlaza las citas huérfanas de ese teléfono, esta
+        # incluida; se comprueba por si el formato no coincidía.
+        appointment.refresh_from_db(fields=['patient'])
+        if appointment.patient_id is None:
+            appointment.patient = patient
+            appointment.save(update_fields=['patient', 'updated_at'])
+    return patient, True
 
 
 # ---------------------------------------------------------------------------

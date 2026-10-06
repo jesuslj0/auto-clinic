@@ -230,8 +230,13 @@ class Appointment(models.Model):
     )
 
     # Denormalized fields used by the WhatsApp bot
-    patient_phone = models.CharField(max_length=20, blank=True)
+    # Contacto de una cita SIN ficha (`patient` vacío): primera visita desde el
+    # panel o reserva del agente antes de que el paciente exista como tal. Con
+    # ficha, estos campos no mandan: se lee de `patient`. Ver
+    # `services.link_patient_by_contact()` y `services.create_patient_from_appointment()`.
+    patient_phone = models.CharField(max_length=32, blank=True)
     patient_name = models.CharField(max_length=255, blank=True)
+    contact_email = models.EmailField(blank=True)
     service_name = models.CharField(max_length=255, blank=True)
 
     class CancelledBy(models.TextChoices):

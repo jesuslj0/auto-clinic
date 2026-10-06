@@ -326,6 +326,27 @@ clínica), `create_appointment()` y `validate_appointment_update()` (solo si la 
 realmente se mueve, así que confirmar/cancelar una cita cercana no se bloquea). El
 error es `BookingTooSoon` (`booking_too_soon`, 400).
 
+### Citas sin ficha de paciente
+
+Una cita puede existir antes que el paciente (primera visita desde el panel, o
+reserva del agente sin onboarding). `Appointment.patient` queda vacío y la cita
+lleva su contacto: `patient_name`, `patient_phone` (E.164) y `contact_email`.
+Con ficha esos campos no mandan, se lee de `patient`.
+
+- **Alta:** el panel (`AppointmentForm`, conmutador «Primera visita (sin ficha)»)
+  y la API (`patient_name` + `patient_phone` obligatorios si no hay `patient`)
+  pasan por `create_appointment()`, que normaliza el teléfono y, si la clínica ya
+  tiene un paciente con ese número, enlaza la cita solo (`_resolve_contact`).
+- **La ficha nace después:** `create_patient_from_appointment()` (acción
+  `create_patient` en `core:dashboard-appointment-action`) crea o vincula sin
+  duplicar, y `create_patient()` enlaza las citas huérfanas de ese teléfono
+  (`link_orphan_appointments`, una a una con `save()`, solo de su clínica).
+- **Barrera clínica:** sin ficha no se puede completar la cita ni registrar
+  procedimientos (historia, consentimientos y facturación cuelgan del paciente).
+  La capa clínica no se toca.
+- **Agente:** el onboarding previo deja de ser obligatorio; `WA-Appointments-Manager`
+  manda `first_name`/`last_name`/`email` como contacto en `action=create`.
+
 ### Token-based public actions
 
 `Appointment` has a UUID `confirmation_token` field. Patients can confirm or cancel without authentication:

@@ -159,11 +159,19 @@ class AppointmentForm(forms.Form):
     se introducen en el timezone de la clínica y se convierten a UTC en clean().
     """
 
+    # Primera visita: la cita se crea sin ficha, con el contacto de quien viene.
+    # La ficha se abre después, cuando la clínica sabe que es su paciente (ver
+    # `services.create_patient_from_appointment`).
+    no_record = forms.BooleanField(label='Sin ficha de paciente', required=False)
     patient = forms.ModelChoiceField(
         queryset=Patient.objects.none(),
         label='Paciente',
+        required=False,
         empty_label='— Selecciona un paciente —',
     )
+    patient_name = forms.CharField(label='Nombre y apellidos', required=False, max_length=255)
+    patient_phone = forms.CharField(label='Teléfono', required=False, max_length=32)
+    contact_email = forms.EmailField(label='Correo electrónico', required=False)
     service = forms.ModelChoiceField(
         queryset=Service.objects.none(),
         label='Servicio',
@@ -205,8 +213,38 @@ class AppointmentForm(forms.Form):
             clinic=clinic, is_active=True
         ).select_related('user').order_by('user__first_name', 'user__last_name')
 
+    def _clean_contact(self, cleaned):
+        """Paciente con ficha, o contacto de una primera visita: una cosa u otra.
+
+        Con «sin ficha» se descarta el paciente que pudiera haber quedado
+        elegido en el desplegable y se exige nombre y un teléfono válido (se
+        guarda en E.164, que es lo que une la cita con la ficha después).
+        """
+        from patients.services import normalize_phone
+
+        if not cleaned.get('no_record'):
+            cleaned['patient_name'] = cleaned['patient_phone'] = cleaned['contact_email'] = ''
+            if not cleaned.get('patient') and 'patient' not in self.errors:
+                self.add_error('patient', 'Selecciona un paciente o marca la cita como sin ficha.')
+            return
+
+        cleaned['patient'] = None
+        name = (cleaned.get('patient_name') or '').strip()
+        cleaned['patient_name'] = name
+        if not name:
+            self.add_error('patient_name', 'Indica el nombre de quien viene.')
+        phone = (cleaned.get('patient_phone') or '').strip()
+        if not phone:
+            self.add_error('patient_phone', 'Indica un teléfono de contacto.')
+        else:
+            try:
+                cleaned['patient_phone'] = normalize_phone(phone)
+            except ValueError as exc:
+                self.add_error('patient_phone', str(exc))
+
     def clean(self):
         cleaned = super().clean()
+        self._clean_contact(cleaned)
         date = cleaned.get('date')
         time_value = cleaned.get('time')
 
