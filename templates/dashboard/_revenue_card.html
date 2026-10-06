@@ -167,4 +167,52 @@ semánticos, así que el tema claro y el oscuro salen solos.
             </p>
         </a>
     </div>
+
+    {# --- Qué hacer con ese dinero: las facturas más antiguas por cobrar y a quién facturar --- #}
+    {% comment %}
+    Las dos listas desglosan las cifras de arriba («Por cobrar» y «Sin facturar») y
+    empujan al fondo de la tarjeta (`mt-auto`), así que si la columna de al lado es
+    más alta rellenan ese hueco en lugar de dejarlo vacío. De los procedimientos
+    solo se enseña cuántos y cuánto por paciente: qué se hizo es historia clínica.
+    {% endcomment %}
+    {% if revenue.oldest_unpaid or revenue.unbilled_by_patient %}
+    <div class="mt-auto grid gap-4 border-t border-line pt-5 sm:mt-auto {% if revenue.oldest_unpaid and revenue.unbilled_by_patient %}xl:grid-cols-2{% endif %}">
+        {% if revenue.oldest_unpaid %}
+        <div>
+            <p class="text-xs font-semibold uppercase tracking-wide text-content-faint">Más antiguas por cobrar</p>
+            <ul class="mt-1 divide-y divide-line">
+                {% for inv in revenue.oldest_unpaid %}
+                <li>
+                    <a href="{% url 'billing:invoice-detail' inv.pk %}" class="flex items-center gap-2 py-2 transition hover:text-brand-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                        <span class="min-w-0 flex-1">
+                            <span class="block truncate text-sm font-medium text-content">{{ inv.frozen_patient_name }}</span>
+                            <span class="block text-xs {% if inv.days >= 30 %}text-danger{% else %}text-content-subtle{% endif %}">{{ inv.number }} · hace {{ inv.days }} día{{ inv.days|pluralize }}</span>
+                        </span>
+                        <span class="text-sm font-semibold text-warning">{{ inv.balance|euros }}</span>
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        {% if revenue.unbilled_by_patient %}
+        <div>
+            <p class="text-xs font-semibold uppercase tracking-wide text-content-faint">Sin facturar</p>
+            <ul class="mt-1 divide-y divide-line">
+                {% for row in revenue.unbilled_by_patient %}
+                <li>
+                    <a href="{% url 'billing:invoice-create' %}?patient={{ row.patient_id }}" class="flex items-center gap-2 py-2 transition hover:text-brand-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                        <span class="min-w-0 flex-1">
+                            <span class="block truncate text-sm font-medium text-content">{{ row.name }}</span>
+                            <span class="block text-xs text-content-subtle">{{ row.count }} procedimiento{{ row.count|pluralize }} · Facturar →</span>
+                        </span>
+                        <span class="text-sm font-semibold text-info">{{ row.amount|euros }}</span>
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
 </article>

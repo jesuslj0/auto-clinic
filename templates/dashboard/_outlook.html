@@ -1,0 +1,73 @@
+{% comment %}
+Mirada hacia delante: las citas de los próximos 7 días (cada barra lleva a la
+lista de ese día) y cuánta de la capacidad de la semana está reservada.
+
+La ocupación compara minutos de cita con minutos de horario semanal activo menos
+ausencias; ver `core.dashboard.week_occupancy()`. Es una lectura de capacidad, no
+una promesa. Más de un 100 % se dibuja lleno y el número dice la verdad.
+{% endcomment %}
+<div class="grid gap-4 lg:grid-cols-2">
+    <article class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+        <div class="flex items-start justify-between gap-3">
+            <div>
+                <p class="text-sm font-medium text-content-subtle">Próximos 7 días</p>
+                <p class="mt-2 text-3xl font-semibold text-content">{{ upcoming.total }}</p>
+                <p class="mt-1 text-xs text-content-subtle">cita{{ upcoming.total|pluralize }} pendiente{{ upcoming.total|pluralize }} o confirmada{{ upcoming.total|pluralize }}.</p>
+            </div>
+        </div>
+        <ul class="mt-4 flex h-28 items-end gap-2">
+            {% for d in upcoming.series %}
+            <li class="flex h-full flex-1 flex-col items-center justify-end gap-1">
+                <span class="text-xs font-semibold {% if d.count %}text-content{% else %}text-content-faint{% endif %}">{{ d.count }}</span>
+                <a href="{{ d.url }}" title="{{ d.day|date:'l j \d\e F' }}: {{ d.count }} cita{{ d.count|pluralize }}"
+                   aria-label="{{ d.day|date:'l j' }}: {{ d.count }} cita{{ d.count|pluralize }}"
+                   class="flex w-full flex-1 items-end rounded-t focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                    <span style="height: {{ d.pct }}%" class="w-full rounded-t transition hover:opacity-80 {% if d.is_today %}bg-brand-500{% elif d.count %}bg-brand-500/40{% else %}bg-muted-strong{% endif %}"></span>
+                </a>
+                <span class="text-[11px] {% if d.is_today %}font-semibold text-brand-fg{% else %}text-content-subtle{% endif %}">{{ d.weekday }} {{ d.day|date:"j" }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </article>
+
+    <article class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+        <p class="text-sm font-medium text-content-subtle">Ocupación de la semana</p>
+        {% if occupancy.pct is not None %}
+            <div class="mt-2 flex items-end justify-between gap-3">
+                <p class="text-3xl font-semibold {% if occupancy.pct >= 90 %}text-warning{% else %}text-content{% endif %}">{{ occupancy.pct }} %</p>
+                <p class="pb-1 text-xs text-content-subtle">{{ occupancy.booked_h }} h reservadas de {{ occupancy.offered_h }} h</p>
+            </div>
+            <div class="mt-3 h-2.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow="{{ occupancy.bar }}" aria-valuemin="0" aria-valuemax="100" aria-label="Ocupación de la clínica">
+                <div style="width: {{ occupancy.bar }}%" class="h-full rounded-full {% if occupancy.pct >= 90 %}bg-warning{% else %}bg-brand-500{% endif %}"></div>
+            </div>
+            {# Un día por columna: dónde queda hueco esta semana. Los días sin horario van vacíos. #}
+            <ul class="mt-4 flex h-20 items-end gap-2" aria-label="Ocupación por día">
+                {% for d in occupancy.days %}
+                <li class="flex h-full flex-1 flex-col items-center justify-end gap-1"
+                    title="{{ d.day|date:'l j' }}: {% if d.pct is None %}sin horario{% else %}{{ d.pct }} % · {{ d.free_h }} h libres{% endif %}">
+                    <span class="flex w-full flex-1 items-end rounded-t bg-muted/60">
+                        {% if d.bar %}<span style="height: {{ d.bar }}%" class="w-full rounded-t {% if d.pct >= 90 %}bg-warning{% elif d.is_today %}bg-brand-500{% else %}bg-brand-500/50{% endif %}"></span>{% endif %}
+                    </span>
+                    <span class="text-[11px] {% if d.is_today %}font-semibold text-brand-fg{% else %}text-content-subtle{% endif %}">{{ d.weekday }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% if occupancy.rows|length > 1 %}
+            <ul class="mt-4 space-y-2.5">
+                {% for row in occupancy.rows %}
+                <li>
+                    <div class="flex items-center justify-between gap-2 text-xs">
+                        <span class="truncate font-medium text-content">{{ row.name }}</span>
+                        <span class="flex-shrink-0 text-content-subtle">{% if row.pct is not None %}{{ row.pct }} %{% else %}Sin horario{% endif %} · {{ row.booked_h }}/{{ row.offered_h }} h</span>
+                    </div>
+                    <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-muted"><div style="width: {{ row.bar }}%" class="h-full rounded-full bg-brand-500/70"></div></div>
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        {% else %}
+            <p class="mt-3 text-sm text-content-subtle">Aún no hay horarios semanales configurados, así que no se puede medir la ocupación.</p>
+            <a href="{% url 'core:account-schedule' %}" class="mt-2 inline-flex text-xs font-semibold text-brand-fg hover:underline">Configurar mi horario →</a>
+        {% endif %}
+    </article>
+</div>

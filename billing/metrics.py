@@ -13,7 +13,7 @@ como cobrado y qué significa «pendiente» ya está decidido en `billing.filter
 viviera en la vista del panel habría dos definiciones de «pendiente de cobro» y
 tarde o temprano dirían cosas distintas en dos pantallas.
 
-Todo se agrega en la base de datos, y son **tres consultas** en total:
+Todo se agrega en la base de datos, y son **cinco consultas** en total (las tres de abajo más las dos listas cortas):
 
 1. la serie diaria de cobros del mes (de la que sale también el total, sumando
    como mucho 31 filas ya traídas, en vez de repetir el agregado),
@@ -31,6 +31,7 @@ from decimal import Decimal
 
 from django.db.models import Count, DecimalField, F, Q, Sum, Value
 from django.db.models.functions import Coalesce, TruncDate
+from django.utils import timezone
 
 from billing.filters import (
     ZERO,
@@ -48,6 +49,9 @@ _MONEY = DecimalField(max_digits=12, decimal_places=2)
 #: Altura mínima de una barra con importe, en porcentaje. Un día que cobró poco
 #: cobró algo, y una barra de medio píxel se lee igual que un día vacío.
 MIN_BAR_PCT = 3
+
+#: Filas de cada lista corta («más antiguas por cobrar», «sin facturar»).
+ACTION_ROWS = 3
 
 
 def payments_for(user):
@@ -199,8 +203,50 @@ def dashboard_revenue(user, today: date) -> dict:
         ),
     )
 
+    # Quién debe más tiempo y a quién hay que facturar: las dos listas cortas de
+    # la parte baja de la tarjeta. Son las mismas poblaciones que cuentan las
+    # cifras de arriba, solo que desglosadas, y se limitan a `ACTION_ROWS` filas.
+    oldest_unpaid = list(
+        invoices_for(user)
+        .with_collection()
+        .filter(issued, ~Q(payment_state=PatientInvoice.PaymentState.PAID))
+        .annotate(balance=F('total') - F('amount_collected'))
+        .order_by('issued_at', 'id')
+        .values('pk', 'number', 'frozen_patient_name', 'issued_at', 'balance')[:ACTION_ROWS]
+    )
+    for row in oldest_unpaid:
+        row['days'] = (today - timezone.localtime(row['issued_at']).date()).days
+    # Solo recuento e importe por paciente: qué se hizo en cada procedimiento es
+    # historia clínica y el panel no lo enseña.
+    unbilled_by_patient = list(
+        pending_procedures_for(user)
+        .values(
+            'visit__episode__history__patient_id',
+            'visit__episode__history__patient__first_name',
+            'visit__episode__history__patient__last_name',
+        )
+        .annotate(
+            n=Count('id'),
+            amount=Coalesce(Sum('frozen_price'), Value(ZERO), output_field=_MONEY),
+        )
+        .order_by('-amount')[:ACTION_ROWS]
+    )
+
     delta_pct = _delta_pct(collected, previous_collected)
     return {
+        'oldest_unpaid': oldest_unpaid,
+        'unbilled_by_patient': [
+            {
+                'patient_id': row['visit__episode__history__patient_id'],
+                'name': (
+                    f"{row['visit__episode__history__patient__first_name']} "
+                    f"{row['visit__episode__history__patient__last_name']}"
+                ),
+                'count': row['n'],
+                'amount': row['amount'],
+            }
+            for row in unbilled_by_patient
+        ],
         'collected': collected,
         'series': series,
         'best_day': best_day,

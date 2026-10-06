@@ -97,6 +97,10 @@ El recurso `/api/professionals/` devuelve:
 | GET | `/api/professionals/{id}/available-slots/` | Slots libres del profesional en una fecha | `date` (req.), `duration`, `start_hour`, `end_hour` |
 | GET | `/api/professionals/{id}/services/` | Servicios que ofrece el profesional | — |
 
+> **Antelación mínima:** los huecos que empiezan antes de `ahora + Clinic.min_booking_notice_minutes`
+> (120 por defecto, 0 = sin mínimo) no se devuelven, y crear o reprogramar por la API una cita
+> dentro de ese plazo responde 400 con `code: booking_too_soon`. El staff desde el panel no está sujeto.
+
 **Ejemplo de respuesta `available-slots`:**
 ```json
 {
@@ -104,6 +108,7 @@ El recurso `/api/professionals/` devuelve:
   "professional_name": "Dr. García",
   "date": "2026-04-20",
   "duration_minutes": 30,
+  "min_notice_minutes": 120,
   "available_slots": ["2026-04-20T08:00:00+02:00", "2026-04-20T08:30:00+02:00"]
 }
 ```
@@ -235,15 +240,6 @@ La conversación se resuelve por `phone` (se crea si no existe) o se indica con 
 |--------|-----|-------|--------|
 | GET | `/servicios/` | `ServiceListView` | Autenticado |
 | GET/POST | `/servicios/crear/` | `ServiceCreateView` | Autenticado |
-
-### Reserva pública — `booking/urls.py`
-
-| Método | URL | Vista | Acceso |
-|--------|-----|-------|--------|
-| GET | `/reservar/` | `BookingServiceListView` | Público |
-| GET/POST | `/reservar/fecha/` | `BookingDateTimeView` | Público |
-| GET/POST | `/reservar/confirmar/` | `BookingConfirmView` | Público |
-| GET | `/reservar/confirmada/` | `BookingSuccessView` | Público |
 
 ### Portal de pacientes — `portal/urls.py`
 

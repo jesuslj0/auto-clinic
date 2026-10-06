@@ -65,7 +65,6 @@ urlpatterns = [
     path('citas/', include('appointments.urls')),
     path('profesionales/', include('appointments.professional_urls')),
     path('pacientes/', include('patients.urls')),
-    path('reservar/', include('booking.urls')),
     path('servicios/', include('services.urls')),
     path('conocimiento/', include('knowledge.urls')),
     path('chats/', include('agent.urls')),

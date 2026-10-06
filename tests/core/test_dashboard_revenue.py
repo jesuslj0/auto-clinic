@@ -343,12 +343,17 @@ class TestElPanel:
         self, django_assert_max_num_queries, panel_client,
         clinic_a, patient_a, visit_a, service_a,
     ):
-        """Todo va agregado en la base de datos: cinco cobros cuestan lo mismo que uno."""
+        """Todo va agregado en la base de datos: cinco cobros cuestan lo mismo que uno.
+
+        El tope cubre además los bloques de `core.dashboard` (alertas, agenda,
+        próximos días, ocupación, calidad, servicios, origen y recontacto): unas
+        35 consultas fijas, cada una un agregado, sin ninguna por fila.
+        """
         for _ in range(5):
             invoice = _issued_invoice(clinic_a, patient_a, visit_a, service_a)
             _pay(invoice, '25.00')
 
-        with django_assert_max_num_queries(15):
+        with django_assert_max_num_queries(40):
             response = panel_client.get(DASHBOARD_URL)
 
         assert response.status_code == 200
@@ -363,3 +368,28 @@ class TestElPanel:
 
         assert response.context['revenue']['collected'] == Decimal('0.00')
         assert response.context['revenue']['pending_amount'] == Decimal('0.00')
+
+
+@pytest.mark.django_db
+class TestListasCortasDelPanel:
+    def test_facturas_por_cobrar_y_pacientes_sin_facturar(
+        self, admin_user, issued_invoice_a, today, procedure_a,
+    ):
+        revenue = dashboard_revenue(admin_user, today)
+
+        assert [row['pk'] for row in revenue['oldest_unpaid']] == [issued_invoice_a.pk]
+        assert revenue['oldest_unpaid'][0]['balance'] == issued_invoice_a.total
+        # La factura emitida ya consumió el procedimiento: nada pendiente de facturar.
+        assert revenue['unbilled_by_patient'] == []
+
+    def test_otra_clinica_no_ve_las_listas(self, admin_user_b, issued_invoice_a, today):
+        revenue = dashboard_revenue(admin_user_b, today)
+
+        assert revenue['oldest_unpaid'] == [] and revenue['unbilled_by_patient'] == []
+
+    def test_procedimiento_sin_factura_sale_por_paciente(self, admin_user, patient_a, procedure_a, today):
+        revenue = dashboard_revenue(admin_user, today)
+
+        row = revenue['unbilled_by_patient'][0]
+        assert row['patient_id'] == patient_a.pk and row['count'] == 1
+        assert row['amount'] == procedure_a.frozen_price

@@ -320,6 +320,7 @@ class ProfessionalViewSet(viewsets.ModelViewSet):
                 'professional_name': str(professional),
                 'date': date_str,
                 'works_this_day': False,
+                'min_notice_minutes': professional.clinic.min_booking_notice_minutes,
                 'available_slots': [],
             })
 
@@ -333,6 +334,7 @@ class ProfessionalViewSet(viewsets.ModelViewSet):
                 'end_time': availability.schedule_end.strftime('%H:%M'),
             },
             'duration_minutes': duration,
+            'min_notice_minutes': professional.clinic.min_booking_notice_minutes,
             'available_slots': [slot.isoformat() for slot in availability.slots],
         })
 
@@ -429,6 +431,10 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
 
         time_slots = [time(hour=h) for h in range(global_start, global_end)]
 
+        days_with_appointments = {
+            timezone.localtime(appt.scheduled_at).date() for appt in appointments
+        }
+
         # Construir info de cada columna del calendario
         week_days_info = []
         for day in week_days:
@@ -462,15 +468,24 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
             week_days_info.append({
                 'date': day,
                 'dow': dow,
+                'has_appointments': day in days_with_appointments,
                 'is_working': is_working,
                 'schedule_label': schedule_label,
                 'working_hours': working_hours,
                 'break_hours': break_hours,
             })
 
+        # Los días no laborables no ocupan columna: se avisan aparte. Salvo que
+        # tengan citas (se dieron antes de cambiar el horario o a mano): ocultar
+        # una columna con citas las haría desaparecer de la agenda.
+        visible_days_info = [d for d in week_days_info if d['is_working'] or d['has_appointments']]
+        hidden_days_info = [d for d in week_days_info if d not in visible_days_info]
+
         context.update({
             'appointments': appointments,
             'professional': professional,
+            'visible_days_info': visible_days_info,
+            'hidden_days_info': hidden_days_info,
             'week_start': week_start,
             'week_end': week_start + timedelta(days=6),
             'previous_week': week_start - timedelta(days=7),
@@ -538,6 +553,8 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
         for appt in cluster:
             appt.col_width = str(round(100 / n, 2))
             appt.col_left = str(round(appt.col_index * 100 / n, 2))
+            # Cita con el ancho entero: cabe el avatar además del nombre.
+            appt.col_wide = n == 1
 
     def _get_week_start(self):
         week_param = self.request.GET.get('week')

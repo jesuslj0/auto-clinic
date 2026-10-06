@@ -1,0 +1,56 @@
+{% comment %}
+Citas por estado. UNA tarjeta con un periodo elegible en lugar de tres tarjetas
+sueltas que mezclaban periodos (pendientes de cualquier fecha, canceladas del mes,
+citas de hoy).
+
+Los tres botones de periodo piden este mismo fragmento por htmx
+(`?bloque=citas&periodo=…`) y reemplazan la tarjeta entera; sin JavaScript son
+enlaces normales a la página completa con el mismo `periodo`. Cada segmento de la
+barra y cada fila de la leyenda llevan al listado con ese estado y ese periodo.
+{% endcomment %}
+<article id="citas-estado" class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+            <p class="text-sm font-medium text-content-subtle">Citas · {% if status_card.period == 'hoy' %}hoy{% elif status_card.period == 'semana' %}esta semana{% else %}{{ status_card.start|date:"F" }}{% endif %}</p>
+            <p class="mt-2 text-3xl font-semibold text-content sm:text-4xl">{{ status_card.total }}</p>
+        </div>
+        <div role="tablist" aria-label="Periodo" class="inline-flex rounded-xl bg-muted p-0.5 text-xs font-semibold">
+            {% for key, label in status_card.periods %}
+            <a href="?periodo={{ key }}"
+               hx-get="?bloque=citas&periodo={{ key }}" hx-target="#citas-estado" hx-swap="outerHTML" hx-push-url="false"
+               role="tab" aria-selected="{% if key == status_card.period %}true{% else %}false{% endif %}"
+               class="rounded-lg px-3 py-1.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500
+                      {% if key == status_card.period %}bg-surface text-brand-fg shadow-sm{% else %}text-content-subtle hover:text-content{% endif %}">{{ label }}</a>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if status_card.total %}
+        <p class="mt-2 text-sm text-content-subtle">
+            {{ status_card.done }} completada{{ status_card.done|pluralize }} · {{ status_card.done_pct }} % del total.
+        </p>
+        <div class="mt-4 flex h-3 w-full gap-0.5 overflow-hidden rounded-full bg-muted" role="img"
+             aria-label="Reparto por estado: {% for s in status_card.bar_segments %}{{ s.count }} {{ s.label|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}">
+            {% for s in status_card.bar_segments %}
+            <a href="{{ s.url }}" title="{{ s.label }}: {{ s.count }}" style="flex: {{ s.count }} 1 0%"
+               class="{{ s.bar }} min-w-[6px] transition hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"></a>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p class="mt-2 text-sm text-content-subtle">Sin citas en este periodo.</p>
+        <div class="mt-4 h-3 w-full rounded-full bg-muted"></div>
+    {% endif %}
+
+    <ul class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {% for s in status_card.segments %}
+        <li>
+            <a href="{{ s.url }}" class="flex items-center gap-2 rounded-xl px-2.5 py-2 transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                <span aria-hidden="true" class="h-2.5 w-2.5 flex-shrink-0 rounded-full {{ s.bar }}"></span>
+                <span class="min-w-0 flex-1 truncate text-xs text-content-subtle">{{ s.label }}</span>
+                <span class="text-sm font-semibold {% if s.count %}{{ s.text }}{% else %}text-content-faint{% endif %}">{{ s.count }}</span>
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+    <a href="{{ status_card.all_url }}" class="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-fg hover:underline">Ver todas las citas →</a>
+</article>

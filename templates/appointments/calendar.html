@@ -94,10 +94,16 @@ sería marcado inválido.
     x-data="agendaSemanal()"
     @keydown.escape.window="cerrarPanel()"
 >
-    <div class="flex flex-col gap-4 rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-            <h3 class="flex items-center gap-2.5 text-lg font-semibold text-content">
-                <span class="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-fg ring-1 ring-brand-line">
+    {% comment %}
+    Cabecera de la semana. En móvil va en UNA fila compacta: título y fechas a la
+    izquierda, flechas a la derecha (los textos «Anterior»/«Siguiente» solo desde
+    `sm`, con `aria-label` para quien no los ve). Antes eran dos filas apiladas con
+    botones a todo ancho que se comían media pantalla antes de ver la rejilla.
+    {% endcomment %}
+    <div class="flex items-center justify-between gap-3 rounded-2xl bg-surface px-3 py-2.5 shadow-soft ring-1 ring-line sm:rounded-3xl sm:p-5">
+        <div class="flex min-w-0 flex-col sm:flex-row sm:items-center sm:gap-3">
+            <h3 class="flex items-center gap-2.5 text-sm font-semibold text-content sm:text-lg">
+                <span class="hidden h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-fg ring-1 ring-brand-line sm:inline-flex">
                     <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
                     </svg>
@@ -105,20 +111,26 @@ sería marcado inválido.
                 {% if professional %}Mi agenda{% else %}Agenda semanal{% endif %}
             </h3>
             <span aria-hidden="true" class="hidden text-content-faint sm:inline">·</span>
-            <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-content-subtle">
-                <svg class="h-4 w-4 flex-shrink-0 text-content-faint" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-content-subtle sm:text-sm">
+                <svg class="hidden h-4 w-4 flex-shrink-0 text-content-faint sm:block" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                 </svg>
                 <span>{{ week_start|date:"j M"|default:"Esta semana" }}{% if week_end %} – {{ week_end|date:"j M, Y" }}{% endif %}</span>
                 {% if week_start %}
                     <span aria-hidden="true" class="text-content-faint">·</span>
-                    <span class="font-medium text-content-muted">Semana {{ week_start|date:"W" }}</span>
+                    <span class="font-medium text-content-muted"><span class="sm:hidden">S.</span><span class="hidden sm:inline">Semana </span>{{ week_start|date:"W" }}</span>
                 {% endif %}
             </p>
         </div>
-        <div class="flex items-center gap-2">
-            <a href="?week={{ previous_week|date:'Y-m-d' }}" class="btn-secondary">Anterior</a>
-            <a href="?week={{ next_week|date:'Y-m-d' }}" class="btn-primary">Siguiente</a>
+        <div class="flex flex-shrink-0 items-center gap-1.5 sm:gap-2">
+            <a href="?week={{ previous_week|date:'Y-m-d' }}" class="btn-secondary max-sm:px-2.5 max-sm:py-2" aria-label="Semana anterior">
+                <svg aria-hidden="true" class="h-4 w-4 sm:hidden" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
+                <span class="hidden sm:inline">Anterior</span>
+            </a>
+            <a href="?week={{ next_week|date:'Y-m-d' }}" class="btn-primary max-sm:px-2.5 max-sm:py-2" aria-label="Semana siguiente">
+                <svg aria-hidden="true" class="h-4 w-4 sm:hidden" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+                <span class="hidden sm:inline">Siguiente</span>
+            </a>
         </div>
     </div>
 
@@ -138,16 +150,31 @@ sería marcado inválido.
     </div>
     {% endif %}
 
-    <section class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
-        <div class="overflow-x-auto">
-            <div class="grid min-w-[900px] grid-cols-[80px_repeat(7,minmax(140px,1fr))]">
+    {% comment %}
+    La rejilla se ancla justo DEBAJO de la barra superior de la app y ocupa el
+    alto que queda de pantalla; el scroll vive dentro (`overflow-auto`), así la
+    fila de días y la columna de horas —`sticky` respecto a ese contenedor— se
+    quedan fijas en los dos sentidos. Hace falta que el desplazamiento sea del
+    contenedor y no de la página: `position: sticky` se pega al ancestro que
+    desplaza, y este ya desplazaba en horizontal.
+
+    `--app-header-h` lo escribe el script de abajo con el alto real de la barra
+    (cambia entre móvil y escritorio); el valor por defecto cubre la carga antes
+    de que corra. Todo lo de la rejilla va por DEBAJO del z-30 de la barra, para
+    que nunca la tape.
+    {% endcomment %}
+    <section class="sticky z-20 flex flex-col overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line"
+             style="top: calc(var(--app-header-h, 4.5rem) + 0.5rem); max-height: calc(100dvh - var(--app-header-h, 4.5rem) - 1rem);">
+        <div class="min-h-0 flex-1 overflow-auto overscroll-contain">
+            {# Una columna por día visible: los no laborables se avisan arriba y no ocupan sitio. #}
+            <div class="grid" style="min-width: calc(80px + {{ visible_days_info|length }} * 140px); grid-template-columns: 80px repeat({{ visible_days_info|length }}, minmax(140px, 1fr));">
 
                 {# Cabecera: columna de hora #}
-                <div class="sticky left-0 z-[25] border-b border-r border-line bg-muted p-4 text-xs font-semibold uppercase tracking-wide text-content-subtle">Hora</div>
+                <div class="sticky left-0 top-0 z-[35] border-b border-r border-line bg-muted p-3 text-xs sm:p-4 font-semibold uppercase tracking-wide text-content-subtle">Hora</div>
 
                 {# Cabecera: columnas de días #}
-                {% for day_info in week_days_info %}
-                    <div class="border-b border-r border-line p-4
+                {% for day_info in visible_days_info %}
+                    <div class="sticky top-0 z-30 border-b border-r border-line p-3 sm:p-4
                         {% if day_info.is_working %}bg-muted{% else %}bg-muted-strong{% endif %}">
                         <p class="text-xs font-semibold uppercase tracking-wide
                             {% if day_info.is_working %}text-content-subtle{% else %}text-content-faint{% endif %}">
@@ -171,7 +198,7 @@ sería marcado inválido.
                         {{ slot|time:"H:i" }}
                     </div>
 
-                    {% for day_info in week_days_info %}
+                    {% for day_info in visible_days_info %}
                         {% if slot.hour in day_info.working_hours %}
                             {% comment %}La clave de la casilla, en dos piezas: es lo
                             que compara `esSlotActivo` para saber cuál está
@@ -235,14 +262,22 @@ sería marcado inválido.
                                             hx-indicator="#panel-spinner"
                                             @click="abrirDetalle()"
                                             @htmx:after-request="panelLoading = false"
-                                            aria-label="Ver cita de {{ appointment.scheduled_at|time:'H:i' }}"
+                                            aria-label="Ver cita de {{ appointment.patient|default:appointment.patient_name }} a las {{ appointment.scheduled_at|time:'H:i' }}"
                                         >
+                                            {% comment %}Quién es, antes que qué se le hace: es lo que se busca
+                                            en la agenda. El avatar solo cuando la cita tiene ancho completo; si
+                                            comparte hueco con otras, el nombre manda y la foto se omite.{% endcomment %}
                                             <div class="flex items-center gap-1.5">
-                                                <span class="h-1.5 w-1.5 flex-shrink-0 rounded-full {{ appointment.status|status_dot }}"></span>
-                                                <span class="truncate text-[11px] font-semibold text-content">{{ appointment.service }}</span>
+                                                {% if appointment.patient and appointment.col_wide %}
+                                                    {% include 'patients/_avatar.html' with patient=appointment.patient classes='h-5 w-5 text-[8px]' %}
+                                                {% else %}
+                                                    <span class="h-1.5 w-1.5 flex-shrink-0 rounded-full {{ appointment.status|status_dot }}"></span>
+                                                {% endif %}
+                                                <span class="truncate text-[11px] font-semibold text-content">{{ appointment.patient|default:appointment.patient_name|default:"Sin paciente" }}</span>
                                             </div>
-                                            <span class="mt-0.5 truncate text-[10px] text-content-subtle">
-                                                {{ appointment.scheduled_at|date:"H:i" }}{% if appointment.end_at %} – {{ appointment.end_at|date:"H:i" }}{% endif %}
+                                            <span class="mt-0.5 flex items-center gap-1 truncate text-[10px] text-content-subtle">
+                                                {% if appointment.col_wide and appointment.patient %}<span class="h-1.5 w-1.5 flex-shrink-0 rounded-full {{ appointment.status|status_dot }}"></span>{% endif %}
+                                                <span class="truncate">{{ appointment.service|default:appointment.service_name }} · {{ appointment.scheduled_at|date:"H:i" }}{% if appointment.end_at %}–{{ appointment.end_at|date:"H:i" }}{% endif %}</span>
                                             </span>
                                         </button>
                                     {% endif %}
@@ -266,7 +301,7 @@ sería marcado inválido.
                     {% endfor %}
 
                 {% empty %}
-                    <div class="col-span-8 px-6 py-10 text-center text-sm text-content-subtle">
+                    <div style="grid-column: 1 / -1" class="px-6 py-10 text-center text-sm text-content-subtle">
                         No hay franjas horarias configuradas para esta semana.
                     </div>
                 {% endfor %}
@@ -274,6 +309,16 @@ sería marcado inválido.
             </div>
         </div>
     </section>
+
+    {% if hidden_days_info %}
+    <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-2xl bg-muted px-4 py-2.5 text-xs text-content-subtle ring-1 ring-line">
+        <svg aria-hidden="true" class="h-4 w-4 flex-shrink-0 text-content-faint" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+        </svg>
+        <span class="font-medium text-content-muted">Días no laborables ocultos:</span>
+        {% for d in hidden_days_info %}<span>{{ d.date|date:"l j M" }}{% if not forloop.last %},{% endif %}</span>{% endfor %}
+    </p>
+    {% endif %}
 
     {% comment %}
     El único panel lateral. Enseña el detalle de una cita o el formulario de una
@@ -358,6 +403,22 @@ podría inicializar esos nodos antes de que el script se hubiera evaluado y el
 `x-data` fallaría con «abierto no está definido» en la primera apertura. Ver la
 cabecera de `static/js/appointment_picker.js`.{% endcomment %}
 <script src="{% static 'js/appointment_picker.js' %}"></script>
+<script>
+    /* Alto real de la barra superior sticky, para anclar la rejilla justo debajo. */
+    (function () {
+        const root = document.documentElement;
+        const medir = () => {
+            const barra = document.querySelector('header.sticky');
+            if (barra) root.style.setProperty('--app-header-h', barra.offsetHeight + 'px');
+        };
+        window.addEventListener('DOMContentLoaded', () => {
+            medir();
+            const barra = document.querySelector('header.sticky');
+            if (barra && window.ResizeObserver) new ResizeObserver(medir).observe(barra);
+        });
+        window.addEventListener('resize', medir);
+    })();
+</script>
 <style>
     .htmx-indicator { display: none; }
     .htmx-request .htmx-indicator { display: flex; }

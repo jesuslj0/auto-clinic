@@ -25,6 +25,19 @@ from appointments.services import AppointmentDomainError, cancel_appointment, co
 from audit.mixins import log_access
 from audit.models import AccessLog
 from billing.metrics import dashboard_revenue
+from core.dashboard import (
+    appointments_by_status,
+    booking_sources,
+    clinic_professionals,
+    dashboard_alerts,
+    month_quality,
+    new_patients_summary,
+    patients_to_recontact,
+    today_agenda,
+    top_services,
+    upcoming_days,
+    week_occupancy,
+)
 from patients.models import Patient
 from core.forms import (
     AccountPasswordChangeForm,
@@ -392,45 +405,54 @@ class PasswordChangeSectionView(LoginRequiredMixin, View):
 
 class DashboardView(LoginRequiredMixin, TemplateView):
     template_name = 'dashboard/dashboard.html'
+    #: Fragmento que htmx pide al cambiar de periodo en la tarjeta de citas.
+    status_card_template = 'dashboard/_appointments_status.html'
+
+    def get_template_names(self):
+        if self._wants_status_card():
+            return [self.status_card_template]
+        return super().get_template_names()
+
+    def _wants_status_card(self):
+        request = self.request
+        return request.headers.get('HX-Request') == 'true' and request.GET.get('bloque') == 'citas'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         today = timezone.localdate()
+        now = timezone.now()
         appointments = Appointment.objects.select_related('patient', 'service').order_by('scheduled_at')
         user = self.request.user
         if user.clinic_id:
             appointments = appointments.filter(clinic=user.clinic)
 
+        period = self.request.GET.get('periodo', 'hoy')
+        context['status_card'] = appointments_by_status(appointments, period, today)
+        if self._wants_status_card():
+            return context
+
         today_schedule = appointments.filter(scheduled_at__date=today)
-        today_count = today_schedule.count()
-        today_completed = today_schedule.filter(status=Appointment.Status.COMPLETED).count()
-        today_completed_pct = round(today_completed / today_count * 100) if today_count else 0
         professional = getattr(user, 'professional_profile', None)
 
         # Mes actual, completo, para las métricas mensuales.
         month_start, month_end = month_bounds(today)
 
-        # Nuevos pacientes registrados este mes (scopeados por clínica)
-        patients_qs = Patient.objects.all()
-        if user.clinic_id:
-            patients_qs = patients_qs.filter(clinic=user.clinic)
-        new_patients_month = patients_qs.filter(created_at__date__gte=month_start).count()
+        # Todo el bloque económico, agregado en la base de datos. Vive en
+        # `billing` porque allí está decidido qué cuenta como cobrado y qué como
+        # pendiente; el panel solo lo enseña.
+        revenue = dashboard_revenue(user, today)
 
-        # Las canceladas SÍ se acotan al mes y las pendientes no, y no es un
-        # descuido: una cita que espera confirmación importa sea de cuando sea
-        # —es trabajo por hacer—, mientras que un recuento de canceladas sin
-        # fecha solo crece y no dice nada del momento actual.
-        #
-        # El mes se cierra por los DOS extremos. Con solo el `gte`, una cita del
-        # mes que viene ya cancelada entraba en el recuento de este, y la tarjeta
-        # dejaba de coincidir con la lista a la que lleva. El eje es
-        # `scheduled_at` (para cuándo era la cita) porque no hay fecha de
-        # cancelación en el modelo; el texto de la tarjeta lo dice así.
-        cancelled_month = appointments.filter(
-            status=Appointment.Status.CANCELLED,
-            scheduled_at__date__gte=month_start,
-            scheduled_at__date__lte=month_end,
-        ).count()
+        # Selector de profesional de la agenda. Solo se ofrece si hay más de uno
+        # y solo acepta un id que sea de la clínica: lo demás se ignora.
+        professionals = clinic_professionals(user)
+        try:
+            agenda_professional = int(self.request.GET.get('profesional', ''))
+        except ValueError:
+            agenda_professional = None
+        if agenda_professional not in {p.pk for p in professionals}:
+            agenda_professional = None
+
+        new_patients = new_patients_summary(user, today)
 
         context.update(
             {
@@ -438,16 +460,33 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 'month_start': month_start,
                 'month_end': month_end,
                 'today_schedule': today_schedule,
-                'today_appointments': today_count,
-                'today_completed': today_completed,
-                'today_completed_pct': today_completed_pct,
+                # Se conservan por compatibilidad con las pruebas y los enlaces
+                # que ya los usan; la tarjeta nueva reparte por estado y periodo.
                 'pending_appointments': appointments.filter(status=Appointment.Status.PENDING).count(),
-                'cancelled_appointments': cancelled_month,
-                'new_patients_month': new_patients_month,
-                # Todo el bloque económico, agregado en la base de datos. Vive en
-                # `billing` porque allí está decidido qué cuenta como cobrado y
-                # qué como pendiente; el panel solo lo enseña.
-                'revenue': dashboard_revenue(user, today),
+                # Las canceladas SÍ se acotan al mes y las pendientes no: una cita
+                # que espera confirmación importa sea de cuando sea —es trabajo
+                # por hacer—, mientras que un recuento de canceladas sin fecha
+                # solo crece. El mes se cierra por los DOS extremos y el eje es
+                # `scheduled_at`, porque no hay fecha de cancelación en el modelo.
+                'cancelled_appointments': appointments.filter(
+                    status=Appointment.Status.CANCELLED,
+                    scheduled_at__date__gte=month_start,
+                    scheduled_at__date__lte=month_end,
+                ).count(),
+                'new_patients_month': new_patients['count'],
+                'new_patients': new_patients,
+                'revenue': revenue,
+                'alerts': dashboard_alerts(user, appointments, revenue, today, now),
+                'agenda': today_agenda(user, appointments, today, now, agenda_professional),
+                'agenda_professionals': professionals,
+                'agenda_professional': agenda_professional,
+                'now': now,
+                'upcoming': upcoming_days(appointments, today),
+                'occupancy': week_occupancy(professionals, appointments, today),
+                'quality': month_quality(appointments, today),
+                'top_services': top_services(appointments, today),
+                'sources': booking_sources(appointments, today),
+                'recontact': patients_to_recontact(user, now),
                 'professional': professional,
                 'section': 'dashboard',
             }

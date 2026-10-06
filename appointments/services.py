@@ -33,6 +33,7 @@ __all__ = [
     'ProfessionalUnavailable',
     'InvalidTransition',
     'SlotUnavailable',
+    'BookingTooSoon',
     'create_appointment',
     'lock_agenda',
     'validate_appointment_update',
@@ -88,6 +89,29 @@ class InvalidTransition(AppointmentDomainError):
 class SlotUnavailable(AppointmentDomainError):
     default_code = 'slot_unavailable'
     default_message = 'Ese hueco ya no está disponible. Elige otra hora, por favor.'
+
+
+class BookingTooSoon(AppointmentDomainError):
+    default_code = 'booking_too_soon'
+    default_message = (
+        'Esa hora queda demasiado cerca: hace falta algo más de antelación para reservarla. '
+        'Elige un hueco posterior, por favor.'
+    )
+
+
+def booking_cutoff(clinic):
+    """Primer instante reservable por la vía online: ahora + antelación mínima."""
+    return timezone.now() + timedelta(minutes=clinic.min_booking_notice_minutes)
+
+
+def _ensure_enough_notice(clinic, scheduled_at):
+    cutoff = booking_cutoff(clinic)
+    if scheduled_at < cutoff:
+        raise BookingTooSoon(details={
+            'scheduled_at': scheduled_at.isoformat(),
+            'min_notice_minutes': clinic.min_booking_notice_minutes,
+            'earliest': cutoff.isoformat(),
+        })
 
 
 # ---------------------------------------------------------------------------
@@ -411,6 +435,11 @@ def create_appointment(
     # varios mensajes de WhatsApp: minutos. La disponibilidad de entonces no vale,
     # hay que revalidarla AHORA y con el recurso bloqueado. Sin esto, dos
     # conversaciones se cuelan por el mismo hueco y las dos reciben un "hecho".
+    # La antelación mínima es una regla de la vía online; el staff encaja citas
+    # cuando quiere (`require_online_booking=False`).
+    if require_online_booking:
+        _ensure_enough_notice(clinic, scheduled_at)
+
     with transaction.atomic():
         lock_agenda(clinic=clinic, service=service, professional=professional)
 
@@ -706,6 +735,15 @@ def validate_appointment_update(appointment, changes: dict, *, require_online_bo
     if status not in LIVE_STATUSES:
         return {}
 
+    # Solo si de verdad se MUEVE la hora: confirmar o cancelar una cita que ya
+    # está a 1 h no es reservar con poca antelación.
+    if (
+        require_online_booking
+        and 'scheduled_at' in changes
+        and changes['scheduled_at'] != appointment.scheduled_at
+    ):
+        _ensure_enough_notice(clinic, scheduled_at)
+
     # Si se mueve la hora sin decir la nueva duración, `end_at` se recalcula desde
     # el servicio. Arrastrar el `end_at` viejo daría un intervalo invertido y la
     # validación de solapamiento no encontraría nada.
@@ -828,13 +866,21 @@ def _overlaps_any(start: datetime, end: datetime, intervals: list) -> bool:
     return any(start < other_end and end > other_start for other_start, other_end in intervals)
 
 
-def _generate_slots(windows: list, blocked: list, duration: timedelta, step: timedelta) -> list:
-    """Recorre cada tramo a pasos de `step` y devuelve los huecos que caben enteros."""
+def _generate_slots(
+    windows: list, blocked: list, duration: timedelta, step: timedelta,
+    not_before: Optional[datetime] = None,
+) -> list:
+    """Recorre cada tramo a pasos de `step` y devuelve los huecos que caben enteros.
+
+    `not_before` descarta los que empiezan antes (antelación mínima de reserva).
+    """
     slots = []
     for window_start, window_end in windows:
         current = window_start
         while current + duration <= window_end:
-            if not _overlaps_any(current, current + duration, blocked):
+            if current >= (not_before or current) and not _overlaps_any(
+                current, current + duration, blocked
+            ):
                 slots.append(current)
             current += step
     return sorted(slots)
@@ -908,6 +954,7 @@ def get_professional_availability(
         blocked,
         duration=timedelta(minutes=duration_minutes),
         step=timedelta(minutes=professional.slot_granularity_minutes),
+        not_before=booking_cutoff(professional.clinic),
     )
 
     return ProfessionalAvailability(
@@ -970,4 +1017,5 @@ def get_clinic_available_slots(
         _busy_intervals(appointments),
         duration=timedelta(minutes=duration_minutes),
         step=timedelta(minutes=duration_minutes),
+        not_before=booking_cutoff(clinic),
     )

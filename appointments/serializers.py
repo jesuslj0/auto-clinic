@@ -11,6 +11,7 @@ from appointments.models import (
     ProfessionalSchedule,
 )
 from appointments.services import (
+    BookingTooSoon,
     AppointmentDomainError,
     create_appointment,
     lock_agenda,
@@ -244,7 +245,8 @@ class AppointmentSerializer(ClinicScopedSerializerMixin, serializers.ModelSerial
             except AppointmentDomainError as error:
                 # Como ValidationError, para que `bulk-update` pueda recogerlo
                 # por cita en vez de abortar el lote entero.
-                raise serializers.ValidationError({'professional': error.detail['message']})
+                campo = 'scheduled_at' if isinstance(error, BookingTooSoon) else 'professional'
+                raise serializers.ValidationError({campo: error.detail['message']})
 
         return attrs
 
@@ -296,7 +298,8 @@ class AppointmentSerializer(ClinicScopedSerializerMixin, serializers.ModelSerial
                     instance, validated_data, require_online_booking=True
                 )
             except AppointmentDomainError as error:
-                raise serializers.ValidationError({'professional': error.detail['message']})
+                campo = 'scheduled_at' if isinstance(error, BookingTooSoon) else 'professional'
+                raise serializers.ValidationError({campo: error.detail['message']})
             return super().update(instance, validated_data)
 
     def create(self, validated_data):
