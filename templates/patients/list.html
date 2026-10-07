@@ -118,8 +118,12 @@ filtrar vuelva siempre a la primera página.
                 {% endwith %}
                 <p class="flex flex-wrap gap-x-3 gap-y-1 pt-1">
                     <span>Alta: <span class="text-content-muted">{{ patient.created_at|date:"j M Y" }}</span></span>
+                    <span>Procedimientos: <span class="text-content-muted">{{ patient.procedure_count }}</span></span>
                     {% if patient.next_appointment %}
-                    <span>Próxima: <span class="font-medium text-brand-fg">{{ patient.next_appointment|date:"j M Y" }}</span></span>
+                    <span>Próxima: <a href="{% url 'core:dashboard-manage-appointment' patient.next_appointment_id %}" class="font-medium text-brand-fg underline-offset-2 hover:underline">{{ patient.next_appointment|date:"j M Y" }}</a></span>
+                    {% endif %}
+                    {% if patient.last_visit %}
+                    <span>Última: <a href="{% url 'core:dashboard-manage-appointment' patient.last_visit_id %}" class="font-medium text-content-muted underline-offset-2 hover:text-brand-fg hover:underline">{{ patient.last_visit|date:"j M Y" }}</a></span>
                     {% endif %}
                 </p>
             </div>
@@ -140,6 +144,7 @@ filtrar vuelva siempre a la primera página.
                     <th class="px-6 py-4 font-semibold">Próxima cita</th>
                     <th class="px-6 py-4 font-semibold">Última visita</th>
                     <th class="px-6 py-4 text-right font-semibold"><span title="Sin contar canceladas">Citas</span></th>
+                    <th class="px-6 py-4 text-right font-semibold">Procedimientos</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-line bg-surface">
@@ -165,17 +170,24 @@ filtrar vuelva siempre a la primera página.
                         <td class="whitespace-nowrap px-6 py-4 text-content-muted">{{ patient.created_at|date:"j M Y" }}</td>
                         <td class="whitespace-nowrap px-6 py-4">
                             {% if patient.next_appointment %}
-                            <span class="font-medium text-brand-fg">{{ patient.next_appointment|date:"j M Y · H:i" }}</span>
+                            <a href="{% url 'core:dashboard-manage-appointment' patient.next_appointment_id %}" class="font-medium text-brand-fg underline-offset-2 hover:underline">{{ patient.next_appointment|date:"j M Y · H:i" }}</a>
                             {% else %}
                             <span class="text-content-faint">—</span>
                             {% endif %}
                         </td>
-                        <td class="whitespace-nowrap px-6 py-4 text-content-muted">{{ patient.last_visit|date:"j M Y"|default:'—' }}</td>
+                        <td class="whitespace-nowrap px-6 py-4 text-content-muted">
+                            {% if patient.last_visit %}
+                            <a href="{% url 'core:dashboard-manage-appointment' patient.last_visit_id %}" class="underline-offset-2 hover:text-brand-fg hover:underline">{{ patient.last_visit|date:"j M Y" }}</a>
+                            {% else %}<span class="text-content-faint">—</span>{% endif %}
+                        </td>
                         <td class="px-6 py-4 text-right tabular-nums text-content-muted">{{ patient.appointment_count }}</td>
+                        <td class="px-6 py-4 text-right tabular-nums text-content-muted">
+                            {% if patient.procedure_count %}<a href="{% url 'clinical:procedure-list' %}?paciente={{ patient.id }}&amp;desde=&amp;hasta=" class="font-medium text-brand-fg underline-offset-2 hover:underline">{{ patient.procedure_count }}</a>{% else %}<span class="text-content-faint">0</span>{% endif %}
+                        </td>
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="6" class="px-6 py-12 text-center text-sm text-content-subtle">No se encontraron pacientes.</td>
+                        <td colspan="7" class="px-6 py-12 text-center text-sm text-content-subtle">No se encontraron pacientes.</td>
                     </tr>
                 {% endfor %}
             </tbody>

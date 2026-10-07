@@ -27,6 +27,7 @@ from appointments.models import (
     ProfessionalSchedule,
     ProfessionalTimeOff,
 )
+from appointments.filters import UNRECORDED_WINDOW_DAYS, completed_without_procedure
 from billing.filters import invoices_for, scope_to_clinic
 from billing.metrics import _delta_pct, _previous_month_span
 from patients.models import Patient
@@ -59,6 +60,16 @@ def _list_url(**params) -> str:
     base = {'desde': '', 'hasta': '', 'profesional': ''}
     base.update({key: value for key, value in params.items() if value is not None})
     return f"{reverse('appointments:list')}?{urlencode(base)}"
+
+
+def greeting(now: datetime) -> str:
+    """Saludo según la hora local: días hasta las 14, tardes hasta las 21, noches."""
+    hour = timezone.localtime(now).hour
+    if 6 <= hour < 14:
+        return 'Buenos días'
+    if 14 <= hour < 21:
+        return 'Buenas tardes'
+    return 'Buenas noches'
 
 
 def week_bounds(day: date) -> tuple[date, date]:
@@ -149,6 +160,22 @@ def dashboard_alerts(user, appointments, revenue: dict, today: date, now: dateti
             'title': f"{pending_today} cita{'s' if pending_today != 1 else ''} de hoy sin confirmar",
             'detail': 'Confírmalas o libera el hueco.',
             'url': _list_url(desde=today.isoformat(), hasta=today.isoformat(), status='pending', sort='asc'),
+            'icon': 'M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z',
+        })
+
+    # --- Citas atendidas sin procedimiento anotado ------------------------
+    since = now - timedelta(days=UNRECORDED_WINDOW_DAYS)
+    unrecorded = completed_without_procedure(appointments, since=since).count()
+    if unrecorded:
+        alerts.append({
+            'key': 'unrecorded',
+            'tone': 'warning',
+            'count': unrecorded,
+            'title': f"{unrecorded} cita{'s' if unrecorded != 1 else ''} completada{'s' if unrecorded != 1 else ''} sin procedimiento",
+            'detail': f'De los últimos {UNRECORDED_WINDOW_DAYS} días: trabajo hecho que no se ha anotado ni se puede facturar.',
+            'url': _list_url(
+                status='completed', procedimiento='sin', desde=since.date().isoformat(), sort='desc'
+            ),
             'icon': 'M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z',
         })
 

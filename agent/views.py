@@ -8,7 +8,7 @@ from django.conf import settings
 from django.contrib import messages as django_messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
-from django.db.models import F, Q, Sum
+from django.db.models import F, Q
 from django.http import HttpResponse, JsonResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
@@ -395,10 +395,10 @@ def inbox_sessions(user, *, query='', only_unread=False):
 
 
 def total_unread(user):
-    """No leídos de todas las conversaciones de la bandeja, sin filtros."""
+    """Chats con mensajes sin leer de la bandeja, sin filtros (conversaciones, no mensajes)."""
     if user.clinic_id:
         return clinic_unread_total(user.clinic_id)
-    return inbox_sessions(user).aggregate(total=Sum('unread_count'))['total'] or 0
+    return inbox_sessions(user).filter(unread_count__gt=0).count()
 
 
 def mark_day_starts(messages, previous=None):

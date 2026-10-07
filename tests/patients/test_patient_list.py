@@ -94,6 +94,20 @@ class TestPatientList:
         _appointment(patient, service_a, professional_a, days=5, status=Appointment.Status.CANCELLED)
         assert listing().context['patients'][0].appointment_count == 1
 
+    def test_procedure_count_is_independent_of_appointments(
+        self, listing, clinic_a, service_a, professional_a, patient_a, procedure_a
+    ):
+        # Varias citas no deben multiplicar la cuenta de procedimientos.
+        for days in (1, 2, 3):
+            _appointment(patient_a, service_a, professional_a, days=days, status=Appointment.Status.PENDING)
+        patient = next(p for p in listing().context['patients'] if p.pk == patient_a.pk)
+        assert patient.procedure_count == 1
+        assert patient.appointment_count == 3
+
+    def test_procedure_count_zero_without_procedures(self, listing, clinic_a):
+        _patient(clinic_a, 'Sin', 'Procedimientos')
+        assert listing().context['patients'][0].procedure_count == 0
+
     def test_pagination_keeps_filters(self, listing, clinic_a):
         for i in range(25):
             _patient(clinic_a, f'P{i:02d}', 'Pag', days_ago=i)
@@ -118,3 +132,49 @@ class TestPatientList:
 ])
 def test_age_filter(born, expected):
     assert age(born, today=date(2026, 9, 17)) == expected
+
+
+@pytest.mark.django_db
+class TestVisitLinks:
+    """«Próxima» y «Última visita» del directorio enlazan a la cita concreta."""
+
+    def make(self, clinic, patient, service, professional, *, days, status):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from appointments.models import Appointment
+
+        return Appointment.objects.create(
+            clinic=clinic, patient=patient, service=service, professional=professional,
+            scheduled_at=timezone.now() + timedelta(days=days), status=status,
+        )
+
+    def test_links_point_to_the_right_appointments(
+        self, client, admin_user, clinic_a, patient_a, service_a, professional_a
+    ):
+        from django.urls import reverse
+
+        from appointments.models import Appointment
+
+        S = Appointment.Status
+        client.force_login(admin_user)
+        old = self.make(clinic_a, patient_a, service_a, professional_a, days=-30, status=S.COMPLETED)
+        last = self.make(clinic_a, patient_a, service_a, professional_a, days=-3, status=S.COMPLETED)
+        soon = self.make(clinic_a, patient_a, service_a, professional_a, days=2, status=S.CONFIRMED)
+        later = self.make(clinic_a, patient_a, service_a, professional_a, days=20, status=S.PENDING)
+        cancelled = self.make(clinic_a, patient_a, service_a, professional_a, days=1, status=S.CANCELLED)
+
+        html = client.get(reverse('patients:list')).content.decode()
+        url = lambda a: reverse('core:dashboard-manage-appointment', args=[a.pk])
+        assert url(soon) in html
+        assert url(last) in html
+        for other in (old, later, cancelled):
+            assert url(other) not in html
+
+    def test_no_links_without_appointments(self, client, admin_user, patient_a):
+        from django.urls import reverse
+
+        client.force_login(admin_user)
+        html = client.get(reverse('patients:list')).content.decode()
+        assert '/panel/citas/' not in html

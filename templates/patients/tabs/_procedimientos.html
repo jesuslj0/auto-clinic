@@ -57,7 +57,8 @@ Responsive: tarjetas en móvil, tabla en escritorio con su propio `overflow-x-au
     <!-- Móvil: tarjetas -->
     <div class="divide-y divide-line md:hidden">
         {% for procedure in procedures %}
-        <article class="px-5 py-4">
+        <article class="relative px-5 py-4 transition hover:bg-muted">
+            <a href="{% url 'clinical:procedure-list' %}?paciente={{ patient.pk }}&amp;desde=&amp;hasta=" class="absolute inset-0" aria-label="Ver {{ procedure.frozen_service_name }} en el listado de procedimientos"></a>
             <div class="flex items-start justify-between gap-3">
                 <p class="min-w-0 break-words text-sm font-semibold text-content">{{ procedure.frozen_service_name }}</p>
                 <span class="flex-shrink-0 text-sm font-semibold text-content">{{ procedure.frozen_price|euros }}</span>
@@ -65,7 +66,7 @@ Responsive: tarjetas en móvil, tabla en escritorio con su propio `overflow-x-au
             <p class="mt-1 text-xs text-content-subtle">{{ procedure.performed_at|date:"j \d\e F \d\e Y" }} · {{ procedure.performed_at|date:"H:i" }}</p>
             <p class="mt-1.5 text-xs">
                 {% if procedure.invoice_id %}
-                <a href="{% url 'billing:invoice-detail' procedure.invoice_id %}" class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-semibold {{ procedure.invoice.status|invoice_status_badge }}">
+                <a href="{% url 'billing:invoice-detail' procedure.invoice_id %}" class="relative inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-semibold {{ procedure.invoice.status|invoice_status_badge }}">
                     {{ procedure.invoice.status|invoice_status_icon:"h-3 w-3" }}
                     {{ procedure.invoice.number|default:'Borrador' }}
                 </a>
@@ -107,9 +108,9 @@ Responsive: tarjetas en móvil, tabla en escritorio con su propio `overflow-x-au
             </thead>
             <tbody class="divide-y divide-line bg-surface">
                 {% for procedure in procedures %}
-                <tr>
+                <tr class="relative cursor-pointer transition hover:bg-muted" onclick="if (!event.target.closest('a')) window.location = this.dataset.href" data-href="{% url 'clinical:procedure-list' %}?paciente={{ patient.pk }}&amp;desde=&amp;hasta=">
                     <td class="whitespace-nowrap px-6 py-4 text-content-muted">{{ procedure.performed_at|date:"j M, Y" }}</td>
-                    <td class="px-6 py-4 font-medium text-content">{{ procedure.frozen_service_name }}</td>
+                    <td class="px-6 py-4 font-medium text-content"><a href="{% url 'clinical:procedure-list' %}?paciente={{ patient.pk }}&amp;desde=&amp;hasta=" class="hover:text-brand-fg">{{ procedure.frozen_service_name }}</a></td>
                     <td class="px-6 py-4 text-content-muted">{{ procedure.get_affected_zone_display|default:"—" }}</td>
                     <td class="px-6 py-4 text-content-muted">{{ procedure.get_laterality_display|default:"—" }}</td>
                     <td class="whitespace-nowrap px-6 py-4">

@@ -5,7 +5,8 @@ from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.db.models import Case, Count, F, IntegerField, Max, Min, Prefetch, Q, Sum, When
+from django.db.models import Case, Count, F, IntegerField, Max, Min, OuterRef, Prefetch, Q, Subquery, Sum, When
+from django.db.models.functions import Coalesce
 from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
 from django.views import View
@@ -122,7 +123,38 @@ class PatientListView(AccessLogMixin, LoginRequiredMixin, ListView):
         now = timezone.now()
         Status = Appointment.Status
 
+        # La cita concreta de «próxima» y «última visita», para enlazarla. Misma
+        # regla que los `Min`/`Max` de abajo (que siguen dando la fecha por la que
+        # se ordena y filtra), pero como subconsulta porque un agregado no devuelve
+        # el id de la fila.
+        mine = Appointment.objects.filter(patient=OuterRef('pk'))
+        next_id = mine.filter(
+            scheduled_at__gte=now, status__in=LIVE_STATUSES
+        ).order_by('scheduled_at').values('pk')[:1]
+        last_id = mine.filter(
+            scheduled_at__lt=now, status__in=[Status.COMPLETED, Status.CONFIRMED]
+        ).order_by('-scheduled_at').values('pk')[:1]
+
+        # Procedimientos por paciente, como subconsulta: un `Count` más sobre el
+        # JOIN de citas multiplicaría ambas cuentas. Mismos filtros de borrado
+        # lógico que `clinical.procedure_list.procedures_for`.
+        procedures = (
+            PerformedProcedure.objects.filter(
+                visit__episode__history__patient=OuterRef('pk'),
+                visit__deleted_at__isnull=True,
+                visit__episode__deleted_at__isnull=True,
+                visit__episode__history__deleted_at__isnull=True,
+            )
+            .order_by()
+            .values('visit__episode__history__patient')
+            .annotate(total=Count('pk'))
+            .values('total')
+        )
+
         queryset = Patient.objects.annotate(
+            procedure_count=Coalesce(Subquery(procedures), 0),
+            next_appointment_id=Subquery(next_id),
+            last_visit_id=Subquery(last_id),
             appointment_count=Count(
                 'appointments', filter=~Q(appointments__status=Status.CANCELLED),
             ),
@@ -209,11 +241,11 @@ class PatientListView(AccessLogMixin, LoginRequiredMixin, ListView):
 #: (más su ruta y su parcial).
 PATIENT_TABS = [
     {'key': 'general', 'label': 'Datos generales', 'url_name': 'patients:detail'},
-    {'key': 'anamnesis', 'label': 'Anamnesis', 'url_name': 'patients:tab-anamnesis'},
-    {'key': 'alerts', 'label': 'Alertas', 'url_name': 'patients:tab-alerts'},
-    {'key': 'lesions', 'label': 'Lesiones', 'url_name': 'patients:tab-lesions'},
-    {'key': 'consents', 'label': 'Consentimientos', 'url_name': 'patients:tab-consents'},
     {'key': 'procedures', 'label': 'Procedimientos', 'url_name': 'patients:tab-procedures'},
+    {'key': 'lesions', 'label': 'Lesiones', 'url_name': 'patients:tab-lesions'},
+    {'key': 'alerts', 'label': 'Alertas', 'url_name': 'patients:tab-alerts'},
+    {'key': 'consents', 'label': 'Consentimientos', 'url_name': 'patients:tab-consents'},
+    {'key': 'anamnesis', 'label': 'Anamnesis', 'url_name': 'patients:tab-anamnesis'},
 ]
 
 #: Orden de presentación de las alertas: primero lo que puede contraindicar un

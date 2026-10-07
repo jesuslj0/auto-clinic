@@ -1,0 +1,19 @@
+{% comment %}
+Avatar de una fila del listado de citas: SOLO iniciales, nunca la foto. Recibe
+`appointment` y `classes` (tamaño y texto, p. ej. "h-9 w-9 text-xs").
+
+A propósito no usa `patients/_avatar.html`: la foto se sirve por
+`patients:photo`, que deja un `AccessLog` por imagen, y un listado de 20 filas
+generaría 20 apuntes por carga sin aportar nada que las iniciales no den. La
+foto sigue en el directorio de pacientes, la ficha y los chats.
+
+Con ficha, iniciales en el color de marca; sin ficha (primera visita o reserva
+del agente), en gris y con las del nombre que lleva la cita.
+{% endcomment %}
+{% if appointment.patient %}
+    <span class="flex {{ classes }} flex-shrink-0 items-center justify-center rounded-full bg-brand-soft-strong font-semibold uppercase text-brand-fg" aria-hidden="true">{{ appointment.patient.first_name|first }}{{ appointment.patient.last_name|first }}</span>
+{% else %}
+    <span class="flex {{ classes }} flex-shrink-0 items-center justify-center rounded-full bg-muted-strong font-semibold uppercase text-content-subtle" aria-hidden="true">
+        {% if appointment.patient_name %}{% for word in appointment.patient_name.split|slice:":2" %}{{ word|first }}{% endfor %}{% else %}?{% endif %}
+    </span>
+{% endif %}

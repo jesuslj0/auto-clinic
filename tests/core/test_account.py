@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from django.utils import timezone
 
 from appointments.models import Professional, ProfessionalSchedule, ProfessionalTimeOff
 from core.models import User
@@ -405,7 +406,9 @@ def test_the_professional_list_shows_role_and_join_date(client, admin_user):
 
     assert '>Rol<' in html and '>Alta<' in html
     assert admin_user.get_role_display() in html
-    assert admin_user.date_joined.strftime('%d/%m/%Y') in html
+    # La plantilla pinta la fecha en hora local; comparar con la UTC falla de
+    # madrugada, cuando el día local ya es otro.
+    assert timezone.localtime(admin_user.date_joined).strftime('%d/%m/%Y') in html
 
 
 @pytest.mark.django_db

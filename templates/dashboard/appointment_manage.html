@@ -5,6 +5,20 @@
 {% block page_heading %}Gestionar cita{% endblock %}
 
 {% block content %}
+{% comment %}
+Detalle de una cita. Dos columnas en escritorio:
+
+- IZQUIERDA, lo que ES la cita: quién, cuándo, con quién y para qué, las notas y
+  los procedimientos.
+- DERECHA, lo que se HACE con ella: el estado y sus acciones, y debajo el
+  historial. Es la columna fija (`sticky`) para que las acciones no se pierdan al
+  bajar por una cita con muchas notas.
+
+En móvil es una sola columna y el orden cambia a propósito (datos → acciones →
+procedimientos → historial): la acción que se viene a hacer no puede quedar
+detrás de un bloque largo. Se consigue con `contents` + `order`, sin duplicar
+marcado.
+{% endcomment %}
 <div
     x-data="{
         modal: null,
@@ -13,262 +27,362 @@
     }"
     @keydown.escape.window="close()"
 >
-<section class="mx-auto max-w-3xl space-y-6">
-    <div class="flex items-center justify-between">
+<section class="mx-auto max-w-6xl space-y-5">
+
+    {# --- Barra superior --------------------------------------------------- #}
+    <div class="flex flex-wrap items-center justify-between gap-3">
         <a href="{% url 'core:dashboard' %}" class="inline-flex items-center gap-2 rounded-xl bg-surface px-4 py-2.5 text-sm font-medium text-content-muted ring-1 ring-line transition hover:bg-muted hover:text-content">
-            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
             </svg>
             Volver al panel
         </a>
-        <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold {{ appointment.status|status_badge }}">
+        <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold lg:hidden {{ appointment.status|status_badge }}">
             {{ appointment.status|status_icon:"h-4 w-4" }}
             {{ appointment.get_status_display|default:appointment.status|title }}
         </span>
     </div>
 
-    <article class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
-        <h2 class="text-lg font-semibold text-content">Detalle de la cita</h2>
-        <p class="mt-1 text-sm text-content-subtle">Gestiona esta cita desde el equipo clínico, sin salir del dashboard.</p>
+    <div class="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
 
-        <dl class="mt-5 grid gap-4 sm:grid-cols-2">
-            <div class="rounded-2xl bg-muted p-4">
-                <dt class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-content-subtle">
-                    {% include 'dashboard/_appointment_field_icon.html' with field='patient' %}
-                    Paciente
-                </dt>
-                <dd class="mt-1.5 text-sm font-semibold text-content">{{ appointment.patient|default:appointment.patient_name|default:'Sin paciente asignado' }}</dd>
-            </div>
-            <div class="rounded-2xl bg-muted p-4">
-                <dt class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-content-subtle">
-                    {% include 'dashboard/_appointment_field_icon.html' with field='service' %}
-                    Servicio
-                </dt>
-                <dd class="mt-1.5 text-sm font-semibold text-content">{{ appointment.service|default:appointment.service_name|default:'Sin servicio asignado' }}</dd>
-            </div>
-            <div class="rounded-2xl bg-muted p-4">
-                <dt class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-content-subtle">
-                    {% include 'dashboard/_appointment_field_icon.html' with field='datetime' %}
-                    Fecha y hora
-                </dt>
-                <dd class="mt-1.5">
-                    <p class="text-lg font-semibold leading-tight text-content tabular-nums">
-                        {{ appointment.scheduled_at|date:"H:i" }}{% if appointment.end_at %} <span class="text-content-subtle">–</span> {{ appointment.end_at|date:"H:i" }}{% endif %}
-                    </p>
-                    <p class="mt-0.5 text-sm text-content-muted">{{ appointment.scheduled_at|date:"l, j \d\e F \d\e Y"|capfirst }}</p>
-                </dd>
-            </div>
-            <div class="rounded-2xl bg-muted p-4">
-                <dt class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-content-subtle">
-                    {% include 'dashboard/_appointment_field_icon.html' with field='professional' %}
-                    Profesional asignado
-                </dt>
-                <dd class="mt-1.5 text-sm font-semibold text-content">{{ appointment.professional|default:'Sin asignar' }}</dd>
-            </div>
-            <div class="rounded-2xl bg-muted p-4 sm:col-span-2" x-data="{ editando: false }">
-                <dt class="flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-wide text-content-subtle">
-                    <span class="flex items-center gap-1.5">
-                        {% include 'dashboard/_appointment_field_icon.html' with field='notes' %}
-                        Notas
-                    </span>
-                    <button
-                        type="button"
-                        x-show="!editando"
-                        @click="editando = true; $nextTick(() => $refs.campo.focus())"
-                        class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-fg transition hover:bg-brand-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-                    >
-                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
-                        </svg>
-                        {% if appointment.notes %}Editar{% else %}Añadir{% endif %}
-                    </button>
-                </dt>
+        {# =================== COLUMNA IZQUIERDA: la cita =================== #}
+        <div class="contents lg:flex lg:flex-col lg:gap-6">
 
-                <dd class="mt-1.5" x-show="!editando">
-                    <p class="whitespace-pre-line text-sm text-content-muted">{{ appointment.notes|default:'Sin notas registradas.' }}</p>
-                </dd>
+            {# --- Datos --------------------------------------------------- #}
+            <article class="order-1 overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line lg:order-none">
 
-                <dd class="mt-1.5" x-show="editando" x-cloak>
-                    <form method="post" action="{% url 'core:dashboard-appointment-action' appointment.id %}">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="save_notes">
-                        <textarea
-                            name="notes"
-                            x-ref="campo"
-                            rows="4"
-                            placeholder="Anota aquí lo que la clínica deba saber de esta cita."
-                            @keydown.escape.stop="editando = false; $refs.campo.value = $refs.campo.defaultValue"
-                            class="block w-full resize-y rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500"
-                        >{{ appointment.notes }}</textarea>
-                        <div class="mt-2 flex justify-end gap-2">
-                            <button
-                                type="button"
-                                @click="editando = false; $refs.campo.value = $refs.campo.defaultValue"
-                                class="rounded-xl px-3 py-2 text-sm font-medium text-content-muted transition hover:bg-muted-strong hover:text-content"
-                            >
-                                Cancelar
-                            </button>
-                            <button type="submit" class="btn-primary px-4 py-2 text-sm">Guardar</button>
-                        </div>
-                    </form>
-                </dd>
-            </div>
-        </dl>
-
-        {% if appointment.status == 'cancelled' %}
-        <div class="mt-6 rounded-2xl bg-danger-soft px-4 py-4 ring-1 ring-danger-line">
-            <div class="flex items-center gap-3">
-                {{ 'cancelled'|status_icon:"h-5 w-5 flex-shrink-0 text-danger" }}
-                <p class="text-sm font-semibold text-danger">
-                    Cita cancelada
-                    {% if appointment.cancelled_by == 'patient' %}
-                        por el paciente.
-                    {% elif appointment.cancelled_by == 'staff' %}
-                        por la clínica.
+                {# Cabecera: quién viene #}
+                <div class="flex items-start gap-4 border-b border-line px-5 py-5 sm:px-6">
+                    {% if appointment.patient %}
+                        {% include 'patients/_avatar.html' with patient=appointment.patient classes="h-12 w-12 text-base" %}
                     {% else %}
-                        — origen desconocido.
+                        <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-muted-strong text-content-subtle" aria-hidden="true">
+                            {% include 'dashboard/_appointment_field_icon.html' with field='patient' icon_class='h-6 w-6' %}
+                        </span>
                     {% endif %}
-                </p>
-            </div>
-            <p class="mt-1 pl-8 text-xs text-danger">No es posible confirmar una cita cancelada.</p>
-        </div>
-        {% else %}
-        <div class="mt-6 flex flex-col gap-4 border-t border-line pt-5 sm:flex-row sm:items-end sm:justify-between">
-            <!-- Acciones negativas -->
-            <div class="flex flex-col gap-2">
-                <p class="text-xs font-semibold uppercase tracking-wide text-content-faint">No realizada</p>
-                <div class="flex flex-wrap gap-2">
-                    <button
-                        type="button"
-                        @click="open('reject')"
-                        class="inline-flex items-center gap-2 rounded-xl border border-danger-line bg-danger-soft px-4 py-2.5 text-sm font-semibold text-danger transition hover:bg-rose-100"
-                    >
-                        {{ 'cancelled'|status_icon:"h-4 w-4" }}
-                        Rechazar cita
-                    </button>
-                    {% if appointment.status != 'completed' %}
-                    <button
-                        type="button"
-                        @click="open('no_show')"
-                        class="inline-flex items-center gap-2 rounded-xl border border-line-strong bg-muted px-4 py-2.5 text-sm font-semibold text-content-muted transition hover:bg-muted-strong"
-                    >
-                        {{ 'no_show'|status_icon:"h-4 w-4" }}
-                        No se presentó
-                    </button>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-[11px] font-semibold uppercase tracking-wide text-content-faint">Paciente</p>
+                        <div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <h2 class="truncate text-xl font-semibold text-content">{{ appointment.patient|default:appointment.patient_name|default:'Sin nombre' }}</h2>
+                            {% if not appointment.patient_id %}
+                            <span class="inline-flex items-center rounded-full bg-info-soft px-2.5 py-0.5 text-xs font-semibold text-info ring-1 ring-info-line">Sin ficha</span>
+                            {% endif %}
+                        </div>
+                        <p class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-content-subtle">
+                            {% with phone=appointment.patient.phone|default:appointment.patient_phone email=appointment.patient.email|default:appointment.contact_email %}
+                            {% if phone %}<span>{{ phone }}</span>{% endif %}
+                            {% if email %}<span class="truncate">{{ email }}</span>{% endif %}
+                            {% if not phone and not email %}<span>Sin datos de contacto</span>{% endif %}
+                            {% endwith %}
+                        </p>
+                    </div>
+                    {% if appointment.patient_id %}
+                    <a href="{% url 'patients:detail' appointment.patient_id %}" class="btn-secondary flex-shrink-0 !px-3 !py-2 text-xs max-sm:hidden">
+                        Ver ficha
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+                    </a>
                     {% endif %}
                 </div>
-            </div>
 
-            <!-- Acciones positivas -->
-            {% if appointment.status == 'pending' or appointment.status == 'confirmed' or appointment.status == 'rescheduled' %}
-            <div class="flex flex-col gap-2 sm:items-end">
-                <p class="text-xs font-semibold uppercase tracking-wide text-content-faint sm:text-right">Avanzar cita</p>
-                <div class="flex flex-wrap gap-2 sm:justify-end">
+                {# Primera visita: la ficha se abre desde aquí #}
+                {% if not appointment.patient_id and appointment.status != 'cancelled' %}
+                {% comment %}Primera visita: la cita lleva solo el contacto. La ficha se abre
+                cuando la clínica sabe que es su paciente; hasta entonces no hay historia
+                clínica ni procedimientos, y no se puede completar la cita.{% endcomment %}
+                <div class="flex flex-col gap-3 bg-info-soft px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                    <div class="min-w-0">
+                        <p class="text-sm font-semibold text-info">Cita sin ficha de paciente</p>
+                        <p class="mt-0.5 text-xs text-content-muted">Crea la ficha cuando se presente para registrar procedimientos y completar la cita.</p>
+                    </div>
+                    <form method="post" action="{% url 'core:dashboard-appointment-action' appointment.id %}" class="flex-shrink-0">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="create_patient">
+                        <button type="submit" class="btn-primary !py-2 text-sm max-sm:w-full">Crear ficha de paciente</button>
+                    </form>
+                </div>
+                {% endif %}
+
+                {# Cuándo, con quién y para qué #}
+                <dl class="grid gap-px bg-line sm:grid-cols-2">
+                    <div class="bg-surface px-5 py-4 sm:px-6 sm:col-span-2">
+                        <dt class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-content-subtle">
+                            {% include 'dashboard/_appointment_field_icon.html' with field='datetime' %}
+                            Fecha y hora
+                        </dt>
+                        <dd class="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                            <span class="text-3xl font-semibold leading-none tracking-tight text-content tabular-nums">
+                                {{ appointment.scheduled_at|date:"H:i" }}{% if appointment.end_at %}<span class="mx-1.5 text-content-faint">–</span>{{ appointment.end_at|date:"H:i" }}{% endif %}
+                            </span>
+                            <span class="text-sm text-content-muted">{{ appointment.scheduled_at|date:"l, j \d\e F \d\e Y"|capfirst }}</span>
+                            {% if appointment.end_at %}
+                            <span class="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-content-subtle">{{ appointment.scheduled_at|timesince:appointment.end_at }}</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="bg-surface px-5 py-4 sm:px-6">
+                        <dt class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-content-subtle">
+                            {% include 'dashboard/_appointment_field_icon.html' with field='service' %}
+                            Servicio
+                        </dt>
+                        <dd class="mt-1.5 text-sm font-semibold text-content">{{ appointment.service|default:appointment.service_name|default:'Sin servicio asignado' }}</dd>
+                    </div>
+                    <div class="bg-surface px-5 py-4 sm:px-6">
+                        <dt class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-content-subtle">
+                            {% include 'dashboard/_appointment_field_icon.html' with field='professional' %}
+                            Profesional
+                        </dt>
+                        <dd class="mt-1.5 text-sm font-semibold text-content">{{ appointment.professional|default:'Sin asignar' }}</dd>
+                    </div>
+                    <div class="bg-surface px-5 py-3 text-xs text-content-subtle sm:px-6 sm:col-span-2">
+                        Reservada desde <span class="font-medium text-content-muted">{{ appointment.get_source_display }}</span>
+                        · {{ appointment.created_at|date:"j M Y, H:i" }}
+                    </div>
+                </dl>
+
+                {# Notas #}
+                <div class="border-t border-line px-5 py-4 sm:px-6" x-data="{ editando: false }">
+                    <div class="flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-wide text-content-subtle">
+                        <span class="flex items-center gap-1.5">
+                            {% include 'dashboard/_appointment_field_icon.html' with field='notes' %}
+                            Notas
+                        </span>
+                        <button
+                            type="button"
+                            x-show="!editando"
+                            @click="editando = true; $nextTick(() => $refs.campo.focus())"
+                            class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-fg transition hover:bg-brand-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                        >
+                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                            </svg>
+                            {% if appointment.notes %}Editar{% else %}Añadir{% endif %}
+                        </button>
+                    </div>
+
+                    <div class="mt-2" x-show="!editando">
+                        <p class="whitespace-pre-line text-sm {% if appointment.notes %}text-content-muted{% else %}text-content-faint{% endif %}">{{ appointment.notes|default:'Sin notas registradas.' }}</p>
+                    </div>
+
+                    <div class="mt-2" x-show="editando" x-cloak>
+                        <form method="post" action="{% url 'core:dashboard-appointment-action' appointment.id %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="save_notes">
+                            <textarea
+                                name="notes"
+                                x-ref="campo"
+                                rows="4"
+                                placeholder="Anota aquí lo que la clínica deba saber de esta cita."
+                                @keydown.escape.stop="editando = false; $refs.campo.value = $refs.campo.defaultValue"
+                                class="block w-full resize-y rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500"
+                            >{{ appointment.notes }}</textarea>
+                            <div class="mt-2 flex justify-end gap-2">
+                                <button
+                                    type="button"
+                                    @click="editando = false; $refs.campo.value = $refs.campo.defaultValue"
+                                    class="rounded-xl px-3 py-2 text-sm font-medium text-content-muted transition hover:bg-muted-strong hover:text-content"
+                                >
+                                    Cancelar
+                                </button>
+                                <button type="submit" class="btn-primary px-4 py-2 text-sm">Guardar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </article>
+
+            {# --- Procedimientos ------------------------------------------ #}
+            {% comment %}Procedimientos de esta cita: solo CUÁNTOS hay.
+
+            Esta pantalla no enseña historia clínica a propósito, y por eso no
+            registra un `AccessLog`. Un recuento dice que la cita acabó en algo
+            —información de agenda, la misma que distingue el listado entre «con» y
+            «sin» procedimiento—, no qué se le hizo al paciente ni por cuánto.
+
+            El contenido está a un clic, en la pestaña de la ficha, que sí es una
+            lectura clínica y sí queda registrada. La frontera está ahí para que
+            cruzarla sea deliberado. Si algún día se pinta aquí el nombre, el importe
+            o la zona de un procedimiento, esta vista tiene que instrumentar
+            `AccessLog`.
+
+            El botón de alta se ofrece mientras la cita no esté cancelada y tenga
+            ficha de paciente (la historia clínica cuelga de ella). Una cita se
+            atiende antes de marcarse completada, y también se puede anotar después,
+            así que el alta no espera al estado.
+            {% endcomment %}
+            <article class="order-3 rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6 lg:order-none">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="flex items-start gap-3">
+                        <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-brand-fg" aria-hidden="true">
+                            {% include 'dashboard/_appointment_field_icon.html' with field='service' icon_class='h-5 w-5' %}
+                        </span>
+                        <div>
+                            <h2 class="text-base font-semibold text-content">
+                                Procedimientos
+                                {% if procedure_count %}
+                                <span class="ml-1.5 inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-brand-soft px-2 py-0.5 text-xs font-semibold text-brand-fg ring-1 ring-brand-line">{{ procedure_count }}</span>
+                                {% endif %}
+                            </h2>
+                            <p class="mt-0.5 text-sm text-content-subtle">
+                                {% if not appointment.patient_id %}
+                                Crea la ficha del paciente para poder registrar lo que se haga en esta cita.
+                                {% elif procedure_count %}
+                                Se registr{{ procedure_count|pluralize:"ó,aron" }} {{ procedure_count }} procedimiento{{ procedure_count|pluralize }} en esta cita.
+                                {% else %}
+                                Todavía no se ha registrado ninguno en esta cita.
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                    {% if appointment.patient_id %}
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2 max-sm:w-full">
+                        {% if procedure_count %}
+                        <a href="{% url 'patients:tab-procedures' appointment.patient_id %}"
+                           class="btn-secondary max-sm:flex-1"
+                           title="Ver los procedimientos en la ficha del paciente">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            Ver procedimientos
+                        </a>
+                        {% endif %}
+                        {% if appointment.status != 'cancelled' %}
+                        <a href="{% url 'appointments:procedure-create' appointment.id %}" class="btn-primary max-sm:flex-1">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                            </svg>
+                            Registrar procedimiento
+                        </a>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </article>
+        </div>
+
+        {# =================== COLUMNA DERECHA: estado y acciones =================== #}
+        <div class="contents lg:sticky lg:top-6 lg:flex lg:flex-col lg:gap-6">
+
+            <article class="order-2 rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6 lg:order-none">
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-content-faint">Estado</p>
+                <div class="mt-2 flex items-center gap-3">
+                    <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl {{ appointment.status|status_badge }}">
+                        {{ appointment.status|status_icon:"h-6 w-6" }}
+                    </span>
+                    <div class="min-w-0">
+                        <p class="text-lg font-semibold leading-tight text-content">{{ appointment.get_status_display|default:appointment.status|title }}</p>
+                        <p class="mt-0.5 text-xs text-content-subtle">
+                            {% if appointment.status == 'pending' %}A la espera de que la clínica la confirme.
+                            {% elif appointment.status == 'rescheduled' %}Hora nueva pendiente de validar.
+                            {% elif appointment.status == 'confirmed' %}Confirmada. Márcala al atenderla.
+                            {% elif appointment.status == 'completed' %}El paciente ya fue atendido.
+                            {% elif appointment.status == 'no_show' %}El paciente no se presentó.
+                            {% elif appointment.status == 'cancelled' %}Esta cita ya no se va a realizar.
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+                {% if appointment.patient_confirmed_at and appointment.status != 'cancelled' %}
+                <p class="mt-3 flex items-center gap-1.5 rounded-xl bg-success-soft px-3 py-2 text-xs font-medium text-success ring-1 ring-success-line">
+                    {{ 'confirmed'|status_icon:"h-4 w-4 flex-shrink-0" }}
+                    El paciente confirmó que vendrá · {{ appointment.patient_confirmed_at|date:"j M, H:i" }}
+                </p>
+                {% endif %}
+
+                {% if appointment.status == 'cancelled' %}
+                <div class="mt-4 rounded-2xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line">
+                    <p class="text-sm font-semibold text-danger">
+                        Cita cancelada
+                        {% if appointment.cancelled_by == 'patient' %}
+                            por el paciente.
+                        {% elif appointment.cancelled_by == 'staff' %}
+                            por la clínica.
+                        {% else %}
+                            — origen desconocido.
+                        {% endif %}
+                    </p>
+                    <p class="mt-0.5 text-xs text-danger">No es posible confirmar una cita cancelada.</p>
+                </div>
+                {% else %}
+                <div class="mt-5 space-y-2.5">
+                    {# Acción principal: la siguiente en el ciclo #}
                     {% if appointment.status == 'pending' or appointment.status == 'rescheduled' %}
-                    <button
-                        type="button"
-                        @click="open('confirm')"
-                        class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
-                    >
-                        {{ 'confirmed'|status_icon:"h-4 w-4" }}
+                    <button type="button" @click="open('confirm')"
+                            class="btn w-full bg-emerald-600 py-3 text-white shadow-sm hover:bg-emerald-700 focus:ring-emerald-500">
+                        {{ 'confirmed'|status_icon:"h-5 w-5" }}
                         {% if appointment.status == 'rescheduled' %}Validar hora nueva{% else %}Confirmar cita{% endif %}
                     </button>
-                    {% endif %}
-                    {% if appointment.status == 'confirmed' %}
-                    <button
-                        type="button"
-                        @click="open('complete')"
-                        class="btn-primary inline-flex items-center gap-2"
-                    >
-                        {{ 'completed'|status_icon:"h-4 w-4" }}
+                    {% elif appointment.status == 'confirmed' %}
+                    {% if appointment.patient_id %}
+                    <button type="button" @click="open('complete')" class="btn-primary w-full py-3">
+                        {{ 'completed'|status_icon:"h-5 w-5" }}
                         Marcar completada
                     </button>
-                    {% endif %}
-                </div>
-            </div>
-            {% endif %}
-        </div>
-        {% endif %}
-
-        {% if not appointment.patient_id and appointment.status != 'cancelled' %}
-        {% comment %}Primera visita: la cita lleva solo el contacto. La ficha se abre
-        cuando la clínica sabe que es su paciente; hasta entonces no hay historia
-        clínica ni procedimientos, y no se puede completar la cita.{% endcomment %}
-        <div class="mt-6 rounded-2xl bg-info-soft px-4 py-4 ring-1 ring-info-line">
-            <p class="text-sm font-semibold text-info">Cita sin ficha de paciente</p>
-            <p class="mt-1 text-sm text-content-muted">
-                {{ appointment.patient_name|default:'Sin nombre' }}
-                {% if appointment.patient_phone %}· {{ appointment.patient_phone }}{% endif %}
-                {% if appointment.contact_email %}· {{ appointment.contact_email }}{% endif %}
-            </p>
-            <p class="mt-1 text-xs text-content-subtle">Crea la ficha cuando se presente para poder registrar procedimientos y completar la cita.</p>
-            <form method="post" action="{% url 'core:dashboard-appointment-action' appointment.id %}" class="mt-3">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="create_patient">
-                <button type="submit" class="btn-primary px-4 py-2 text-sm">Crear ficha de paciente</button>
-            </form>
-        </div>
-        {% endif %}
-
-        {% comment %}Procedimientos de esta cita: solo CUÁNTOS hay.
-
-        Esta pantalla no enseña historia clínica a propósito, y por eso no
-        registra un `AccessLog`. Un recuento dice que la cita acabó en algo
-        —información de agenda, la misma que distingue el listado entre «con» y
-        «sin» procedimiento—, no qué se le hizo al paciente ni por cuánto.
-
-        El contenido está a un clic, en la pestaña de la ficha, que sí es una
-        lectura clínica y sí queda registrada. La frontera está ahí para que
-        cruzarla sea deliberado. Si algún día se pinta aquí el nombre, el importe
-        o la zona de un procedimiento, esta vista tiene que instrumentar
-        `AccessLog`.
-
-        El botón de alta se ofrece mientras la cita no esté cancelada y tenga
-        ficha de paciente (la historia clínica cuelga de ella). Una cita se
-        atiende antes de marcarse completada, y también se puede anotar después,
-        así que el alta no espera al estado.
-        {% endcomment %}
-        {% if appointment.patient_id %}
-        <div class="mt-5 flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-                <p class="text-sm font-semibold text-content">
-                    Procedimientos
-                    {% if procedure_count %}
-                    <span class="ml-1.5 inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-brand-soft px-2 py-0.5 text-xs font-semibold text-brand-fg ring-1 ring-brand-line">{{ procedure_count }}</span>
-                    {% endif %}
-                </p>
-                <p class="mt-0.5 text-sm text-content-subtle">
-                    {% if procedure_count %}
-                    Se registr{{ procedure_count|pluralize:"ó,aron" }} {{ procedure_count }} procedimiento{{ procedure_count|pluralize }} en esta cita.
                     {% else %}
-                    Todavía no se ha registrado ninguno en esta cita.
+                    <button type="button" disabled class="btn-primary w-full py-3" title="Crea primero la ficha del paciente">
+                        {{ 'completed'|status_icon:"h-5 w-5" }}
+                        Marcar completada
+                    </button>
+                    <p class="text-center text-xs text-content-subtle">Crea antes la ficha del paciente para poder completarla.</p>
                     {% endif %}
-                </p>
-            </div>
-            <div class="flex flex-shrink-0 flex-wrap items-center gap-3 max-sm:w-full">
-                {% if procedure_count %}
-                <a href="{% url 'patients:tab-procedures' appointment.patient_id %}"
-                   class="btn-secondary max-sm:w-full max-sm:justify-center"
-                   title="Ver los procedimientos en la ficha del paciente">
-                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    Ver procedimientos
-                </a>
+                    {% endif %}
+
+                    {# Salidas #}
+                    <div class="grid grid-cols-2 gap-2.5 pt-1">
+                        {% if appointment.status != 'completed' %}
+                        <button type="button" @click="open('no_show')"
+                                class="btn-secondary !px-3 text-xs">
+                            {{ 'no_show'|status_icon:"h-4 w-4" }}
+                            No se presentó
+                        </button>
+                        {% endif %}
+                        <button type="button" @click="open('reject')"
+                                {# Hover: de «aviso» a «destructivo» (rosa fuerte con texto blanco, el mismo de .btn-danger). Un fondo claro literal en hover se vería lavado en oscuro. #}
+                                class="btn !px-3 text-xs border border-danger-line bg-danger-soft text-danger hover:border-rose-600 hover:bg-rose-600 hover:text-white focus:ring-rose-500 {% if appointment.status == 'completed' %}col-span-2{% endif %}">
+                            {{ 'cancelled'|status_icon:"h-4 w-4" }}
+                            Rechazar cita
+                        </button>
+                    </div>
+                </div>
                 {% endif %}
-                {% if appointment.status != 'cancelled' %}
-                <a href="{% url 'appointments:procedure-create' appointment.id %}" class="btn-secondary max-sm:w-full max-sm:justify-center">
-                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                    Registrar procedimiento
-                </a>
-                {% endif %}
-            </div>
+            </article>
+
+            {# --- Historial ---------------------------------------------- #}
+            {% with history=appointment.status_history.all %}
+            {% if history %}
+            <article class="order-4 rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6 lg:order-none">
+                <h2 class="text-[11px] font-semibold uppercase tracking-wide text-content-faint">Historial de estado</h2>
+                <ol class="mt-4">
+                    {% for entry in history %}
+                    <li class="relative flex gap-3.5 pb-5 last:pb-0">
+                        {% if not forloop.last %}
+                        <span class="absolute left-[13px] top-7 h-full w-px bg-line" aria-hidden="true"></span>
+                        {% endif %}
+                        <span class="relative flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full ring-4 ring-surface {{ entry.to_status|status_badge }}">
+                            {{ entry.to_status|status_icon:"h-3.5 w-3.5" }}
+                        </span>
+                        <div class="min-w-0 flex-1 pt-0.5">
+                            <p class="text-sm font-semibold text-content">
+                                {% if entry.from_status %}
+                                    {{ entry.get_from_status_display }} → {{ entry.get_to_status_display }}
+                                {% else %}
+                                    Creada como {{ entry.get_to_status_display }}
+                                {% endif %}
+                            </p>
+                            <p class="mt-0.5 text-xs text-content-subtle">
+                                {{ entry.actor_label|default:entry.get_actor_display }}
+                                <span class="mx-1 text-content-faint">·</span>
+                                {{ entry.changed_at|date:"j M Y · H:i" }}
+                            </p>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ol>
+            </article>
+            {% endif %}
+            {% endwith %}
         </div>
-        {% endif %}
-    </article>
+    </div>
 
     <!-- Forms ocultos que se envían desde los modales -->
     <form id="form-confirm" method="post" action="{% url 'core:dashboard-appointment-action' appointment.id %}">
@@ -291,43 +405,6 @@
         <input type="hidden" name="action" value="no_show">
         <input type="hidden" name="next" value="{{ request.path }}">
     </form>
-
-    {% with history=appointment.status_history.all %}
-    {% if history %}
-    <article class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
-        <h2 class="text-sm font-semibold uppercase tracking-wide text-content-subtle">Historial de estado</h2>
-        <ol class="mt-4 space-y-0">
-            {% for entry in history %}
-            <li class="relative flex gap-4 pb-6 last:pb-0">
-                <!-- Línea vertical conectora -->
-                {% if not forloop.last %}
-                <span class="absolute left-[13px] top-7 h-full w-px bg-line" aria-hidden="true"></span>
-                {% endif %}
-                <!-- Punto -->
-                <span class="relative flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full ring-2 ring-surface {{ entry.to_status|status_badge }}">
-                    {{ entry.to_status|status_icon:"h-3.5 w-3.5" }}
-                </span>
-                <!-- Contenido -->
-                <div class="min-w-0 flex-1 pt-0.5">
-                    <p class="text-sm font-semibold text-content">
-                        {% if entry.from_status %}
-                            {{ entry.get_from_status_display }} → {{ entry.get_to_status_display }}
-                        {% else %}
-                            Creada como {{ entry.get_to_status_display }}
-                        {% endif %}
-                    </p>
-                    <p class="mt-0.5 text-xs text-content-subtle">
-                        {{ entry.actor_label|default:entry.get_actor_display }}
-                        <span class="mx-1 text-content-faint">·</span>
-                        {{ entry.changed_at|date:"j M Y · H:i" }}
-                    </p>
-                </div>
-            </li>
-            {% endfor %}
-        </ol>
-    </article>
-    {% endif %}
-    {% endwith %}
 </section>
 
 <!-- Modal: Confirmar cita -->
