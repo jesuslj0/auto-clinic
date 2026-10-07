@@ -55,7 +55,11 @@ def form_data(service, professional, date, **kwargs):
 
 
 def make_orphan(clinic, service, professional, days=1, **kwargs):
-    start = timezone.now() + timedelta(days=days)
+    # A una hora fija del día: «ahora + N días» cruza la medianoche si se
+    # ejecuta de noche y la cita se sale del horario del profesional.
+    start = (timezone.localtime() + timedelta(days=days)).replace(
+        hour=10, minute=0, second=0, microsecond=0
+    )
     defaults = dict(patient_name='Marta Gil Soto', patient_phone=PHONE)
     defaults.update(kwargs)
     return create_appointment(

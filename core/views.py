@@ -35,6 +35,7 @@ from core.dashboard import (
     booking_sources,
     clinic_professionals,
     dashboard_alerts,
+    greeting,
     month_quality,
     new_patients_summary,
     patients_to_recontact,
@@ -466,6 +467,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context.update(
             {
                 'today': today,
+                'greeting': greeting(now),
                 'month_start': month_start,
                 'month_end': month_end,
                 'today_schedule': today_schedule,

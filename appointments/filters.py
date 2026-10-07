@@ -216,3 +216,29 @@ class AppointmentFilters:
     def toggled(self) -> 'AppointmentFilters':
         """Los mismos filtros con el orden por fecha invertido."""
         return replace(self, sort='desc' if self.sort == 'asc' else 'asc')
+
+
+#: Hasta dónde mira atrás el aviso de «citas completadas sin procedimiento». Sin
+#: límite, las citas antiguas de antes de que existiera el registro de
+#: procedimientos mantendrían el aviso encendido para siempre.
+UNRECORDED_WINDOW_DAYS = 90
+
+
+def completed_without_procedure(queryset, *, since):
+    """Citas completadas, con ficha, que no acabaron en ningún procedimiento.
+
+    Es el aviso de trabajo sin anotar (y, por tanto, sin facturar). Solo las que
+    tienen ficha: una cita sin ficha no puede registrar procedimientos, así que
+    avisar de ella no tiene remedio hasta que se cree la ficha.
+
+    No es dato clínico: es la misma información de agenda que el filtro «con / sin
+    procedimiento» del listado de citas.
+    """
+    from appointments.models import Appointment
+
+    return annotate_procedures(queryset).filter(
+        status=Appointment.Status.COMPLETED,
+        patient__isnull=False,
+        has_procedure=False,
+        scheduled_at__gte=since,
+    )

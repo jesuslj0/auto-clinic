@@ -158,7 +158,8 @@ class TestSessionListFragment:
     def test_total_unread_header_ignores_filters(self, client, staff_user, session_a, thread_a):
         client.force_login(staff_user)
         response = client.get(self.url(), {'q': 'nadie-se-llama-asi'})
-        assert response['X-Total-Unread'] == '5'
+        # 5 mensajes sin leer, pero de un solo chat.
+        assert response['X-Total-Unread'] == '1'
 
     def test_active_row_is_highlighted(self, client, staff_user, session_a, thread_a):
         client.force_login(staff_user)

@@ -10,12 +10,11 @@ paciente viajan por el socket. El cliente pide el fragmento renderizado.
 
 Los hilos de prueba (`is_test`) no se emiten: la bandeja no los muestra.
 
-Cada aviso lleva `total_unread`, los no leídos de toda la clínica, para que el
-contador del menú se actualice en cualquier página sin pedir nada al servidor.
+Cada aviso lleva `total_unread`, los chats con algo sin leer de toda la clínica
+(conversaciones, no mensajes), para que el contador del menú se actualice en cualquier página sin pedir nada al servidor.
 """
 
 from django.db import transaction
-from django.db.models import Sum
 
 from core.realtime import clinic_group_name, send_to_group
 
@@ -28,12 +27,14 @@ def _isoformat(value):
 
 
 def clinic_unread_total(clinic_id) -> int:
-    """No leídos de la bandeja de una clínica (sin los hilos de prueba)."""
-    return (
-        ConversationSession.objects.filter(clinic_id=clinic_id, is_test=False)
-        .aggregate(total=Sum('unread_count'))['total']
-        or 0
-    )
+    """Chats con mensajes sin leer en la bandeja de una clínica (sin los de prueba).
+
+    Cuenta conversaciones, no mensajes: cinco mensajes de la misma persona son un
+    chat pendiente, que es lo que hay que atender.
+    """
+    return ConversationSession.objects.filter(
+        clinic_id=clinic_id, is_test=False, unread_count__gt=0
+    ).count()
 
 
 def _emit(clinic_id, handler, payload):

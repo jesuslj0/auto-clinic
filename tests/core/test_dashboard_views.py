@@ -192,3 +192,27 @@ class TestTarjetaCanceladas:
         ids = {a.pk for a in listado.context['appointments']}
         assert ids == {canceladas['este_mes'].pk}
         assert listado.context['paginator'].count == panel.context['cancelled_appointments']
+
+
+class TestGreeting:
+    @pytest.mark.parametrize('hour, text', [
+        (3, 'Buenas noches'), (6, 'Buenos días'), (13, 'Buenos días'),
+        (14, 'Buenas tardes'), (20, 'Buenas tardes'), (21, 'Buenas noches'),
+    ])
+    def test_greeting_by_hour(self, hour, text):
+        from datetime import datetime
+
+        from django.utils import timezone
+
+        from core.dashboard import greeting
+
+        now = timezone.make_aware(datetime(2026, 10, 7, hour, 30))
+        assert greeting(now) == text
+
+    @pytest.mark.django_db
+    def test_subtitle_shows_greeting_and_short_date(self, client, admin_user):
+        client.force_login(admin_user)
+        response = client.get(reverse('core:dashboard'))
+        html = response.content.decode()
+        assert f"{response.context['greeting']} · " in html
+        assert 'necesita tu atención' not in html

@@ -148,6 +148,14 @@ touching it — see `clinical/README.md` for the full picture:
   append-only. A `ClinicalAlert` is never deleted either — `deactivate()` sets
   `is_active=False` and keeps the row, so "what was known back then" stays
   answerable.
+- **Global procedure list (`clinical:procedure-list`).** All procedures of the
+  clinic with filters (period — current month by default —, patient, professional,
+  service, billed/unbilled) and totals. It reads clinical data, so it logs
+  `AccessLog` (list, or search with `q`), unlike the appointment list. It shows
+  and sums `frozen_*`, never the catalogue. The same screen and the dashboard
+  warn of **completed appointments with a patient file and no procedure** in the
+  last 90 days (`appointments.filters.completed_without_procedure`): work done
+  that was never recorded, hence never billed.
 - **Off-limits to the n8n token.** This layer has **no REST API** on purpose, so
   the agent's `Api-Key` cannot reach clinical data. `Visit` links *to*
   `Appointment`, never the reverse. The only HTTP surface is the session-only
@@ -231,7 +239,7 @@ Panel map (namespace in brackets):
 | `/chats/` (`agent`) | `agente/`, `lista/`, `adjuntos/<uuid>/`, `<uuid>/` (`mensajes/`, `enviar/`, `escribiendo/`, `modo/`) |
 | `/agente/` (`agent_settings`, admins only) | test chat at the root («Chat»), `probar/enviar/`, `personalidad/`, `configuracion/` (Meta credentials + webhook, two forms told apart by a hidden `form` field) — views in `agent/settings_views.py` |
 | `/facturacion/` (`billing`) | `nueva/`, `pendientes/`, `<pk>/` (`emitir/`, `anular/`, `cobrar/`, `procedimientos/`, `eliminar/`) |
-| `/clinico/` (`clinical`) | `adjuntos/<uuid>/`, `consentimientos/<uuid>/firma/` |
+| `/clinico/` (`clinical`) | `procedimientos/` (listado global), `adjuntos/<uuid>/`, `consentimientos/<uuid>/firma/` |
 
 ### Agent personality (`agent.AgentProfile`)
 

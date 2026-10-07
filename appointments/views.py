@@ -636,6 +636,7 @@ class AppointmentListView(LoginRequiredMixin, TemplateView):
             default_professional_id=self.default_professional_id(),
         )
         appointments = filters.order(filters.apply(annotate_procedures(appointments)))
+        professionals = self.get_professionals()
 
         paginator = Paginator(appointments, self.paginate_by)
         page_number = self.request.GET.get('page')
@@ -648,7 +649,8 @@ class AppointmentListView(LoginRequiredMixin, TemplateView):
                 'paginator': paginator,
                 'is_paginated': paginator.num_pages > 1,
                 'filters': filters,
-                'professionals': self.get_professionals(),
+                'professionals': professionals,
+                'filter_summary': self.describe_filters(filters, professionals),
                 'status_choices': Appointment.Status.choices,
                 'procedure_choices': PROCEDURE_CHOICES,
                 # Base de las URLs de orden y paginación, ya normalizada. Las
@@ -661,6 +663,31 @@ class AppointmentListView(LoginRequiredMixin, TemplateView):
             }
         )
         return context
+
+
+    @staticmethod
+    def describe_filters(filters, professionals):
+        """Los filtros activos en frases cortas, para la barra plegada.
+
+        Con la barra de filtros plegada hay que seguir viendo QUÉ está filtrado: un
+        listado que oculta citas sin decir por qué parece que faltan.
+        """
+        from django.utils.formats import date_format
+
+        summary = []
+        if filters.date_from or filters.date_to:
+            start = date_format(filters.date_from, 'j M') if filters.date_from else '…'
+            end = date_format(filters.date_to, 'j M Y') if filters.date_to else '…'
+            summary.append(f'{start} – {end}')
+        if filters.professional:
+            match = next((p for p in professionals if p.pk == filters.professional), None)
+            if match is not None:
+                summary.append(match.display_name)
+        if filters.status:
+            summary.append(dict(Appointment.Status.choices).get(filters.status, filters.status))
+        if filters.procedure:
+            summary.append(dict(PROCEDURE_CHOICES).get(filters.procedure, filters.procedure))
+        return summary
 
 
 def _searchable(*values) -> str:

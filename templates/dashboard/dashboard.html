@@ -4,7 +4,7 @@
 {% block title %}Panel · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
 {% block page_heading %}Panel de Control{% endblock %}
 {% block page_subheading %}
-<p class="mt-0.5 hidden text-sm text-content-subtle sm:block">{{ today|date:"l j \d\e F" }} · esto es lo que necesita tu atención.</p>
+<p class="mt-0.5 hidden text-sm text-content-subtle sm:block">{{ greeting }} · {{ today|date:"D" }}. {{ today|date:"j F" }}</p>
 {% endblock %}
 
 {% block page_actions %}

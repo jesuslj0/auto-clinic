@@ -22,12 +22,29 @@ def unread_session(db, clinic_a):
 
 @pytest.mark.django_db
 class TestSidebarBadge:
-    def test_shows_unread_total_outside_the_inbox(self, client, staff_user, unread_session):
+    def test_counts_chats_not_messages(self, client, staff_user, unread_session, clinic_a):
+        # `unread_session` tiene 3 mensajes sin leer: es UN chat pendiente.
+        other = ConversationSession.objects.create(clinic=clinic_a, phone='+34600333444')
+        record_message(
+            clinic=clinic_a, session=other, direction=ChatMessage.Direction.INBOUND,
+            sender=ChatMessage.Sender.PATIENT, body='hola',
+        )
         client.force_login(staff_user)
         response = client.get(reverse('appointments:calendar'))
         assert response.status_code == 200
-        assert response.context['chat_unread_total'] == 3
-        assert '<span data-chat-unread-count>3</span>' in response.content.decode()
+        assert response.context['chat_unread_total'] == 2
+        assert '<span data-chat-unread-count>2</span>' in response.content.decode()
+
+    def test_one_chat_with_many_messages_counts_once(self, client, staff_user, unread_session):
+        client.force_login(staff_user)
+        response = client.get(reverse('appointments:calendar'))
+        assert response.context['chat_unread_total'] == 1
+        assert '<span data-chat-unread-count>1</span>' in response.content.decode()
+
+    def test_read_chats_do_not_count(self, client, staff_user, unread_session):
+        ConversationSession.objects.filter(pk=unread_session.pk).update(unread_count=0)
+        client.force_login(staff_user)
+        assert client.get(reverse('appointments:calendar')).context['chat_unread_total'] == 0
 
     def test_badge_is_hidden_with_nothing_unread(self, client, staff_user):
         client.force_login(staff_user)
@@ -56,7 +73,7 @@ class TestPollingFallback:
         client.force_login(staff_user)
         response = client.head(reverse('agent:chat-list-fragment'))
         assert response.status_code == 200
-        assert response['X-Total-Unread'] == '3'
+        assert response['X-Total-Unread'] == '1'
         assert response.content == b''
 
 

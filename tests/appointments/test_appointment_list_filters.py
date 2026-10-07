@@ -18,6 +18,7 @@ from django.utils import timezone
 from appointments.models import Appointment, Professional
 from clinical.models import PerformedProcedure, Visit
 from core.models import User
+from patients.models import Patient
 
 
 LIST_URL = reverse('appointments:list')
@@ -270,3 +271,42 @@ class TestAislamiento:
             LIST_URL, {'profesional': ajeno.pk, 'desde': '', 'hasta': ''}
         )
         assert _ids(response) == set()
+
+
+@pytest.mark.django_db
+class TestListAvatarAndCollapsibleFilters:
+    def test_rows_show_avatar_initials_and_sin_ficha_chip(
+        self, client, admin_user, clinic_a, service_a, professional_a, patient_a
+    ):
+        from django.utils import timezone
+
+        from appointments.models import Appointment
+
+        client.force_login(admin_user)
+        when = timezone.now()
+        Patient.objects.filter(pk=patient_a.pk).update(photo='patient-photos/x.jpg')
+        Appointment.objects.create(
+            clinic=clinic_a, patient=patient_a, service=service_a, professional=professional_a,
+            scheduled_at=when,
+        )
+        Appointment.objects.create(
+            clinic=clinic_a, patient=None, patient_name='Marta Gil Soto', service=service_a,
+            professional=professional_a, scheduled_at=when,
+        )
+        html = client.get(reverse('appointments:list'), {'profesional': ''}).content.decode()
+        # Solo iniciales: la foto no se pide desde el listado (cada una sería un
+        # AccessLog), aunque el paciente la tenga.
+        assert reverse('patients:photo', args=[patient_a.pk]) not in html
+        assert 'JD' in html           # iniciales de John Doe (avatar de ficha)
+        assert 'MG' in html           # iniciales del contacto sin ficha
+        assert 'Sin ficha' in html
+
+    def test_filters_bar_is_collapsible_and_summarises_what_is_filtered(
+        self, client, admin_user
+    ):
+        client.force_login(admin_user)
+        response = client.get(reverse('appointments:list'), {'status': 'confirmed'})
+        html = response.content.decode()
+        assert 'ac-appointments-filters' in html
+        assert 'id="appointment-filters"' in html
+        assert 'Confirmada' in response.context['filter_summary']
