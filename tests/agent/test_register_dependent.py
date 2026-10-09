@@ -103,3 +103,16 @@ def test_requires_agent_key_and_stays_in_its_clinic(api_client, agent, clinic_a,
     assert Guardian.objects.filter(clinic=clinic_b).count() == 0
     api_client.credentials()
     assert api_client.post(URL, _body(), format='json').status_code in (401, 403)
+<<<<<<< HEAD
+=======
+
+
+@pytest.mark.django_db
+def test_patient_list_serializes_existing_patient_and_phone_stays_required(agent, clinic_a):
+    """Regresión: DRF 3.18 daba 500 al serializar un paciente (required + default en `phone`)."""
+    create_patient(clinic=clinic_a, phone=PHONE, first_name='Juan', last_name='Pérez')
+    listed = agent.get('/api/patients/', {'phone': PHONE, 'patient_id': ''})
+    assert listed.status_code == 200 and listed.json()['count'] == 1
+    created = agent.post('/api/patients/', {'first_name': 'Ana', 'last_name': 'Ruiz'}, format='json')
+    assert created.status_code == 400 and 'phone' in created.json()
+>>>>>>> main
