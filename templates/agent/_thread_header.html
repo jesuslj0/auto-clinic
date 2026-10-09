@@ -14,6 +14,8 @@ Recibe `session` y `query`.
         {% if session.patient %}
         <a href="{% url 'patients:detail' session.patient.id %}" title="Ver la ficha de {{ session.patient }}"
            class="block truncate text-sm font-semibold text-content transition hover:text-brand-fg hover:underline underline-offset-2">{{ session.patient }}</a>
+        {% elif session.guardian %}
+        <p class="truncate text-sm font-semibold text-content">{{ session.guardian }} <span class="font-normal text-content-faint">· contacto de {{ session.guardian.dependents.count }} paciente{{ session.guardian.dependents.count|pluralize }}</span></p>
         {% else %}
         <p class="truncate text-sm font-semibold text-content">{% with tel=session.phone|phone_parts %}{% if tel.prefix %}<span class="font-normal text-content-faint">{{ tel.prefix }}</span> {% endif %}{{ tel.number }}{% endwith %}</p>
         {% endif %}

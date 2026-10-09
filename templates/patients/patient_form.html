@@ -64,7 +64,7 @@
             </div>
 
             <div>
-                <label for="{{ form.phone.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">{{ form.phone.label }}</label>
+                <label for="{{ form.phone.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">{{ form.phone.label }} <span class="font-normal text-content-faint">(opcional si lo gestiona un contacto)</span></label>
                 <input type="tel" name="{{ form.phone.html_name }}" id="{{ form.phone.id_for_label }}" value="{{ form.phone.value|default:'' }}" placeholder="+34 600 000 000"
                     class="block w-full rounded-xl border {% if form.phone.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
                 {% if form.phone.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.phone.errors|join:", " }}</p>{% endif %}

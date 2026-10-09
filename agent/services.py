@@ -17,7 +17,7 @@ from agent.models import ChatAttachment, ChatMessage, ConversationSession
 from agent.realtime import broadcast_message, broadcast_session
 from agent.files import is_chat_audio
 from agent.whatsapp import WhatsAppError, send_media, send_text, send_typing, upload_media
-from patients.models import Patient
+from patients.models import Guardian, Patient
 from patients.services import normalize_phone_safe
 
 logger = logging.getLogger(__name__)
@@ -71,6 +71,12 @@ def get_or_create_session(clinic, phone: str, *, is_test: bool = False) -> Conve
         if patient is not None:
             session.patient = patient
             session.save(update_fields=['patient'])
+        elif session.guardian_id is None:
+            # Sin ficha con ese teléfono: puede ser el de un contacto responsable.
+            guardian = Guardian.objects.filter(clinic=clinic, phone=normalized).first()
+            if guardian is not None:
+                session.guardian = guardian
+                session.save(update_fields=['guardian'])
 
     return session
 

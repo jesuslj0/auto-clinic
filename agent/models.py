@@ -92,6 +92,14 @@ class ConversationSession(models.Model):
         related_name='conversations',
         help_text="Paciente vinculado, si el número coincide con una ficha.",
     )
+    guardian = models.ForeignKey(
+        'patients.Guardian',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='conversations',
+        help_text="Contacto responsable, si el número es el de uno y no hay ficha con ese teléfono.",
+    )
     session_data = models.JSONField(default=dict)
     last_interaction = models.DateTimeField(null=True, blank=True)
     appointment_context = models.JSONField(default=dict)

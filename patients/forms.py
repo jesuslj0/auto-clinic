@@ -3,7 +3,7 @@ from django.core.files.base import ContentFile
 from django.db import transaction
 from django.forms import ModelForm, DateInput, Textarea
 
-from patients.models import Patient
+from patients.models import Patient, PatientGuardian
 from patients.photos import delete_photo_object, prepare_patient_photo
 
 
@@ -66,3 +66,14 @@ class PatientEditForm(PatientForm):
                 # apuntando a la antigua y esa no puede haber desaparecido.
                 transaction.on_commit(lambda: delete_photo_object(old_name))
         return patient
+
+
+class GuardianForm(forms.Form):
+    """Alta de un contacto responsable desde la ficha de un paciente."""
+
+    first_name = forms.CharField(label='Nombre', max_length=150)
+    last_name = forms.CharField(label='Apellidos', max_length=150, required=False)
+    phone = forms.CharField(label='Teléfono', max_length=32)
+    relationship = forms.ChoiceField(
+        label='Relación con el paciente', choices=PatientGuardian.Relationship.choices
+    )

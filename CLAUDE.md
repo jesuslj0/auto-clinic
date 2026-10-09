@@ -355,6 +355,29 @@ Con ficha esos campos no mandan, se lee de `patient`.
 - **Agente:** el onboarding previo deja de ser obligatorio; `WA-Appointments-Manager`
   manda `first_name`/`last_name`/`email` como contacto en `action=create`.
 
+### Contactos responsables (`patients.Guardian`)
+
+Quien gestiona las citas de otros con su propio teléfono (el hijo que pide por sus
+padres). `Guardian` es único por `(clinic, phone)` y se vincula a pacientes con
+`PatientGuardian` (+ relación). `Guardian.patient` enlaza su propia ficha si
+también es paciente. **Solo logística de citas: nunca ve datos clínicos.**
+`Guardian.bookable_patients()` es la regla de a quién puede reservar: sus
+vinculados y él mismo (si es paciente), sin archivados y sin nadie más.
+`Patient.phone` es opcional (quien se gestiona por un contacto); el hilo de
+WhatsApp resuelve primero ficha por teléfono y, si no hay, contacto
+(`ConversationSession.guardian`). Un paciente archivado no admite citas nuevas
+(`PatientArchived` en `create_appointment`).
+
+**Agente.** `GET /api/agent/sessions/booking-context/?phone=` (solo `Api-Key`)
+dice si el número es de un contacto con pacientes a su cargo (`ask_for_whom`) y
+cuáles son (`candidates`, solo los suyos). El orquestador de n8n lo pide en el
+nodo `Cargar Contexto Reserva` y, si hay que preguntar, el agente pregunta «¿para
+quién?» y manda `patient_id` en los params de `tool_clinica`. Django lo hace
+cumplir: `GET /api/patients/?phone=…&patient_id=…` solo devuelve la ficha si ese
+número puede gestionarla, y `POST /api/appointments/` del agente exige
+`requester_phone` y rechaza (400) pacientes que ese número no pueda reservar. El
+`phone` de la tool lo fija n8n con el del remitente real, no el LLM.
+
 ### Token-based public actions
 
 `Appointment` has a UUID `confirmation_token` field. Patients can confirm or cancel without authentication:

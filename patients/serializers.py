@@ -12,6 +12,7 @@ class PatientSerializer(ClinicScopedSerializerMixin, serializers.ModelSerializer
         # sirve por sesión, firmada y con `AccessLog` (`patients:photo`).
         exclude = ("photo",)
         read_only_fields = ("created_at", "updated_at")
+        extra_kwargs = {"phone": {"required": True, "allow_blank": False}}
 
     def create(self, validated_data):
         # La creación real (normalización de teléfono) vive en el service
