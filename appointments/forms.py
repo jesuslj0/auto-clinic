@@ -203,7 +203,7 @@ class AppointmentForm(forms.Form):
         if clinic is None:
             return
 
-        self.fields['patient'].queryset = Patient.objects.filter(clinic=clinic).order_by(
+        self.fields['patient'].queryset = Patient.objects.filter(clinic=clinic, archived_at__isnull=True).order_by(
             'last_name', 'first_name'
         )
         self.fields['service'].queryset = Service.objects.filter(

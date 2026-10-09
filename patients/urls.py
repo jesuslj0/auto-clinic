@@ -2,6 +2,7 @@ from django.urls import path
 
 from patients.views import (
     PatientAlertsTabView,
+    PatientArchiveView,
     PatientAnamnesisCreateView,
     PatientAnamnesisTabView,
     PatientConsentsTabView,
@@ -18,6 +19,7 @@ from patients.views import (
     PatientLesionsTabView,
     PatientListView,
     PatientPhotoView,
+    PatientRestoreView,
     PatientProcedureCreateView,
     PatientProceduresTabView,
 )
@@ -92,6 +94,8 @@ urlpatterns = [
         PatientProcedureCreateView.as_view(),
         name='procedure-create',
     ),
+    path('<int:id>/archivar/', PatientArchiveView.as_view(), name='archive'),
+    path('<int:id>/restaurar/', PatientRestoreView.as_view(), name='restore'),
     path('<int:id>/editar/', PatientEditView.as_view(), name='edit'),
     # Foto de perfil: redirige a una URL firmada del bucket privado.
     path('<int:id>/foto/', PatientPhotoView.as_view(), name='photo'),

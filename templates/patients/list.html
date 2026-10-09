@@ -77,6 +77,17 @@ filtrar vuelva siempre a la primera página.
             </label>
 
             <label class="block xl:col-span-2">
+                <span class="sr-only">Estado</span>
+                <select name="estado" onchange="this.form.requestSubmit()"
+                        class="block h-11 w-full min-w-0 rounded-2xl border-line py-0 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">
+                    <option value="">Pacientes activos</option>
+                    {% for value, label in status_options %}
+                    <option value="{{ value }}" {% if filters.estado == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label class="block xl:col-span-2">
                 <span class="sr-only">Ordenar por</span>
                 <select name="orden" onchange="this.form.requestSubmit()"
                         class="block h-11 w-full min-w-0 rounded-2xl border-line py-0 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">

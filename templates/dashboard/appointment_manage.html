@@ -89,16 +89,43 @@ marcado.
                 {% comment %}Primera visita: la cita lleva solo el contacto. La ficha se abre
                 cuando la clínica sabe que es su paciente; hasta entonces no hay historia
                 clínica ni procedimientos, y no se puede completar la cita.{% endcomment %}
-                <div class="flex flex-col gap-3 bg-info-soft px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                <div x-data="{ open: false }" class="flex flex-col gap-3 bg-info-soft px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                     <div class="min-w-0">
                         <p class="text-sm font-semibold text-info">Cita sin ficha de paciente</p>
                         <p class="mt-0.5 text-xs text-content-muted">Crea la ficha cuando se presente para registrar procedimientos y completar la cita.</p>
                     </div>
-                    <form method="post" action="{% url 'core:dashboard-appointment-action' appointment.id %}" class="flex-shrink-0">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="create_patient">
-                        <button type="submit" class="btn-primary !py-2 text-sm max-sm:w-full">Crear ficha de paciente</button>
-                    </form>
+                    <button type="button" @click="open = true" class="btn-primary flex-shrink-0 !py-2 text-sm max-sm:w-full">Crear ficha de paciente</button>
+
+                    <template x-teleport="body">
+                        <div x-cloak x-show="open" @keydown.escape.window="open = false" class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="create-patient-title">
+                            <div x-show="open" x-transition.opacity @click="open = false" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+                            <form method="post" action="{% url 'core:dashboard-appointment-action' appointment.id %}" x-show="open" x-transition
+                                  class="relative w-full max-w-md rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="create_patient">
+                                <h3 id="create-patient-title" class="text-base font-semibold text-content">¿Crear la ficha con estos datos?</h3>
+                                <p class="mt-1 text-sm text-content-subtle">Se tomarán del contacto de la cita. Si la clínica ya tiene un paciente con ese teléfono, se vinculará en vez de crear otro.</p>
+                                <dl class="mt-4 divide-y divide-line rounded-xl bg-muted px-4 ring-1 ring-line">
+                                    <div class="py-2.5 sm:grid sm:grid-cols-3 sm:gap-3">
+                                        <dt class="text-xs font-medium text-content-muted sm:pt-0.5">Nombre</dt>
+                                        <dd class="mt-0.5 break-words text-sm sm:col-span-2 sm:mt-0 {% if appointment.patient_name %}text-content{% else %}text-content-faint{% endif %}">{{ appointment.patient_name|default:"—" }}</dd>
+                                    </div>
+                                    <div class="py-2.5 sm:grid sm:grid-cols-3 sm:gap-3">
+                                        <dt class="text-xs font-medium text-content-muted sm:pt-0.5">Teléfono</dt>
+                                        <dd class="mt-0.5 break-words text-sm sm:col-span-2 sm:mt-0 {% if appointment.patient_phone %}text-content{% else %}text-content-faint{% endif %}">{{ appointment.patient_phone|default:"—" }}</dd>
+                                    </div>
+                                    <div class="py-2.5 sm:grid sm:grid-cols-3 sm:gap-3">
+                                        <dt class="text-xs font-medium text-content-muted sm:pt-0.5">Correo electrónico</dt>
+                                        <dd class="mt-0.5 break-words text-sm sm:col-span-2 sm:mt-0 {% if appointment.contact_email %}text-content{% else %}text-content-faint{% endif %}">{{ appointment.contact_email|default:"—" }}</dd>
+                                    </div>
+                                </dl>
+                                <div class="mt-5 flex justify-end gap-2">
+                                    <button type="button" @click="open = false" class="btn-secondary">Cancelar</button>
+                                    <button type="submit" class="btn-primary">Sí, crear ficha</button>
+                                </div>
+                            </form>
+                        </div>
+                    </template>
                 </div>
                 {% endif %}
 

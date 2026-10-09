@@ -922,7 +922,7 @@ class AppointmentCreateView(LoginRequiredMixin, FormView):
         limit = self.get_preload_limit()
         patients = list(
             Patient.objects
-            .filter(clinic=self.request.user.clinic)
+            .filter(clinic=self.request.user.clinic, archived_at__isnull=True)
             .order_by('last_name', 'first_name')[:limit + 1]
         )
         truncated = len(patients) > limit
