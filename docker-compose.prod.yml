@@ -24,8 +24,8 @@ services:
       retries: 5
 
   web:
-    build: .
-    image: auto-clinic:latest
+    image: ghcr.io/jesuslj0/auto-clinic:prod
+    pull_policy: always
     restart: unless-stopped
     command: >
       bash -c "python manage.py migrate --noinput &&
@@ -74,7 +74,8 @@ services:
         condition: service_healthy
 
   nginx:
-    build: ./nginx
+    image: ghcr.io/jesuslj0/auto-clinic-nginx:prod
+    pull_policy: always
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/nginx-health || exit 1"]
@@ -99,7 +100,8 @@ services:
         condition: service_healthy
 
   celery:
-    image: auto-clinic:latest
+    image: ghcr.io/jesuslj0/auto-clinic:prod
+    pull_policy: always
     restart: unless-stopped
     command: celery -A config worker -l info
     healthcheck:
@@ -131,7 +133,8 @@ services:
         condition: service_healthy
 
   celery-beat:
-    image: auto-clinic:latest
+    image: ghcr.io/jesuslj0/auto-clinic:prod
+    pull_policy: always
     restart: unless-stopped
     command: celery -A config beat -l info
     healthcheck:
