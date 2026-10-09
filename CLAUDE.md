@@ -378,6 +378,19 @@ número puede gestionarla, y `POST /api/appointments/` del agente exige
 `requester_phone` y rechaza (400) pacientes que ese número no pueda reservar. El
 `phone` de la tool lo fija n8n con el del remitente real, no el LLM.
 
+**Alta desde la conversación.** «Quiero pedir cita para mi padre»:
+`POST /api/agent/sessions/register-dependent/` (solo `Api-Key`; clínica de la clave)
+→ `patients.services.register_dependent()`, todo o nada: crea el contacto del
+número si no existe (nombre de su ficha si la tiene; si no, exige
+`requester_first_name`/`requester_last_name` → 400 `requester_name_required`), la
+ficha del familiar **sin teléfono** y el vínculo. `relationship` es lo que ES quien
+escribe respecto al familiar (su padre → `child`; su hijo → `parent`); n8n lo deduce
+de `patient_is` en el nodo `L - Preparar Datos Familiar`. Idempotente por
+nombre+apellidos dentro del contacto, con tope `MAX_DEPENDENTS_PER_GUARDIAN` (10).
+Devuelve `patient_id`, que el agente usa en `create`/`list_upcoming`/`cancel`/
+`reschedule`. En `WA-Appointments-Manager` es la acción `register_dependent`
+(ramas `L - …`); la regla del prompt está en `PEDIR CITA PARA OTRA PERSONA`.
+
 ### Token-based public actions
 
 `Appointment` has a UUID `confirmation_token` field. Patients can confirm or cancel without authentication:
