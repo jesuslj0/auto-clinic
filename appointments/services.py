@@ -94,6 +94,11 @@ class SlotUnavailable(AppointmentDomainError):
     default_message = 'Ese hueco ya no está disponible. Elige otra hora, por favor.'
 
 
+class PatientArchived(AppointmentDomainError):
+    default_code = 'patient_archived'
+    default_message = 'La ficha de este paciente está archivada: no admite citas nuevas.'
+
+
 class BookingTooSoon(AppointmentDomainError):
     default_code = 'booking_too_soon'
     default_message = (
@@ -418,6 +423,10 @@ def create_appointment(
         (`agent`, `booking`) caducan, y solo si la clínica configuró un TTL
         (`clinic.hold_ttl_minutes`; 0 = sin caducidad).
     """
+    patient = extra_fields.get('patient')
+    if patient is not None and patient.archived_at is not None:
+        raise PatientArchived()
+
     if end_at is None:
         duration = service.booking_duration_minutes if service is not None else DEFAULT_DURATION_MINUTES
         end_at = scheduled_at + timedelta(minutes=duration)

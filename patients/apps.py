@@ -9,8 +9,10 @@ class PatientsConfig(AppConfig):
     def ready(self):
         from audit import registry
 
-        from patients.models import Patient
+        from patients.models import Guardian, Patient, PatientGuardian
 
         # `notes`, `date_of_birth` y `photo` son sensibles: del resto de campos se guarda
         # el antes/después, de estos solo que cambiaron.
         registry.register(Patient, sensitive=['notes', 'date_of_birth', 'photo'])
+        registry.register(Guardian, sensitive=['notes'])
+        registry.register(PatientGuardian)

@@ -5,6 +5,109 @@ en `detail.html`. Los `{% load %}` son por plantilla, así que el parcial carga
 `appointment_extras` por su cuenta: se renderiza solo, sin depender de quién lo
 incluya.
 {% endcomment %}
+{% comment %}
+Contactos responsables. Solo logística de citas: un contacto no ve datos clínicos.
+Solo existe en la pestaña general (la que trae `guardian_links` en el contexto).
+{% endcomment %}
+{% if guardian_form %}
+<section x-data="{ adding: false }" class="mb-6 overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-6 py-5">
+        <div class="min-w-0">
+            <h3 class="text-lg font-semibold text-content">Contactos</h3>
+            <p class="mt-1 text-sm text-content-subtle">Personas que gestionan las citas de este paciente con su propio teléfono.</p>
+        </div>
+        {% if not patient.is_archived %}
+        <button type="button" @click="adding = !adding" class="btn-secondary" x-text="adding ? 'Cancelar' : 'Añadir contacto'">Añadir contacto</button>
+        {% endif %}
+    </div>
+
+    {% if not patient.is_archived %}
+    <form x-cloak x-show="adding" method="post" action="{% url 'patients:guardian-add' patient.pk %}" class="grid gap-3 border-b border-line bg-muted px-6 py-5 sm:grid-cols-2">
+        {% csrf_token %}
+        <label class="block text-sm font-medium text-content-muted">Nombre
+            <input type="text" name="first_name" required maxlength="150" class="mt-1.5 block w-full rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </label>
+        <label class="block text-sm font-medium text-content-muted">Apellidos
+            <input type="text" name="last_name" maxlength="150" class="mt-1.5 block w-full rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </label>
+        <label class="block text-sm font-medium text-content-muted">Teléfono
+            <input type="tel" name="phone" required maxlength="32" placeholder="+34 600 000 000" class="mt-1.5 block w-full rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </label>
+        <label class="block text-sm font-medium text-content-muted">Relación con el paciente
+            <select name="relationship" class="mt-1.5 block w-full rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                {% for value, label in guardian_form.fields.relationship.choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+            </select>
+        </label>
+        <p class="text-xs text-content-subtle sm:col-span-2">Si el teléfono ya es de otro contacto de la clínica, se vincula ese mismo en vez de crear uno nuevo.</p>
+        <div class="flex justify-end sm:col-span-2"><button type="submit" class="btn-primary">Guardar contacto</button></div>
+    </form>
+    {% endif %}
+
+    <ul class="divide-y divide-line">
+        {% for link in guardian_links %}
+        <li class="flex items-center justify-between gap-3 px-6 py-4">
+            <div class="min-w-0">
+                <p class="truncate text-sm font-semibold text-content">{{ link.guardian }}
+                    <span class="font-normal text-content-faint">· {{ link.get_relationship_display }}</span></p>
+                <p class="mt-0.5 text-xs text-content-subtle">
+                    {{ link.guardian.phone }}
+                    {% if link.guardian.patient_id %}· <a href="{% url 'patients:detail' link.guardian.patient_id %}" class="font-medium text-brand-fg underline-offset-2 hover:underline">también es paciente</a>{% endif %}
+                </p>
+            </div>
+            <div x-data="{ open: false }" class="flex flex-shrink-0 items-center gap-3">
+                {% if not link.guardian.patient_id %}
+                <button type="button" @click="open = true" class="text-xs font-semibold text-brand-fg transition hover:underline">Crear ficha</button>
+
+                <template x-teleport="body">
+                    <div x-cloak x-show="open" @keydown.escape.window="open = false" class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="guardian-patient-title-{{ link.pk }}">
+                        <div x-show="open" x-transition.opacity @click="open = false" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+                        <form method="post" action="{% url 'patients:guardian-create-patient' patient.pk link.pk %}" x-show="open" x-transition
+                              class="relative w-full max-w-md rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+                            {% csrf_token %}
+                            <h3 id="guardian-patient-title-{{ link.pk }}" class="text-base font-semibold text-content">¿Crear la ficha de {{ link.guardian }}?</h3>
+                            <p class="mt-1 text-sm text-content-subtle">Se creará un paciente nuevo con los datos del contacto. Seguirá siendo contacto de {{ patient }} y podrá reservar también para sí mismo. Si la clínica ya tiene un paciente con ese teléfono, se vinculará en vez de crear otro.</p>
+                            <dl class="mt-4 divide-y divide-line rounded-xl bg-muted px-4 ring-1 ring-line">
+                                <div class="py-2.5 sm:grid sm:grid-cols-3 sm:gap-3">
+                                    <dt class="text-xs font-medium text-content-muted sm:pt-0.5">Nombre</dt>
+                                    <dd class="mt-0.5 break-words text-sm text-content sm:col-span-2 sm:mt-0">{{ link.guardian }}</dd>
+                                </div>
+                                <div class="py-2.5 sm:grid sm:grid-cols-3 sm:gap-3">
+                                    <dt class="text-xs font-medium text-content-muted sm:pt-0.5">Teléfono</dt>
+                                    <dd class="mt-0.5 break-words text-sm text-content sm:col-span-2 sm:mt-0">{{ link.guardian.phone }}</dd>
+                                </div>
+                                <div class="py-2.5 sm:grid sm:grid-cols-3 sm:gap-3">
+                                    <dt class="text-xs font-medium text-content-muted sm:pt-0.5">Correo electrónico</dt>
+                                    <dd class="mt-0.5 break-words text-sm sm:col-span-2 sm:mt-0 {% if link.guardian.email %}text-content{% else %}text-content-faint{% endif %}">{{ link.guardian.email|default:"—" }}</dd>
+                                </div>
+                            </dl>
+                            <div class="mt-5 flex justify-end gap-2">
+                                <button type="button" @click="open = false" class="btn-secondary">Cancelar</button>
+                                <button type="submit" class="btn-primary">Sí, crear ficha</button>
+                            </div>
+                        </form>
+                    </div>
+                </template>
+                {% endif %}
+                <form method="post" action="{% url 'patients:guardian-remove' patient.pk link.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="text-xs font-semibold text-content-muted transition hover:text-danger">Quitar</button>
+                </form>
+            </div>
+        </li>
+        {% empty %}
+        <li class="px-6 py-5 text-sm text-content-subtle">Sin contactos. {% if not patient.phone %}Este paciente no tiene teléfono propio: añade un contacto para poder avisarle.{% endif %}</li>
+        {% endfor %}
+    </ul>
+
+    {% if dependents %}
+    <div class="border-t border-line bg-muted px-6 py-4 text-sm text-content-muted">
+        También es contacto de:
+        {% for other in dependents %}<a href="{% url 'patients:detail' other.pk %}" class="font-medium text-brand-fg underline-offset-2 hover:underline">{{ other }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+    </div>
+    {% endif %}
+</section>
+{% endif %}
+
 <section class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-6 py-5">
         <div class="min-w-0">

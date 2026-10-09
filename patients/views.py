@@ -42,11 +42,17 @@ from core.authentication import ClinicAgent
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ClinicAdminRequiredMixin, ExportMixin, is_clinic_admin
 from core.permissions import IsAgentClinicKey, IsStaffOrAdmin
 from patients.filters import PatientFilter
-from patients.models import Patient
+from patients.models import Patient, PatientGuardian
 from patients.serializers import PatientSerializer
-from patients.forms import PatientEditForm, PatientForm
+from patients.forms import GuardianForm, PatientEditForm, PatientForm
 from patients.photos import PHOTO_CACHE_CONTROL, log_photo_view, signed_photo_url
-from patients.services import archive_patient, create_patient, upcoming_appointments
+from patients.services import (
+    add_guardian,
+    archive_patient,
+    create_patient,
+    create_patient_from_guardian,
+    upcoming_appointments,
+)
 
 
 class PatientViewSet(
@@ -386,6 +392,15 @@ class PatientDetailView(PatientTabView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['appointments'] = self.object.appointments.all()
+        context['guardian_links'] = list(
+            self.object.guardian_links.select_related('guardian').order_by('created_at')
+        )
+        context['guardian_form'] = GuardianForm()
+        guardian_profile = getattr(self.object, 'guardian_profile', None)
+        context['dependents'] = (
+            list(guardian_profile.bookable_patients().exclude(pk=self.object.pk))
+            if guardian_profile else []
+        )
         context['can_archive'] = is_clinic_admin(self.request.user)
         if context['can_archive'] and not self.object.is_archived:
             context['upcoming_appointments'] = list(upcoming_appointments(self.object))
@@ -1468,6 +1483,65 @@ class PatientEditView(PatientScopedMixin, AccessLogMixin, LoginRequiredMixin, Up
 
     def get_success_url(self):
         return reverse_lazy('patients:detail', kwargs={'id': self.object.pk})
+
+
+class PatientGuardianAddView(PatientScopedMixin, LoginRequiredMixin, View):
+    """Añadir un contacto responsable a la ficha. POST desde el bloque «Contactos»."""
+
+    def post(self, request, id):
+        patient = get_object_or_404(self.get_queryset(), pk=id)
+        form = GuardianForm(request.POST)
+        if not form.is_valid():
+            messages.error(request, 'Revisa los datos del contacto: ' + ' '.join(
+                f'{form.fields[name].label}: {" ".join(errs)}' for name, errs in form.errors.items()
+            ))
+        else:
+            try:
+                link, created = add_guardian(
+                    patient, created_by=request.user, **form.cleaned_data
+                )
+            except ValueError as exc:
+                messages.error(request, str(exc))
+            else:
+                messages.success(
+                    request,
+                    f'{link.guardian} añadido como contacto.'
+                    if created else f'{link.guardian} ya existía como contacto y se ha vinculado.',
+                )
+        return redirect('patients:detail', id=patient.pk)
+
+
+class PatientGuardianRemoveView(PatientScopedMixin, LoginRequiredMixin, View):
+    """Desvincular un contacto. El contacto en sí se conserva (puede serlo de otros)."""
+
+    def post(self, request, id, link_id):
+        patient = get_object_or_404(self.get_queryset(), pk=id)
+        link = get_object_or_404(PatientGuardian, pk=link_id, patient=patient)
+        guardian = link.guardian
+        link.delete()
+        messages.success(request, f'{guardian} ya no es contacto de {patient}.')
+        return redirect('patients:detail', id=patient.pk)
+
+
+class PatientGuardianCreatePatientView(PatientScopedMixin, LoginRequiredMixin, View):
+    """Abrir la ficha de paciente de uno de los contactos de esta ficha."""
+
+    def post(self, request, id, link_id):
+        patient = get_object_or_404(self.get_queryset(), pk=id)
+        link = get_object_or_404(
+            PatientGuardian.objects.select_related('guardian'), pk=link_id, patient=patient
+        )
+        try:
+            new_patient, created = create_patient_from_guardian(link.guardian)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect('patients:detail', id=patient.pk)
+        messages.success(
+            request,
+            f'Ficha de {new_patient} creada.' if created
+            else f'{new_patient} ya tenía ficha con ese teléfono y se ha vinculado como contacto.',
+        )
+        return redirect('patients:detail', id=new_patient.pk)
 
 
 class PatientArchiveView(PatientScopedMixin, ClinicAdminRequiredMixin, View):

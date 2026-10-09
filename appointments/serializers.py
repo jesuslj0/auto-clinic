@@ -21,6 +21,7 @@ from appointments.services import (
 from core.authentication import ClinicAgent
 from core.models import User
 from core.serializers import ClinicScopedSerializerMixin
+from patients.services import can_book_for
 from services.models import Service
 
 
@@ -148,6 +149,10 @@ class AppointmentSerializer(ClinicScopedSerializerMixin, serializers.ModelSerial
     professional_type_display = serializers.CharField(
         source='professional.get_professional_type_display', read_only=True, default=''
     )
+    # Solo de entrada. El número de WhatsApp en nombre del cual el agente reserva:
+    # con él se comprueba que puede hacerlo para ESE paciente (la suya, o la de un
+    # paciente vinculado a su contacto responsable) y nada más. No se guarda.
+    requester_phone = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -172,6 +177,17 @@ class AppointmentSerializer(ClinicScopedSerializerMixin, serializers.ModelSerial
         # profesional). Si se enforcara después, un payload con `clinic` de otra
         # clínica pasaría la validación de servicio y quedaría incoherente.
         self._enforce_clinic(attrs)
+
+        requester_phone = (attrs.pop('requester_phone', '') or '').strip()
+        usuario = getattr(self.context.get('request'), 'user', None)
+        patient = attrs.get('patient')
+        if self.instance is None and isinstance(usuario, ClinicAgent) and patient is not None:
+            # El agente solo reserva para quien el número que escribe puede gestionar.
+            # Sin el número no hay forma de comprobarlo, y entonces no se reserva.
+            if not requester_phone or not can_book_for(usuario.clinic, requester_phone, patient):
+                raise serializers.ValidationError({
+                    'patient': 'Este número de teléfono no puede reservar citas para ese paciente.'
+                })
 
         professional = attrs.get('professional', getattr(self.instance, 'professional', None))
         service = attrs.get('service', getattr(self.instance, 'service', None))

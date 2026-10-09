@@ -24,6 +24,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from agent.filters import ConversationSessionFilter
+from patients.services import booking_context as patient_booking_context
 from agent.media import MediaAlreadyAttached, attach_media, log_media_view, signed_media_url
 from agent.models import (
     AgentMemory,
@@ -181,6 +182,26 @@ class ConversationSessionViewSet(ExportMixin, viewsets.ModelViewSet):
         mark_session_read(session)
         session.refresh_from_db(fields=['unread_count'])
         return Response({'id': str(session.id), 'unread_count': session.unread_count})
+
+    @action(
+        detail=False,
+        methods=['get'],
+        url_path='booking-context',
+        permission_classes=[IsAgentClinicKey],
+    )
+    def booking_context(self, request):
+        """A quién puede atender el agente desde ese número: ¿hay que preguntar «¿para quién?»?
+
+        Solo la clave de clínica: la clínica sale de la clave. Devuelve únicamente
+        los pacientes que el número puede gestionar (ver `patients.services.booking_context`).
+        """
+        phone = (request.query_params.get('phone') or '').strip()
+        if not phone:
+            return Response(
+                {'detail': 'El parámetro phone es obligatorio.'},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(patient_booking_context(request.user.clinic, phone))
 
     @action(detail=False, methods=['get'], url_path='should-reply')
     def should_reply(self, request):
