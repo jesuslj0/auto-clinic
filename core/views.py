@@ -518,7 +518,7 @@ class SearchView(LoginRequiredMixin, TemplateView):
         appointments = Appointment.objects.none()
 
         if query:
-            patients = Patient.objects.all()
+            patients = Patient.objects.filter(archived_at__isnull=True)
             appointments = Appointment.objects.select_related('patient', 'service', 'professional__user')
 
             if user.clinic_id:

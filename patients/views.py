@@ -39,14 +39,14 @@ from clinical.models import (
 )
 from clinical.procedures import record_procedure
 from core.authentication import ClinicAgent
-from core.mixins import BulkCreateMixin, BulkUpdateMixin, ExportMixin
+from core.mixins import BulkCreateMixin, BulkUpdateMixin, ClinicAdminRequiredMixin, ExportMixin, is_clinic_admin
 from core.permissions import IsAgentClinicKey, IsStaffOrAdmin
 from patients.filters import PatientFilter
 from patients.models import Patient
 from patients.serializers import PatientSerializer
 from patients.forms import PatientEditForm, PatientForm
 from patients.photos import PHOTO_CACHE_CONTROL, log_photo_view, signed_photo_url
-from patients.services import create_patient
+from patients.services import archive_patient, create_patient, upcoming_appointments
 
 
 class PatientViewSet(
@@ -105,6 +105,7 @@ class PatientListView(AccessLogMixin, LoginRequiredMixin, ListView):
     APPOINTMENT_OPTIONS = {'proxima': 'Con próxima cita', 'sin': 'Sin cita futura'}
     INACTIVE_OPTIONS = {'3': 'Más de 3 meses', '6': 'Más de 6 meses', '12': 'Más de 12 meses'}
     JOINED_OPTIONS = {'30d': 'Últimos 30 días', 'mes': 'Este mes', 'anio': 'Este año'}
+    STATUS_OPTIONS = {'archivados': 'Archivados'}
 
     def read_filters(self):
         get = self.request.GET
@@ -115,6 +116,7 @@ class PatientListView(AccessLogMixin, LoginRequiredMixin, ListView):
             'cita': get.get('cita', '') if get.get('cita') in self.APPOINTMENT_OPTIONS else '',
             'inactivo': get.get('inactivo', '') if get.get('inactivo') in self.INACTIVE_OPTIONS else '',
             'alta': get.get('alta', '') if get.get('alta') in self.JOINED_OPTIONS else '',
+            'estado': get.get('estado', '') if get.get('estado') in self.STATUS_OPTIONS else '',
         }
 
     def get_queryset(self):
@@ -176,6 +178,9 @@ class PatientListView(AccessLogMixin, LoginRequiredMixin, ListView):
         if user.clinic_id:
             queryset = queryset.filter(clinic=user.clinic)
 
+        # Los archivados salen del directorio salvo que se pidan expresamente.
+        queryset = queryset.filter(archived_at__isnull=filters['estado'] != 'archivados')
+
         # Cada palabra tiene que aparecer en algún campo: así «Ana López»
         # encuentra a quien tiene «Ana» de nombre y «López» de apellido.
         for word in filters['q'].split():
@@ -222,11 +227,12 @@ class PatientListView(AccessLogMixin, LoginRequiredMixin, ListView):
         context.update({
             'section': 'patients',
             'filters': filters,
-            'has_filters': any(filters[key] for key in ('q', 'cita', 'inactivo', 'alta')),
+            'has_filters': any(filters[key] for key in ('q', 'cita', 'inactivo', 'alta', 'estado')),
             'sort_options': [(key, label) for key, (label, _) in self.SORT_OPTIONS.items()],
             'appointment_options': self.APPOINTMENT_OPTIONS.items(),
             'inactive_options': self.INACTIVE_OPTIONS.items(),
             'joined_options': self.JOINED_OPTIONS.items(),
+            'status_options': self.STATUS_OPTIONS.items(),
             'query_base': urlencode(params),
         })
         return context
@@ -380,6 +386,9 @@ class PatientDetailView(PatientTabView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['appointments'] = self.object.appointments.all()
+        context['can_archive'] = is_clinic_admin(self.request.user)
+        if context['can_archive'] and not self.object.is_archived:
+            context['upcoming_appointments'] = list(upcoming_appointments(self.object))
         return context
 
 
@@ -1459,6 +1468,34 @@ class PatientEditView(PatientScopedMixin, AccessLogMixin, LoginRequiredMixin, Up
 
     def get_success_url(self):
         return reverse_lazy('patients:detail', kwargs={'id': self.object.pk})
+
+
+class PatientArchiveView(PatientScopedMixin, ClinicAdminRequiredMixin, View):
+    """Archivar la ficha (solo admins) y cancelar sus citas futuras.
+
+    POST y nada más: la confirmación, con las citas que se van a cancelar, es el
+    modal de la ficha. No es un borrado: la ficha y todo lo que cuelga de ella
+    siguen intactos y se recupera con `PatientRestoreView`.
+    """
+
+    def post(self, request, id):
+        patient = get_object_or_404(self.get_queryset(), pk=id)
+        cancelled = archive_patient(patient, user=request.user)
+        message = f'Ficha de {patient} archivada.'
+        if cancelled:
+            message += f' Se cancelaron {cancelled} cita{"s" if cancelled != 1 else ""} futura{"s" if cancelled != 1 else ""}.'
+        messages.success(request, message)
+        return redirect('patients:list')
+
+
+class PatientRestoreView(PatientScopedMixin, ClinicAdminRequiredMixin, View):
+    """Devuelve una ficha archivada al directorio. Las citas canceladas no se reabren."""
+
+    def post(self, request, id):
+        patient = get_object_or_404(self.get_queryset(), pk=id)
+        patient.restore()
+        messages.success(request, f'Ficha de {patient} restaurada.')
+        return redirect('patients:detail', id=patient.pk)
 
 
 class PatientPhotoView(PatientScopedMixin, LoginRequiredMixin, View):

@@ -74,3 +74,45 @@ def normalize_phone_safe(phone: str) -> str | None:
         return normalize_phone(phone)
     except (ValueError, AttributeError):
         return None
+
+
+def upcoming_appointments(patient):
+    """Citas futuras del paciente que siguen en pie (pendientes, confirmadas o movidas)."""
+    from django.utils import timezone
+
+    from appointments.models import LIVE_STATUSES, Appointment
+
+    return (
+        Appointment.objects.filter(
+            patient=patient, scheduled_at__gte=timezone.now(), status__in=LIVE_STATUSES
+        )
+        .select_related('service', 'professional__user')
+        .order_by('scheduled_at')
+    )
+
+
+def archive_patient(patient, *, user):
+    """Archiva la ficha y cancela sus citas futuras, todo o nada.
+
+    Devuelve cuántas citas se cancelaron. Cada cita pasa por `cancel_appointment()`
+    (una a una, con `save()`): deja su historial de estados y no se salta las
+    señales ni la auditoría, que un `queryset.update()` sí haría.
+    """
+    from django.db import transaction
+
+    from appointments.models import Appointment, AppointmentStatusHistory
+    from appointments.services import cancel_appointment
+
+    actor_label = (user.get_full_name() or user.email) if user else ''
+    with transaction.atomic():
+        cancelled = 0
+        for appointment in upcoming_appointments(patient).select_for_update(of=('self',)):
+            cancel_appointment(
+                appointment,
+                actor=AppointmentStatusHistory.Actor.STAFF,
+                actor_label=actor_label,
+                cancelled_by=Appointment.CancelledBy.STAFF,
+            )
+            cancelled += 1
+        patient.archive(by=user)
+    return cancelled

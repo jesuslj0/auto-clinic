@@ -4,7 +4,24 @@
 {% block page_heading %}Nuevo paciente{% endblock %}
 
 {% block content %}
-<div class="mx-auto max-w-xl">
+<div class="mx-auto max-w-xl" x-data="{
+    open: false,
+    data: [],
+    review() {
+        const f = this.$refs.form;
+        const v = (n) => (f.elements[n]?.value || '').trim();
+        const dob = v('date_of_birth');
+        this.data = [
+            ['Nombre', v('first_name')],
+            ['Apellido', v('last_name')],
+            ['Correo electrónico', v('email')],
+            ['Teléfono', v('phone')],
+            ['Fecha de nacimiento', dob ? dob.split('-').reverse().join('/') : ''],
+            ['Notas', v('notes')],
+        ];
+        this.open = true;
+    },
+}">
     <div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
 
         <div class="border-b border-line px-4 py-6 sm:px-8">
@@ -12,7 +29,7 @@
             <p class="mt-1 text-sm text-content-subtle">Completa la información para registrar un nuevo paciente.</p>
         </div>
 
-        <form method="post" novalidate class="px-4 py-7 sm:px-8 space-y-6">
+        <form method="post" novalidate x-ref="form" @submit.prevent="review()" class="px-4 py-7 sm:px-8 space-y-6">
             {% csrf_token %}
             {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
 
@@ -72,6 +89,27 @@
                 <button type="submit" class="btn-primary">Guardar paciente</button>
             </div>
         </form>
+    </div>
+
+    <div x-cloak x-show="open" @keydown.escape.window="open = false" class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="patient-confirm-title">
+        <div x-show="open" x-transition.opacity @click="open = false" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div x-show="open" x-transition class="relative w-full max-w-md rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+            <h3 id="patient-confirm-title" class="text-base font-semibold text-content">¿Crear la ficha con estos datos?</h3>
+            <p class="mt-1 text-sm text-content-subtle">Revisa que todo es correcto antes de guardar.</p>
+            <dl class="mt-4 divide-y divide-line rounded-xl bg-muted px-4 ring-1 ring-line">
+                <template x-for="[label, value] in data" :key="label">
+                    <div class="py-2.5 sm:grid sm:grid-cols-3 sm:gap-3">
+                        <dt class="text-xs font-medium text-content-muted sm:pt-0.5" x-text="label"></dt>
+                        <dd class="mt-0.5 break-words text-sm text-content sm:col-span-2 sm:mt-0 whitespace-pre-line"
+                            :class="value ? '' : 'text-content-faint'" x-text="value || '—'"></dd>
+                    </div>
+                </template>
+            </dl>
+            <div class="mt-5 flex justify-end gap-2">
+                <button type="button" @click="open = false" class="btn-secondary">Corregir</button>
+                <button type="button" @click="$refs.form.submit()" class="btn-primary">Sí, crear paciente</button>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

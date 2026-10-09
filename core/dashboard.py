@@ -688,7 +688,7 @@ def patients_to_recontact(user, now: datetime, limit: int = 5) -> dict:
     """Pacientes sin cita futura cuya última visita completada ya quedó lejos."""
     cutoff = now - timedelta(days=RECONTACT_DAYS)
     queryset = (
-        scope_to_clinic(Patient.objects.all(), user)
+        scope_to_clinic(Patient.objects.filter(archived_at__isnull=True), user)
         .annotate(
             last_visit=Max('appointments__scheduled_at', filter=Q(appointments__status=Status.COMPLETED)),
             upcoming=Count(

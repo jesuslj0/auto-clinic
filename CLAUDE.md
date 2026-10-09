@@ -391,6 +391,53 @@ overrides: `CLINICAL_MEDIA_URL_EXPIRE` (signed-URL seconds, default 600),
 `CHAT_MEDIA_URL_EXPIRE` (WhatsApp attachments, default 300),
 `CHAT_AUDIO_MAX_BYTES` (default 16 MB).
 
+### Deploy (GitHub Actions → GHCR → Coolify)
+
+La imagen **se construye fuera del servidor** (un build en el host provocaba picos
+de RAM que podían tumbar n8n, que comparte máquina). Coolify solo hace `pull` y
+reinicia. Flujo:
+
+1. Push a la rama `prod` (se llega con `git merge main` en `prod`; `main` no
+   despliega nada).
+2. `.github/workflows/deploy.yml` construye dos imágenes con caché de capas y las
+   sube a GHCR con los tags `:prod` y `:<sha>`: `ghcr.io/jesuslj0/auto-clinic`
+   (Django; la usan `web`, `celery` y `celery-beat`) y
+   `ghcr.io/jesuslj0/auto-clinic-nginx`.
+3. El último paso llama a la API de Coolify
+   (`/api/v1/deploy?uuid=…`). Coolify relee `docker-compose.prod.yml` de `prod`,
+   hace `pull` (`pull_policy: always`) y recrea los contenedores.
+
+Reglas:
+
+- **`docker-compose.prod.yml` no tiene `build:`**: solo `image:`. Si se añade, el
+  servidor volvería a construir. `docker-compose.yml` es el de desarrollo y sí
+  construye.
+- **El recurso de Coolify sigue siendo Docker Compose** (db, redis, nginx con
+  labels de Traefik, volúmenes), no «Docker Image». Con **auto-deploy y webhook de
+  git desactivados**: el workflow es el único camino de despliegue. Si se
+  reactivan, cada push haría además un build en el servidor.
+- **Migraciones**: van en el `command` de `web`; `celery` y `celery-beat` no las
+  lanzan.
+- **Variables**: los secretos reales viven en Coolify (runtime). El build no
+  necesita `.env`: `collectstatic` usa el `SECRET_KEY` por defecto de `base.py`.
+- **Secrets de GitHub** (*Settings → Secrets → Actions*): `COOLIFY_TOKEN` (API
+  token de Coolify), `COOLIFY_URL` (sin barra final) y `COOLIFY_APP_UUID` (último
+  tramo de la URL del recurso). `GITHUB_TOKEN` lo pone Actions solo.
+- **Pull privado**: el servidor necesita `docker login ghcr.io` hecho como `root`
+  en el host (terminal de *Servers → localhost*, no la del contenedor `coolify`)
+  con un PAT classic de solo `read:packages`. **El PAT caduca**: cuando lo haga,
+  Actions seguirá en verde pero el `pull` fallará con `unauthorized`. Renovar y
+  repetir el `docker login`.
+- **Rollback**: cada imagen lleva su `sha`. Cambiar `:prod` por `:<sha>` en los
+  cuatro servicios de `docker-compose.prod.yml`, push a `prod` y redesplegar.
+- Los tags `:<sha>` se acumulan en GHCR; limpiarlos de vez en cuando
+  (*Packages → Package settings*). En el servidor, *Force Docker Cleanup*
+  de Coolify retira las capas antiguas.
+
+Fallos típicos del último paso del workflow: `401` = token, `404` = UUID, error de
+conexión = `COOLIFY_URL`. `manifest unknown` en Coolify = intentó bajar la imagen
+antes de que existiera; relanzar el deploy.
+
 ## Key notes
 
 - **Tests: pytest + pytest-django**, configured in `pytest.ini`

@@ -1,4 +1,6 @@
+from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from clinical.files import clinical_media_storage
 from core.models import Clinic, TimeStampedModel
@@ -22,6 +24,18 @@ class Patient(TimeStampedModel):
         blank=True,
     )
 
+    # Archivar aparta la ficha del directorio, del buscador y de los selectores,
+    # pero NO la borra: historia, citas y facturas siguen donde estaban. Es
+    # reversible (`restore()`); el borrado real es otra cosa y no vive en el panel.
+    archived_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    archived_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='+',
+    )
+
     class Meta:
         ordering = ['last_name', 'first_name']
         unique_together = ('clinic', 'email', 'phone')
@@ -30,3 +44,20 @@ class Patient(TimeStampedModel):
 
     def __str__(self):
         return f'{self.first_name} {self.last_name}'
+
+    @property
+    def is_archived(self):
+        return self.archived_at is not None
+
+    def archive(self, *, by=None):
+        """Aparta la ficha. Con `save()` y no `update()`: así queda en `ChangeLog`."""
+        if self.archived_at is None:
+            self.archived_at = timezone.now()
+            self.archived_by = by
+            self.save(update_fields=['archived_at', 'archived_by', 'updated_at'])
+
+    def restore(self):
+        if self.archived_at is not None:
+            self.archived_at = None
+            self.archived_by = None
+            self.save(update_fields=['archived_at', 'archived_by', 'updated_at'])

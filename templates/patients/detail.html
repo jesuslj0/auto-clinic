@@ -18,6 +18,21 @@ Ficha del paciente. Tres piezas, de arriba abajo:
 
 {% block content %}
 <div class="space-y-6">
+    {% if patient.is_archived %}
+    <div class="flex flex-col gap-3 rounded-2xl bg-warning-soft px-5 py-4 ring-1 ring-warning-line sm:flex-row sm:items-center sm:justify-between">
+        <div class="min-w-0">
+            <p class="text-sm font-semibold text-warning">Ficha archivada</p>
+            <p class="mt-0.5 text-xs text-content-muted">Archivada el {{ patient.archived_at|date:"j \d\e F \d\e Y" }}. No aparece en el directorio, el buscador ni al crear citas.</p>
+        </div>
+        {% if can_archive %}
+        <form method="post" action="{% url 'patients:restore' patient.pk %}" class="flex-shrink-0">
+            {% csrf_token %}
+            <button type="submit" class="btn-secondary max-sm:w-full">Restaurar ficha</button>
+        </form>
+        {% endif %}
+    </div>
+    {% endif %}
+
     {% include 'patients/_alert_banner.html' %}
 
     <div class="grid items-start gap-6 xl:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
@@ -36,6 +51,52 @@ Ficha del paciente. Tres piezas, de arriba abajo:
                 </svg>
                 Editar datos
             </a>
+
+            {% if can_archive and not patient.is_archived %}
+            <div x-data="{ open: false }">
+                <button type="button" @click="open = true" class="btn-secondary mt-2 w-full">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m6 4.125l2.25 2.25m0 0l2.25-2.25M12 13.875v-6.75M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                    </svg>
+                    Archivar ficha
+                </button>
+
+                <template x-teleport="body">
+                    <div x-cloak x-show="open" @keydown.escape.window="open = false" class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="archive-patient-title">
+                        <div x-show="open" x-transition.opacity @click="open = false" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+                        <form method="post" action="{% url 'patients:archive' patient.pk %}" x-show="open" x-transition
+                              class="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+                            {% csrf_token %}
+                            <h3 id="archive-patient-title" class="text-base font-semibold text-content">¿Archivar la ficha de {{ patient }}?</h3>
+                            <p class="mt-2 text-sm text-content-subtle">
+                                Dejará de aparecer en el directorio, el buscador y al crear citas. No se borra nada: la historia clínica,
+                                las citas pasadas y las facturas se conservan, y podrás restaurarla cuando quieras.
+                            </p>
+                            {% if upcoming_appointments %}
+                            <div class="mt-4 rounded-xl bg-warning-soft px-4 py-3 ring-1 ring-warning-line">
+                                <p class="text-sm font-semibold text-warning">
+                                    Tiene {{ upcoming_appointments|length }} cita{{ upcoming_appointments|length|pluralize }} futura{{ upcoming_appointments|length|pluralize }}
+                                    que se cancelará{{ upcoming_appointments|length|pluralize:"n" }} al confirmar:
+                                </p>
+                                <ul class="mt-2 space-y-1 text-sm text-content-muted">
+                                    {% for appt in upcoming_appointments %}
+                                    <li>{{ appt.scheduled_at|date:"j M Y · H:i" }}{% if appt.service %} · {{ appt.service.name }}{% endif %}</li>
+                                    {% endfor %}
+                                </ul>
+                                <p class="mt-2 text-xs text-content-subtle">El paciente no recibe ningún aviso automático.</p>
+                            </div>
+                            {% endif %}
+                            <div class="mt-5 flex justify-end gap-2">
+                                <button type="button" @click="open = false" class="btn-secondary">Cancelar</button>
+                                <button type="submit" class="btn-danger">
+                                    {% if upcoming_appointments %}Archivar y cancelar citas{% else %}Sí, archivar{% endif %}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </template>
+            </div>
+            {% endif %}
 
             <dl class="mt-6 space-y-5 border-t border-line pt-6 text-sm">
                 <div class="flex items-start gap-3">
