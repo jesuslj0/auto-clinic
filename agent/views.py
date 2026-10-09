@@ -24,6 +24,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from agent.filters import ConversationSessionFilter
+from patients.services import DependentError, register_dependent
 from patients.services import booking_context as patient_booking_context
 from agent.media import MediaAlreadyAttached, attach_media, log_media_view, signed_media_url
 from agent.models import (
@@ -202,6 +203,46 @@ class ConversationSessionViewSet(ExportMixin, viewsets.ModelViewSet):
                 status=http_status.HTTP_400_BAD_REQUEST,
             )
         return Response(patient_booking_context(request.user.clinic, phone))
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='register-dependent',
+        permission_classes=[IsAgentClinicKey],
+    )
+    def register_dependent(self, request):
+        """«Quiero pedir cita para mi padre»: da de alta al familiar y, si hace falta, al contacto.
+
+        Solo la clave de clínica (la clínica sale de la clave). `phone` es el del
+        remitente real, que fija n8n, no el LLM. Devuelve el `patient_id` con el que
+        el agente reserva después (ver `patients.services.register_dependent`).
+        """
+        data = request.data
+        try:
+            patient, created = register_dependent(
+                request.user.clinic,
+                requester_phone=data.get('phone') or '',
+                first_name=data.get('first_name') or '',
+                last_name=data.get('last_name') or '',
+                relationship=data.get('relationship') or '',
+                requester_first_name=data.get('requester_first_name') or '',
+                requester_last_name=data.get('requester_last_name') or '',
+                email=data.get('email') or '',
+            )
+        except DependentError as exc:
+            return Response(
+                {'code': exc.code, 'detail': str(exc)}, status=http_status.HTTP_400_BAD_REQUEST
+            )
+        # El hilo se enlaza al contacto ya, sin esperar al siguiente mensaje.
+        session = self.get_queryset().filter(phone=normalize_phone_safe(data.get('phone') or '')).first()
+        if session is not None and session.patient_id is None and session.guardian_id is None:
+            guardian = patient.guardian_links.first().guardian
+            session.guardian = guardian
+            session.save(update_fields=['guardian'])
+        return Response(
+            {'patient_id': patient.pk, 'name': str(patient), 'created': created},
+            status=http_status.HTTP_201_CREATED if created else http_status.HTTP_200_OK,
+        )
 
     @action(detail=False, methods=['get'], url_path='should-reply')
     def should_reply(self, request):
