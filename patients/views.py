@@ -398,7 +398,12 @@ class PatientDetailView(PatientTabView):
         context['guardian_form'] = GuardianForm()
         guardian_profile = getattr(self.object, 'guardian_profile', None)
         context['dependents'] = (
-            list(guardian_profile.bookable_patients().exclude(pk=self.object.pk))
+            list(
+                guardian_profile.links.filter(patient__archived_at__isnull=True)
+                .exclude(patient=self.object)
+                .select_related('patient')
+                .order_by('created_at')
+            )
             if guardian_profile else []
         )
         context['can_archive'] = is_clinic_admin(self.request.user)
@@ -1518,7 +1523,7 @@ class PatientGuardianRemoveView(PatientScopedMixin, LoginRequiredMixin, View):
         patient = get_object_or_404(self.get_queryset(), pk=id)
         link = get_object_or_404(PatientGuardian, pk=link_id, patient=patient)
         guardian = link.guardian
-        link.delete()
+        link.delete()  # borrado lógico: el vínculo queda como historial
         messages.success(request, f'{guardian} ya no es contacto de {patient}.')
         return redirect('patients:detail', id=patient.pk)
 

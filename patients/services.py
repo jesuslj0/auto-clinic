@@ -127,11 +127,13 @@ def archive_patient(patient, *, user):
     return cancelled
 
 
-def add_guardian(patient, *, first_name, last_name='', phone, relationship, created_by=None):
+def add_guardian(patient, *, first_name, last_name='', phone='', relationship, created_by=None):
     """Vincula un contacto responsable a un paciente. Devuelve `(vínculo, contacto_nuevo)`.
 
     El contacto se identifica por su teléfono dentro de la clínica: si ya existe
-    (porque lo es de otro paciente) se reutiliza y no se pisan sus datos. Si el
+    (porque lo es de otro paciente) se reutiliza y no se pisan sus datos. El
+    teléfono es opcional: sin él siempre se crea un contacto nuevo (no hay con qué
+    reconocerlo) y no puede escribir por WhatsApp hasta que tenga uno. Si el
     teléfono es el de una ficha de paciente de la clínica (y solo una), el contacto
     queda enlazado a ella. Lanza `ValueError` si el teléfono no es válido o si el
     paciente intenta ser contacto de sí mismo.
@@ -140,15 +142,18 @@ def add_guardian(patient, *, first_name, last_name='', phone, relationship, crea
 
     from patients.models import Guardian, Patient, PatientGuardian
 
-    normalized = normalize_phone(phone)
-    if patient.phone and patient.phone == normalized:
+    normalized = normalize_phone(phone) if (phone or '').strip() else ''
+    if normalized and patient.phone == normalized:
         raise ValueError('El contacto no puede usar el mismo teléfono que el propio paciente.')
 
     with transaction.atomic():
-        guardian = Guardian.objects.filter(clinic=patient.clinic, phone=normalized).first()
+        guardian = (
+            Guardian.objects.filter(clinic=patient.clinic, phone=normalized).first()
+            if normalized else None
+        )
         created = guardian is None
         if created:
-            own = list(
+            own = [] if not normalized else list(
                 Patient.objects.filter(
                     clinic=patient.clinic, phone=normalized, archived_at__isnull=True
                 ).exclude(pk=patient.pk)[:2]
@@ -186,7 +191,7 @@ def booking_context(clinic, phone):
     from patients.models import Guardian
 
     normalized = normalize_phone_safe(phone) or (phone or '').strip()
-    guardian = Guardian.objects.filter(clinic=clinic, phone=normalized).first()
+    guardian = Guardian.objects.filter(clinic=clinic, phone=normalized).first() if normalized else None
     if guardian is None:
         return {'ask_for_whom': False, 'guardian': None, 'candidates': []}
 
@@ -233,7 +238,7 @@ def can_book_for(clinic, phone, patient):
     normalized = normalize_phone_safe(phone) or (phone or '').strip()
     if normalized and patient.phone == normalized:
         return True
-    guardian = Guardian.objects.filter(clinic=clinic, phone=normalized).first()
+    guardian = Guardian.objects.filter(clinic=clinic, phone=normalized).first() if normalized else None
     return guardian is not None and guardian.bookable_patients().filter(pk=patient.pk).exists()
 
 
@@ -257,14 +262,14 @@ def create_patient_from_guardian(guardian):
             Patient.objects.filter(
                 clinic=guardian.clinic, phone=guardian.phone, archived_at__isnull=True
             )[:2]
-        )
+        ) if guardian.phone else []
         if len(existing) == 1:
             guardian.patient = existing[0]
             guardian.save(update_fields=['patient', 'updated_at'])
             return existing[0], False
 
         email = guardian.email
-        if email and Patient.objects.filter(
+        if email and guardian.phone and Patient.objects.filter(
             clinic=guardian.clinic, email=email, phone=guardian.phone
         ).exists():
             email = ''
