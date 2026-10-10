@@ -660,18 +660,19 @@ def top_services(appointments, today: date, limit: int = 5) -> list[dict]:
 
 
 def booking_sources(appointments, today: date) -> dict:
-    """De dónde llegan las citas creadas este mes: agente, reserva web o panel."""
+    """De dónde llegan las citas creadas este mes: agente o panel."""
     from appointments.filters import month_bounds
 
     month_start, _ = month_bounds(today)
     counts = dict(
         appointments.filter(created_at__date__gte=month_start, created_at__date__lte=today)
+        .exclude(source=Appointment.Source.BOOKING)
         .values_list('source')
         .annotate(n=Count('id'))
         .order_by()
     )
     total = sum(counts.values())
-    tones = {'agent': 'bg-brand-500', 'booking': 'bg-info', 'staff': 'bg-content-faint'}
+    tones = {'agent': 'bg-brand-500', 'staff': 'bg-content-faint'}
     rows = [
         {
             'label': label,
@@ -680,6 +681,7 @@ def booking_sources(appointments, today: date) -> dict:
             'bar': tones[value],
         }
         for value, label in Appointment.Source.choices
+        if value in tones
     ]
     return {'total': total, 'rows': rows}
 

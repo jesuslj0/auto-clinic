@@ -3,7 +3,7 @@ from django.db import models
 from django.utils import timezone
 
 from clinical.files import clinical_media_storage
-from core.models import Clinic, TimeStampedModel
+from core.models import Clinic, SoftDeleteModel, TimeStampedModel
 from patients.photos import patient_photo_upload_to
 
 
@@ -87,7 +87,7 @@ class Guardian(TimeStampedModel):
     clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name='guardians')
     first_name = models.CharField(max_length=150)
     last_name = models.CharField(max_length=150, blank=True)
-    phone = models.CharField(max_length=32)
+    phone = models.CharField(max_length=32, blank=True)
     email = models.EmailField(blank=True)
     notes = models.TextField(blank=True)
     patient = models.OneToOneField(
@@ -105,7 +105,12 @@ class Guardian(TimeStampedModel):
     class Meta:
         ordering = ['last_name', 'first_name']
         constraints = [
-            models.UniqueConstraint(fields=['clinic', 'phone'], name='guardian_unique_clinic_phone'),
+            # Teléfono opcional: solo los contactos que tienen uno son únicos por clínica.
+            models.UniqueConstraint(
+                fields=['clinic', 'phone'],
+                condition=~models.Q(phone=''),
+                name='guardian_unique_clinic_phone',
+            ),
         ]
         verbose_name = 'contacto responsable'
         verbose_name_plural = 'contactos responsables'
@@ -128,8 +133,15 @@ class Guardian(TimeStampedModel):
         )
 
 
-class PatientGuardian(TimeStampedModel):
-    """Vínculo entre un paciente y uno de sus contactos responsables."""
+class PatientGuardian(SoftDeleteModel, TimeStampedModel):
+    """Vínculo entre un paciente y uno de sus contactos responsables.
+
+    «Quitar» un contacto es borrado lógico: el vínculo deja de contar (los
+    gestores por defecto lo excluyen) pero la fila queda como historial de quién
+    pudo gestionar las citas de quién. Por eso el acceso va siempre por
+    `guardian_links` / `links` / `objects`; **no** por el M2M `dependents` /
+    `guardians`, que recorre la tabla intermedia sin mirar `deleted_at`.
+    """
 
     class Relationship(models.TextChoices):
         CHILD = 'child', 'Hijo/a'
@@ -148,12 +160,32 @@ class PatientGuardian(TimeStampedModel):
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+'
     )
 
-    class Meta:
+    class Meta(SoftDeleteModel.Meta):
+        abstract = False
         constraints = [
-            models.UniqueConstraint(fields=['patient', 'guardian'], name='patientguardian_unique'),
+            # Solo entre vínculos vivos: tras quitar uno se puede volver a añadir.
+            models.UniqueConstraint(
+                fields=['patient', 'guardian'],
+                condition=models.Q(deleted_at__isnull=True),
+                name='patientguardian_unique',
+            ),
         ]
         verbose_name = 'vínculo paciente-contacto'
         verbose_name_plural = 'vínculos paciente-contacto'
+
+    # Lo que el contacto ES respecto al paciente, en frase: «Es hijo/a de X».
+    RELATIONSHIP_PHRASES = {
+        'child': 'Es hijo/a de',
+        'spouse': 'Es cónyuge o pareja de',
+        'parent': 'Es padre/madre de',
+        'sibling': 'Es hermano/a de',
+        'caregiver': 'Es cuidador/a de',
+        'other': 'Es contacto de',
+    }
+
+    @property
+    def relationship_phrase(self):
+        return self.RELATIONSHIP_PHRASES.get(self.relationship, 'Es contacto de')
 
     def clean(self):
         if self.patient_id and self.guardian_id and self.patient.clinic_id != self.guardian.clinic_id:

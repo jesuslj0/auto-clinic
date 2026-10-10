@@ -156,3 +156,32 @@ def test_create_patient_from_guardian_links_existing_file(client, admin_user, pa
     link.guardian.refresh_from_db()
     assert link.guardian.patient == existing
     assert Patient.objects.filter(phone=PHONE).count() == 1
+
+
+@pytest.mark.django_db
+def test_guardian_without_phone_is_allowed_and_never_deduplicated(clinic_a):
+    mother, father = _patient(clinic_a, 'Rosa'), _patient(clinic_a, 'Luis')
+    first, created_a = add_guardian(mother, first_name='Ana', relationship='caregiver')
+    second, created_b = add_guardian(father, first_name='Eva', phone='', relationship='caregiver')
+
+    assert created_a and created_b
+    assert first.guardian != second.guardian
+    assert first.guardian.phone == '' == second.guardian.phone
+
+
+@pytest.mark.django_db
+def test_removing_a_link_is_soft_and_can_be_added_again(clinic_a):
+    patient = _patient(clinic_a, 'Rosa')
+    link, _ = add_guardian(patient, first_name='Juan', phone=PHONE, relationship='child')
+    guardian = link.guardian
+
+    link.delete()
+
+    assert not PatientGuardian.objects.filter(pk=link.pk).exists()
+    assert PatientGuardian.all_objects.filter(pk=link.pk, deleted_at__isnull=False).exists()
+    assert list(guardian.bookable_patients()) == []
+    assert Patient.objects.filter(pk=patient.pk).exists() and Guardian.objects.filter(pk=guardian.pk).exists()
+
+    again, created = add_guardian(patient, first_name='Juan', phone=PHONE, relationship='child')
+    assert not created and again.pk != link.pk
+    assert set(guardian.bookable_patients()) == {patient}

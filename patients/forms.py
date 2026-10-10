@@ -73,7 +73,7 @@ class GuardianForm(forms.Form):
 
     first_name = forms.CharField(label='Nombre', max_length=150)
     last_name = forms.CharField(label='Apellidos', max_length=150, required=False)
-    phone = forms.CharField(label='Teléfono', max_length=32)
+    phone = forms.CharField(label='Teléfono', max_length=32, required=False)
     relationship = forms.ChoiceField(
         label='Relación con el paciente', choices=PatientGuardian.Relationship.choices
     )
