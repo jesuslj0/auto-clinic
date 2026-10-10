@@ -93,6 +93,9 @@ marcado.
                     <div class="min-w-0">
                         <p class="text-sm font-semibold text-info">Cita sin ficha de paciente</p>
                         <p class="mt-0.5 text-xs text-content-muted">Crea la ficha cuando se presente para registrar procedimientos y completar la cita.</p>
+                        {% if appointment.booked_for_other %}
+                        <p class="mt-1 text-xs text-content-muted">Cita pedida por <span class="font-medium text-content">{{ appointment.contact_name|default:"un familiar" }}</span> ({{ appointment.patient_phone }}) para otra persona.</p>
+                        {% endif %}
                     </div>
                     <button type="button" @click="open = true" class="btn-primary flex-shrink-0 !py-2 text-sm max-sm:w-full">Crear ficha de paciente</button>
 
@@ -104,15 +107,19 @@ marcado.
                                 {% csrf_token %}
                                 <input type="hidden" name="action" value="create_patient">
                                 <h3 id="create-patient-title" class="text-base font-semibold text-content">¿Crear la ficha con estos datos?</h3>
+                                {% if appointment.booked_for_other %}
+                                <p class="mt-1 text-sm text-content-subtle">Se creará la ficha de esta persona, sin teléfono, y quien pidió la cita quedará como su contacto responsable.</p>
+                                {% else %}
                                 <p class="mt-1 text-sm text-content-subtle">Se tomarán del contacto de la cita. Si la clínica ya tiene un paciente con ese teléfono, se vinculará en vez de crear otro.</p>
+                                {% endif %}
                                 <dl class="mt-4 divide-y divide-line rounded-xl bg-muted px-4 ring-1 ring-line">
                                     <div class="py-2.5 sm:grid sm:grid-cols-3 sm:gap-3">
                                         <dt class="text-xs font-medium text-content-muted sm:pt-0.5">Nombre</dt>
                                         <dd class="mt-0.5 break-words text-sm sm:col-span-2 sm:mt-0 {% if appointment.patient_name %}text-content{% else %}text-content-faint{% endif %}">{{ appointment.patient_name|default:"—" }}</dd>
                                     </div>
                                     <div class="py-2.5 sm:grid sm:grid-cols-3 sm:gap-3">
-                                        <dt class="text-xs font-medium text-content-muted sm:pt-0.5">Teléfono</dt>
-                                        <dd class="mt-0.5 break-words text-sm sm:col-span-2 sm:mt-0 {% if appointment.patient_phone %}text-content{% else %}text-content-faint{% endif %}">{{ appointment.patient_phone|default:"—" }}</dd>
+                                        <dt class="text-xs font-medium text-content-muted sm:pt-0.5">{% if appointment.booked_for_other %}Contacto{% else %}Teléfono{% endif %}</dt>
+                                        <dd class="mt-0.5 break-words text-sm sm:col-span-2 sm:mt-0 {% if appointment.patient_phone %}text-content{% else %}text-content-faint{% endif %}">{% if appointment.booked_for_other %}{{ appointment.contact_name|default:"—" }} · {% endif %}{{ appointment.patient_phone|default:"—" }}</dd>
                                     </div>
                                     <div class="py-2.5 sm:grid sm:grid-cols-3 sm:gap-3">
                                         <dt class="text-xs font-medium text-content-muted sm:pt-0.5">Correo electrónico</dt>

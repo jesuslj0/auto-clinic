@@ -237,6 +237,15 @@ class Appointment(models.Model):
     patient_phone = models.CharField(max_length=32, blank=True)
     patient_name = models.CharField(max_length=255, blank=True)
     contact_email = models.EmailField(blank=True)
+    # Cita para OTRA persona (el hijo que pide por su padre): sin ficha, con el
+    # nombre del familiar en `patient_name` y, como teléfono de contacto, el de quien
+    # la gestiona. Ese teléfono NO identifica al paciente: nunca enlaza esta cita con
+    # una ficha (ver `services.link_patient_by_contact`). `contact_name` y
+    # `contact_relationship` (lo que ES quien escribe respecto al paciente, como en
+    # `PatientGuardian`) dicen quién la pidió; al abrir la ficha pasan a ser su contacto.
+    booked_for_other = models.BooleanField(default=False)
+    contact_name = models.CharField(max_length=255, blank=True)
+    contact_relationship = models.CharField(max_length=20, blank=True)
     service_name = models.CharField(max_length=255, blank=True)
 
     class CancelledBy(models.TextChoices):

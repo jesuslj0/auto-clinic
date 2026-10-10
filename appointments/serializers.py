@@ -164,6 +164,37 @@ class AppointmentSerializer(ClinicScopedSerializerMixin, serializers.ModelSerial
             data['patient_phone'] = instance.patient.phone
         return data
 
+    def _validate_booked_for_other(self, attrs):
+        """Cita pedida para otra persona: sin ficha y con quién la pide.
+
+        La ficha médica la abre el admin después; aquí solo viaja el contacto. El
+        teléfono es el de quien la pide, así que hace falta saber su nombre: sale de
+        lo que ya tenga la clínica de ese número o lo manda el agente.
+        """
+        from appointments.services import contact_name_for_phone
+        from patients.models import PatientGuardian
+        from patients.services import normalize_phone_safe
+
+        if attrs.get('patient') is not None:
+            raise serializers.ValidationError(
+                {'patient': 'Una cita para otra persona no lleva ficha: la crea la clínica.'}
+            )
+        relationship = (attrs.get('contact_relationship') or '').strip()
+        if relationship and relationship not in PatientGuardian.Relationship.values:
+            raise serializers.ValidationError({
+                'contact_relationship': 'Debe ser uno de: ' + ', '.join(PatientGuardian.Relationship.values) + '.'
+            })
+        if not (attrs.get('contact_name') or '').strip():
+            phone = (attrs.get('patient_phone') or '').strip()
+            clinic = attrs.get('clinic') or self._forced_clinic()
+            known = contact_name_for_phone(clinic, normalize_phone_safe(phone) or phone) if clinic and phone else ''
+            if not known:
+                raise serializers.ValidationError({
+                    'contact_name': 'Obligatorio si quien pide la cita aún no es conocido por la clínica.'
+                })
+            attrs['contact_name'] = known
+        return attrs
+
     def get_professional_name(self, obj):
         if obj.professional:
             return str(obj.professional)
@@ -188,6 +219,9 @@ class AppointmentSerializer(ClinicScopedSerializerMixin, serializers.ModelSerial
                 raise serializers.ValidationError({
                     'patient': 'Este número de teléfono no puede reservar citas para ese paciente.'
                 })
+
+        if self.instance is None and attrs.get('booked_for_other'):
+            attrs = self._validate_booked_for_other(attrs)
 
         professional = attrs.get('professional', getattr(self.instance, 'professional', None))
         service = attrs.get('service', getattr(self.instance, 'service', None))

@@ -532,10 +532,29 @@ def _resolve_contact(clinic, fields):
         return fields
     normalized = normalize_phone_safe(raw) or raw
     fields['patient_phone'] = normalized
+    if fields.get('booked_for_other'):
+        # El teléfono es el de quien la pide, no el del paciente: no se enlaza.
+        if not (fields.get('contact_name') or '').strip():
+            fields['contact_name'] = contact_name_for_phone(clinic, normalized)
+        return fields
     patient = Patient.objects.filter(clinic=clinic, phone=normalized).first()
     if patient is not None:
         fields['patient'] = patient
     return fields
+
+
+def contact_name_for_phone(clinic, phone):
+    """Nombre de quien escribe desde `phone`, si la clínica ya lo conoce ('' si no).
+
+    Sale de su ficha de paciente o de su contacto responsable.
+    """
+    from patients.models import Guardian, Patient
+
+    patient = Patient.objects.filter(clinic=clinic, phone=phone).first()
+    if patient is not None:
+        return f'{patient.first_name} {patient.last_name}'.strip()
+    guardian = Guardian.objects.filter(clinic=clinic, phone=phone).first()
+    return str(guardian) if guardian is not None else ''
 
 
 def link_patient_by_contact(appointment):
@@ -547,7 +566,7 @@ def link_patient_by_contact(appointment):
     from patients.models import Patient
     from patients.services import normalize_phone_safe
 
-    if appointment.patient_id or not appointment.patient_phone:
+    if appointment.patient_id or not appointment.patient_phone or appointment.booked_for_other:
         return None
     normalized = normalize_phone_safe(appointment.patient_phone) or appointment.patient_phone
     patient = Patient.objects.filter(clinic_id=appointment.clinic_id, phone=normalized).first()
@@ -566,7 +585,11 @@ def link_orphan_appointments(patient):
     if not patient.phone:
         return 0
     orphans = Appointment.objects.filter(
-        clinic_id=patient.clinic_id, patient__isnull=True, patient_phone=patient.phone
+        clinic_id=patient.clinic_id,
+        patient__isnull=True,
+        patient_phone=patient.phone,
+        # Las citas para otra persona llevan el teléfono de quien las pide: no son suyas.
+        booked_for_other=False,
     )
     linked = 0
     for appointment in orphans:
@@ -591,6 +614,9 @@ def create_patient_from_appointment(appointment):
 
     if appointment.patient_id:
         return appointment.patient, False
+
+    if appointment.booked_for_other:
+        return _create_dependent_from_appointment(appointment)
 
     existing = link_patient_by_contact(appointment)
     if existing is not None:
@@ -621,6 +647,40 @@ def create_patient_from_appointment(appointment):
         if appointment.patient_id is None:
             appointment.patient = patient
             appointment.save(update_fields=['patient', 'updated_at'])
+    return patient, True
+
+
+def _create_dependent_from_appointment(appointment):
+    """Ficha de la persona para la que se pidió una cita ajena. Siempre nueva.
+
+    Va SIN teléfono (el de la cita es el de quien la pidió) y quien la pidió queda
+    como su contacto responsable, con la relación que dijo. Así, la próxima vez que
+    escriba, el agente le preguntará «¿para quién?» y podrá reservar para ella.
+    """
+    from patients.services import add_guardian, create_patient
+
+    name = (appointment.patient_name or '').strip()
+    if not name:
+        raise ValueError('La cita no tiene el nombre de la persona para crear la ficha.')
+    first, _, last = name.partition(' ')
+    contact_first, _, contact_last = (appointment.contact_name or 'Contacto').strip().partition(' ')
+    with transaction.atomic():
+        patient = create_patient(
+            clinic=appointment.clinic,
+            phone='',
+            first_name=first,
+            last_name=last.strip(),
+            email=appointment.contact_email,
+        )
+        add_guardian(
+            patient,
+            first_name=contact_first,
+            last_name=contact_last.strip(),
+            phone=appointment.patient_phone,
+            relationship=appointment.contact_relationship or 'other',
+        )
+        appointment.patient = patient
+        appointment.save(update_fields=['patient', 'updated_at'])
     return patient, True
 
 
