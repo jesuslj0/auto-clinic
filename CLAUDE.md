@@ -378,18 +378,23 @@ número puede gestionarla, y `POST /api/appointments/` del agente exige
 `requester_phone` y rechaza (400) pacientes que ese número no pueda reservar. El
 `phone` de la tool lo fija n8n con el del remitente real, no el LLM.
 
-**Alta desde la conversación.** «Quiero pedir cita para mi padre»:
-`POST /api/agent/sessions/register-dependent/` (solo `Api-Key`; clínica de la clave)
-→ `patients.services.register_dependent()`, todo o nada: crea el contacto del
-número si no existe (nombre de su ficha si la tiene; si no, exige
-`requester_first_name`/`requester_last_name` → 400 `requester_name_required`), la
-ficha del familiar **sin teléfono** y el vínculo. `relationship` es lo que ES quien
-escribe respecto al familiar (su padre → `child`; su hijo → `parent`); n8n lo deduce
-de `patient_is` en el nodo `L - Preparar Datos Familiar`. Idempotente por
-nombre+apellidos dentro del contacto, con tope `MAX_DEPENDENTS_PER_GUARDIAN` (10).
-Devuelve `patient_id`, que el agente usa en `create`/`list_upcoming`/`cancel`/
-`reschedule`. En `WA-Appointments-Manager` es la acción `register_dependent`
-(ramas `L - …`); la regla del prompt está en `PEDIR CITA PARA OTRA PERSONA`.
+**Cita para otra persona.** «Quiero pedir cita para mi padre»: el agente **no crea
+ninguna ficha** (la ficha médica la abre solo el admin). Reserva con `action=create`
+y `for_other=true` en `WA-Appointments-Manager`, que llega a `POST /api/appointments/`
+como una **cita sin ficha** con `booked_for_other=true`: `patient_name` es el del
+familiar, `patient_phone` el de quien la pide (el familiar puede no tener móvil),
+`contact_name` quién la pide (de su ficha o contacto si la clínica ya lo conoce; si
+no, el agente lo pregunta y Django devuelve 400 `contact_name`) y
+`contact_relationship` lo que ES quien escribe respecto al paciente (su padre →
+`child`; su hijo → `parent`), deducido de `patient_is` en `B - Preparar Datos Cita`.
+**Ese teléfono no identifica al paciente**, así que una cita `booked_for_other` nunca
+se enlaza por teléfono: lo respetan `_resolve_contact`, `link_patient_by_contact` y
+`link_orphan_appointments`. Cuando el admin pulsa «Crear ficha»,
+`create_patient_from_appointment()` crea la ficha **sin teléfono** y deja a quien
+pidió la cita como su contacto responsable (`add_guardian`), con lo que la próxima vez
+el agente le preguntará «¿para quién?». Límite conocido: esas citas sin ficha no salen
+en `list_upcoming` ni se pueden cancelar/mover desde el agente (esas acciones buscan
+por ficha); el prompt le dice que lo gestiona la clínica.
 
 ### Token-based public actions
 
