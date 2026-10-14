@@ -41,6 +41,7 @@ from clinical.procedures import record_procedure
 from core.authentication import ClinicAgent
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ClinicAdminRequiredMixin, ExportMixin, is_clinic_admin
 from core.permissions import IsAgentClinicKey, IsStaffOrAdmin
+from agent.services import patient_chat_access
 from patients.filters import PatientFilter
 from patients.models import Patient, PatientGuardian
 from patients.serializers import PatientSerializer
@@ -365,6 +366,7 @@ class PatientTabView(PatientScopedMixin, AccessLogMixin, LoginRequiredMixin, Det
         context['patient_tabs'] = PATIENT_TABS
         context['active_tab'] = self.tab
         context['panel_template'] = self.panel_template
+        context['chat_session'], context['chat_state'] = patient_chat_access(self.object)
         alerts = self.get_active_alerts()
         context['active_alerts'] = alerts
         context['has_critical_alerts'] = any(

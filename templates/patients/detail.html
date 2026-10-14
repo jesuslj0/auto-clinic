@@ -45,20 +45,55 @@ Ficha del paciente. Tres piezas, de arriba abajo:
                 </div>
             </div>
 
-            <a href="{% url 'patients:edit' patient.pk %}" class="btn-secondary mt-5 w-full">
-                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+            <div class="mt-5 space-y-2">
+            {% comment %}
+            Tres estados (ver `agent.services.patient_chat_access`): se puede responder
+            («Enviar mensaje»), solo se puede leer porque la ventana de 24 h está cerrada
+            («Ver chat»), o no hay nada que hacer (sin teléfono o nunca ha escrito).
+            El botón nunca crea conversaciones.
+            {% endcomment %}
+            {% if chat_state == 'open' %}
+            <a href="{% url 'agent:chat-thread' chat_session.id %}" class="btn-primary w-full">
+                <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 011.037-.443 48.282 48.282 0 005.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                </svg>
+                Enviar mensaje
+            </a>
+            {% elif chat_state == 'closed' %}
+            <a href="{% url 'agent:chat-thread' chat_session.id %}" class="btn-secondary w-full">
+                <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 011.037-.443 48.282 48.282 0 005.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                </svg>
+                Ver chat
+            </a>
+            <p class="text-center text-xs text-content-subtle">Ventana de 24 h cerrada: solo puedes leer la conversación.</p>
+            {% else %}
+            <button type="button" disabled class="btn-primary w-full">
+                <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 011.037-.443 48.282 48.282 0 005.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                </svg>
+                Enviar mensaje
+            </button>
+            <p class="text-center text-xs text-content-subtle">
+                {% if chat_state == 'no_phone' %}Este paciente no tiene teléfono.{% else %}Aún no ha escrito: WhatsApp no permite iniciar la conversación.{% endif %}
+            </p>
+            {% endif %}
+
+            <div class="flex gap-2">
+            <a href="{% url 'patients:edit' patient.pk %}" class="btn-secondary min-w-0 flex-1 whitespace-nowrap !px-3">
+                <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
                 </svg>
                 Editar datos
             </a>
 
             {% if can_archive and not patient.is_archived %}
-            <div x-data="{ open: false }">
-                <button type="button" @click="open = true" class="btn-secondary mt-2 w-full">
-                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+            <div x-data="{ open: false }" class="min-w-0 flex-1">
+                <button type="button" @click="open = true" class="btn-secondary w-full whitespace-nowrap !px-3">
+                    <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m6 4.125l2.25 2.25m0 0l2.25-2.25M12 13.875v-6.75M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
                     </svg>
-                    Archivar ficha
+                    Archivar
                 </button>
 
                 <template x-teleport="body">
@@ -97,6 +132,8 @@ Ficha del paciente. Tres piezas, de arriba abajo:
                 </template>
             </div>
             {% endif %}
+            </div>
+            </div>
 
             <dl class="mt-6 space-y-5 border-t border-line pt-6 text-sm">
                 <div class="flex items-start gap-3">

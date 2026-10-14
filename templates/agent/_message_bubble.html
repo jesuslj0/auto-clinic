@@ -5,12 +5,12 @@ cliente para no pintar dos veces un mensaje que llega por el socket.
 <div data-message-id="{{ message.id }}" data-direction="{{ message.direction }}" class="flex {% if message.direction == 'inbound' %}justify-start{% else %}justify-end{% endif %}">
     <div class="chat-bubble max-w-[85%] rounded-2xl px-4 py-2.5 shadow-sm sm:max-w-[70%]
         {% if message.direction == 'inbound' %}chat-bubble-in rounded-tl-sm bg-surface text-content ring-1 ring-line
-        {% elif message.sender == 'staff' %}chat-bubble-out rounded-tr-sm bg-tertiary-600 text-white
-        {% else %}chat-bubble-out rounded-tr-sm bg-brand-600 text-white{% endif %}"
+        {% elif message.sender == 'staff' %}chat-bubble-out chat-bubble-staff rounded-tr-sm text-white
+        {% else %}chat-bubble-out chat-bubble-agent rounded-tr-sm text-white{% endif %}"
         {% comment %}Las recibidas van sobre la superficie del tema: su pico lo
-        fija .chat-bubble-in en CSS, no aquí. Las enviadas usan colores de marca,
-        iguales en claro y oscuro.{% endcomment %}
-        {% if message.direction != 'inbound' %}style="--bubble-tail: {% if message.sender == 'staff' %}#4c1d95{% else %}#7c3aed{% endif %}"{% endif %}>
+        fija .chat-bubble-in en CSS, no aquí. Las enviadas toman su color (y el de
+        su pico) del tema de chat del hilo: .chat-bubble-agent / .chat-bubble-staff,
+        con --chat-agent y --chat-staff. Iguales en claro y oscuro.{% endcomment %}>
 
         {% comment %}
         Adjuntos. La foto NO se carga al pintar el hilo: el recuadro difuminado es
