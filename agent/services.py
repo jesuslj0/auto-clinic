@@ -41,6 +41,35 @@ def build_preview(message: ChatMessage) -> str:
     return _NON_TEXT_PREVIEW.get(message.message_type, '')
 
 
+def patient_chat_access(patient) -> tuple[ConversationSession | None, str]:
+    """Qué puede hacer el staff con el chat de un paciente, para la ficha.
+
+    Devuelve `(sesión, estado)`:
+
+    - `no_phone`: la ficha no tiene teléfono; no hay a quién escribir.
+    - `never_wrote`: el paciente nunca ha escrito. WhatsApp no deja iniciar la
+      conversación con texto libre y no hay nada que leer.
+    - `closed`: hay hilo con historial pero la ventana de 24 h está cerrada;
+      solo se puede leer.
+    - `open`: hay hilo y se puede responder con texto libre.
+
+    Es de solo lectura: no crea conversaciones. El hilo de pruebas del agente
+    queda fuera, igual que en la bandeja.
+    """
+    if not patient.phone:
+        return None, 'no_phone'
+    session = (
+        ConversationSession.objects.filter(
+            clinic=patient.clinic, patient=patient, is_test=False, last_message_at__isnull=False
+        )
+        .order_by(F('last_message_at').desc(), '-updated_at')
+        .first()
+    )
+    if session is None:
+        return None, 'never_wrote'
+    return session, 'open' if session.can_send_free_text else 'closed'
+
+
 def get_or_create_session(clinic, phone: str, *, is_test: bool = False) -> ConversationSession:
     """Devuelve la conversación de ese número en esa clínica, creándola si hace falta.
 

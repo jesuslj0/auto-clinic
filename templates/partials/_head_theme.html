@@ -553,6 +553,35 @@ opacidades sobre ellos (bg-surface/90, ring-line/70…).
     /* Recibida en estado de error: su fondo es danger-soft, no la superficie */
     .chat-bubble-danger { --bubble-tail: rgb(var(--c-danger-soft)); }
 
+    /* Temas de chat por conversación (el selector de la cabecera del hilo).
+       Cada tema define el fondo del hilo (--chat-bg, uno por modo claro/oscuro) y
+       el color de las burbujas que salen: --chat-agent (agente IA) y --chat-staff
+       (personal, un tono más oscuro). El pico de cada burbuja usa el mismo color,
+       así que no hay hexadecimales sueltos en las plantillas. Los valores por
+       defecto son el aspecto lila de siempre. Todas las burbujas salientes llevan
+       texto blanco: los tonos son 600-900 para que cumplan contraste.
+       La elección vive en el navegador (`ac-chat-theme:<id del hilo>`), no en BD. */
+    :root {
+        --chat-bg: var(--brand-gradient-soft);
+        --chat-agent: #7c3aed;
+        --chat-staff: #4c1d95;
+    }
+    .chat-thread-bg { background: var(--chat-bg); }
+    .chat-bubble-agent { background-color: var(--chat-agent); --bubble-tail: var(--chat-agent); }
+    .chat-bubble-staff { background-color: var(--chat-staff); --bubble-tail: var(--chat-staff); }
+
+    [data-chat-theme="azul"]    { --chat-bg: linear-gradient(135deg, #dbeafe 0%, #e0f2fe 100%); --chat-agent: #2563eb; --chat-staff: #1e3a8a; }
+    [data-chat-theme="verde"]   { --chat-bg: linear-gradient(135deg, #e6efdf 0%, #efeae2 100%); --chat-agent: #15803d; --chat-staff: #14532d; }
+    [data-chat-theme="naranja"] { --chat-bg: linear-gradient(135deg, #ffedd5 0%, #fef3c7 100%); --chat-agent: #c2410c; --chat-staff: #7c2d12; }
+    [data-chat-theme="rosa"]    { --chat-bg: linear-gradient(135deg, #fce7f3 0%, #ffe4e6 100%); --chat-agent: #be185d; --chat-staff: #831843; }
+    [data-chat-theme="grafito"] { --chat-bg: linear-gradient(135deg, #e5e7eb 0%, #f1f5f9 100%); --chat-agent: #475569; --chat-staff: #1e293b; }
+
+    .dark [data-chat-theme="azul"]    { --chat-bg: linear-gradient(135deg, #1b2a4a 0%, #173a52 100%); }
+    .dark [data-chat-theme="verde"]   { --chat-bg: linear-gradient(135deg, #12261f 0%, #0f2a2a 100%); }
+    .dark [data-chat-theme="naranja"] { --chat-bg: linear-gradient(135deg, #3b2a18 0%, #3f2a1b 100%); }
+    .dark [data-chat-theme="rosa"]    { --chat-bg: linear-gradient(135deg, #3d1f33 0%, #40212b 100%); }
+    .dark [data-chat-theme="grafito"] { --chat-bg: linear-gradient(135deg, #1f2430 0%, #262b36 100%); }
+
     .sidebar-enter {
         transform: translateX(-100%);
     }

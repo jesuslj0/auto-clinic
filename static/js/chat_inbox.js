@@ -446,3 +446,42 @@ document.addEventListener('alpine:init', () => {
         },
     }));
 });
+
+/*
+ * Selector de tema de una conversación (cabecera del hilo). El tema es solo
+ * visual y personal: se guarda en este navegador, una clave por hilo, y se
+ * aplica poniendo `data-chat-theme` en la tarjeta del hilo; los colores salen
+ * de las reglas `[data-chat-theme]` de `_head_theme.html`. Al cargar la página,
+ * un script en línea de `chat_inbox.html` lo aplica antes del primer pintado.
+ * Sin storage (navegación privada) el cambio vale hasta recargar.
+ */
+document.addEventListener('alpine:init', () => {
+    const THEMES = ['lila', 'azul', 'verde', 'naranja', 'rosa', 'grafito'];
+    const DEFAULT_THEME = 'lila';
+    const storageKey = (sessionId) => 'ac-chat-theme:' + sessionId;
+
+    Alpine.data('chatThemePicker', (sessionId) => ({
+        open: false,
+        current: DEFAULT_THEME,
+
+        init() {
+            try {
+                const saved = localStorage.getItem(storageKey(sessionId));
+                if (THEMES.includes(saved)) this.current = saved;
+            } catch (e) {}
+        },
+
+        choose(theme) {
+            if (!THEMES.includes(theme)) return;
+            this.current = theme;
+            const root = document.querySelector('[data-chat-theme-root]');
+            if (root) root.dataset.chatTheme = theme;
+            try {
+                // El lila es el aspecto por defecto: no hace falta guardarlo.
+                if (theme === DEFAULT_THEME) localStorage.removeItem(storageKey(sessionId));
+                else localStorage.setItem(storageKey(sessionId), theme);
+            } catch (e) {}
+            this.open = false;
+        },
+    }));
+});

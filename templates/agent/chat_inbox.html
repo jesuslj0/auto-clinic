@@ -104,14 +104,25 @@ funcionando como antes, recargando al navegar.
     <!-- Hilo -->
     {% comment %}Un hilo sin mensajes, en móvil, llena la pantalla: si no, el
     compositor quedaría a media altura con un hueco vacío debajo.{% endcomment %}
-    <section class="flex min-h-0 flex-col overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line {% if not active_session %}max-lg:hidden{% elif not chat_messages %}max-lg:min-h-[calc(100dvh-8rem)]{% endif %}"
+    <section data-chat-theme-root class="flex min-h-0 flex-col overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line {% if not active_session %}max-lg:hidden{% elif not chat_messages %}max-lg:min-h-[calc(100dvh-8rem)]{% endif %}"
              :class="expanded && 'max-lg:fixed max-lg:inset-0 max-lg:z-[60] max-lg:h-[100dvh] max-lg:min-h-0 max-lg:rounded-none max-lg:ring-0'">
         {% if active_session %}
+        {% comment %}Tema de chat de ESTA conversación, aplicado antes del primer pintado
+        para que no parpadee del lila al elegido. Lo escribe el selector de la
+        cabecera (`chatThemePicker`); un valor desconocido no hace nada.{% endcomment %}
+        <script>
+            (function () {
+                try {
+                    var t = localStorage.getItem('ac-chat-theme:{{ active_session.id }}');
+                    if (t && /^[a-z]{3,10}$/.test(t)) document.currentScript.parentElement.dataset.chatTheme = t;
+                } catch (e) {}
+            })();
+        </script>
         {% include 'agent/_thread_header.html' with session=active_session query=query %}
 
         <div class="relative flex min-h-0 flex-1 flex-col">
         <div x-ref="thread" @scroll.passive="onThreadScroll()" @click="onThreadClick($event)"
-             class="min-h-0 flex-1 space-y-3 overflow-y-auto bg-brand-gradient-soft px-4 py-5 sm:px-6 max-lg:max-h-[60vh] {% if not chat_messages %}flex flex-col max-lg:max-h-none{% endif %}"
+             class="chat-thread-bg min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-5 sm:px-6 max-lg:max-h-[60vh] {% if not chat_messages %}flex flex-col max-lg:max-h-none{% endif %}"
              :class="expanded && 'max-lg:!max-h-none'">
             {% if has_older_messages %}
             <div class="text-center">

@@ -298,6 +298,20 @@ preference, and is toggled by `partials/_theme_toggle.html` (included once per
 sidebar). Its state lives in `window.acTheme`, wired up with a delegated click
 listener, so the partial can be included any number of times.
 
+### Chat themes (per conversation, browser-only)
+
+Each thread has its own look (lila by default, azul, verde, naranja, rosa, grafito),
+picked from the palette button in the thread header. It is **purely visual and
+personal**: stored in `localStorage` under `ac-chat-theme:<session id>`, never in
+the database (so it is not shared between staff or devices, and needs no audit).
+The colours live in `_head_theme.html` as `[data-chat-theme="…"]` rules that set
+`--chat-bg`, `--chat-agent` and `--chat-staff` (outgoing bubbles: agent / staff,
+always white text, tones 600–900 for contrast; the bubble tail uses the same
+variable). Bubbles use `.chat-bubble-agent` / `.chat-bubble-staff`, never a literal
+colour or an inline `--bubble-tail`. An inline script in `chat_inbox.html` applies the
+saved theme before first paint; `chatThemePicker` (`chat_inbox.js`) changes it. The
+agent test chat (`agent/settings/test.html`) is not themed.
+
 ### Real-time (WebSockets)
 
 `Django Channels 4.1` + `channels-redis` + `Daphne` ASGI server. Both consumers (`AppointmentConsumer`, `agent.consumers.ChatConsumer`) extend `core.consumers.ClinicScopedConsumer`: the clinic is taken from `scope['user']`, **never from the URL**, and the group name comes from `core.realtime.clinic_group_name()` (hashed — `clinic_id` is free text). Consumers are read-only; writes stay as HTTP POSTs. Appointment changes broadcast via a `post_save` signal in `appointments/signals.py`. Chat events are emitted from the services in `agent/realtime.py` (not signals), with `transaction.on_commit`, and carry no message content — the browser fetches the rendered fragment. Every event carries the clinic's `total_unread`.
