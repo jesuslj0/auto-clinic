@@ -42,6 +42,7 @@ from core.authentication import ClinicAgent
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ClinicAdminRequiredMixin, ExportMixin, is_clinic_admin
 from core.permissions import IsAgentClinicKey, IsStaffOrAdmin
 from agent.services import patient_chat_access
+from patients import foot_map
 from patients.filters import PatientFilter
 from patients.models import Patient, PatientGuardian
 from patients.serializers import PatientSerializer
@@ -617,6 +618,17 @@ class PatientLesionsTabView(PatientTabView):
             ),
             'view_param': self.view_param,
             'laterality_param': self.laterality_param,
+            # La geometría del dibujo (tamaño, qué combinación se refleja y
+            # dónde va cada rótulo) sale de `patients/foot_map.py`, la única
+            # fuente; la plantilla y el JavaScript no repiten la regla.
+            'foot_map': {
+                'width': foot_map.WIDTH,
+                'height': foot_map.HEIGHT,
+                'views': foot_map.VIEWS,
+                'mirror_transform': foot_map.MIRROR_TRANSFORM,
+                'mirror_table': foot_map.mirror_table(),
+                'scenes': foot_map.build_map_scenes(),
+            },
         })
         # El mapa se pinta igual con formulario y sin él; la plantilla decide.
         context.setdefault('lesion_form', None)

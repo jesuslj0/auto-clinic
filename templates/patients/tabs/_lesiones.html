@@ -3,9 +3,10 @@ Panel «Lesiones»: el mapa del pie, con captura por clic y alta.
 
 Qué hay aquí y qué no:
 
-- Se pintan los marcadores de las lesiones del paciente (`lesions`) sobre un SVG
-  de marcador de posición, con un selector de vista (dorsal/plantar/medial/
-  lateral) y otro de pie (izquierdo/derecho).
+- Se pintan los marcadores de las lesiones del paciente (`lesions`) sobre la
+  ilustración del pie, con un selector de vista (dorsal/plantar/medial/lateral)
+  y otro de pie (izquierdo/derecho). Cada pie tiene su orientación: el otro pie
+  de una vista es el dibujo reflejado (`patients/foot_map.py`).
 - Se puede **marcar un punto en el mapa y registrar allí una lesión**.
 - Pulsando un marcador se abre el **detalle** de esa lesión al lado del mapa, con
   su seguimiento: se pueden **anotar observaciones con sus fotos** y **darla por
@@ -46,6 +47,18 @@ botones son alcanzables con el tabulador.
             //: Modo de marcado: el siguiente clic sobre el mapa sitúa la lesión.
             captura: false,
 
+            /**
+             * ¿Se está viendo el dibujo canónico de la vista reflejado?
+             *
+             * La regla no se repite aquí: llega resuelta desde
+             * `patients/foot_map.py` (`{vista: {pie: bool}}`). Con ella se
+             * refleja el grupo del dibujo y se desrefleja el clic.
+             */
+            get espejo() {
+                const porVista = config.espejo[this.vista] || {};
+                return Boolean(porVista[this.pie]);
+            },
+
             alternarCaptura() {
                 this.captura = !this.captura;
             },
@@ -68,6 +81,12 @@ botones son alcanzables con el tabulador.
              * del dibujo, y además ignoraría cualquier transformación heredada
              * (zoom, `transform` de un contenedor). La matriz lo contempla todo,
              * a cualquier tamaño de pantalla.
+             *
+             * Lo que se devuelve es la fracción del dibujo **canónico**: si la
+             * combinación se ve reflejada, la x se refleja de vuelta
+             * (`1 - x`), que es lo que guarda `Lesion.x`. Así el mismo punto
+             * anatómico vale lo mismo en los dos pies, y el servidor lo vuelve
+             * a reflejar al pintar el marcador (etiqueta `foot_point`).
              */
             fraccionesDelClic(evento) {
                 const svg = evento.currentTarget;
@@ -82,10 +101,11 @@ botones son alcanzables con el tabulador.
                 // recorta al borde en vez de descartarlo, que es lo que el
                 // usuario quería decir. El servidor lo revalida igualmente.
                 const recortar = (valor) => Math.min(1, Math.max(0, valor));
+                const x = recortar((punto.x - caja.x) / caja.width);
                 return {
                     // Cuatro decimales sobre el `viewBox` es una décima de
                     // unidad: más precisión de la que tiene el dedo de nadie.
-                    x: recortar((punto.x - caja.x) / caja.width).toFixed(4),
+                    x: (this.espejo ? 1 - x : x).toFixed(4),
                     y: recortar((punto.y - caja.y) / caja.height).toFixed(4),
                 };
             },
@@ -146,9 +166,11 @@ botones son alcanzables con el tabulador.
         };
     };
 </script>
+{# Qué combinación se ve reflejada: la regla de `patients/foot_map.py`, ya resuelta. #}
+{{ foot_map.mirror_table|json_script:"mapa-lesiones-espejo" }}
 <section
     class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line"
-    x-data="mapaLesiones({ vista: '{{ default_view }}', pie: '{{ default_laterality }}', urlAlta: '{{ lesion_create_url }}' })"
+    x-data="mapaLesiones({ vista: '{{ default_view }}', pie: '{{ default_laterality }}', urlAlta: '{{ lesion_create_url }}', espejo: JSON.parse(document.getElementById('mapa-lesiones-espejo').textContent) })"
     @keydown.escape.window="salirDeCaptura()"
     hx-indicator="#lesiones-spinner"
 >

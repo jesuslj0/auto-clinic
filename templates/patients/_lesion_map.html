@@ -1,13 +1,21 @@
+{% load patient_extras %}
 {% comment %}
-El dibujo del pie: silueta, zonas rotuladas, marcadores y punto pendiente.
+El dibujo del pie: ilustración por vista, rótulos de zona, marcadores y punto
+pendiente.
 
-**Las coordenadas son fracciones, no píxeles.** `lesion.x`/`lesion.y` valen entre
-0 y 1 y se convierten a unidades del `viewBox` multiplicando por su ancho y su
-alto (`{% widthratio lesion.x 1 mapa_ancho %}`). Nada se mide en píxeles: el SVG
-se escala con el contenedor y los marcadores viajan con él a cualquier tamaño.
-Si mañana entra el dibujo definitivo, basta con cambiar el `viewBox` y las dos
-constantes de abajo — los datos no se tocan. Aquí es donde viven, y en ningún
-otro sitio.
+**Cada pie es su propio dibujo.** Hay cuatro dibujos canónicos, uno por vista
+(`patients/_foot_drawing.html`), y el otro pie de cada vista es su imagen
+especular. Qué combinación se refleja lo decide `patients/foot_map.py`, y en
+ningún otro sitio: aquí llega resuelto en `foot_map`. Se refleja **solo el grupo
+del dibujo** (`transform`); los rótulos se pintan aparte, ya colocados para cada
+combinación, porque un texto reflejado no se lee.
+
+**Las coordenadas son fracciones del dibujo canónico, no píxeles.** `lesion.x`/
+`lesion.y` valen entre 0 y 1; `{% foot_point %}` las pasa a unidades del
+`viewBox`, reflejando la x en las combinaciones en espejo. Así una x pequeña en
+dorsal es siempre el lado del hallux, sea el pie que sea, y el SVG escala con el
+contenedor sin que los marcadores se muevan. El clic hace el camino inverso en
+`fraccionesDelClic()`.
 
 **La zona anatómica y las coordenadas son dos datos distintos.** La zona
 (`get_anatomical_zone_display`) es lo clínico y sobrevive a un rediseño del
@@ -25,13 +33,13 @@ Sobre el clic hay **dos gestos distintos y no se pisan**:
   situando una lesión nueva no quiere abrir la de al lado. Eso lo decide
   `abrirDetalle()`, que solo detiene la propagación cuando de verdad va a abrir.
 
-Cada marcador es alcanzable con el tabulador y se activa con Intro o con la barra
-espaciadora: el detalle no puede depender de tener ratón.
+Cada marcador es alcanzable con el tabulador, enseña un anillo al recibir el foco
+y se activa con Intro o con la barra espaciadora: el detalle no puede depender de
+tener ratón. Activa y resuelta se distinguen por color **y** por forma (punto
+frente a marca de verificación).
 {% endcomment %}
-{# Unidades del `viewBox`. Cambiarlas aquí cambia el mapa entero, dibujo y marcadores. #}
-{% with mapa_ancho=400 mapa_alto=520 %}
 <svg
-    viewBox="0 0 {{ mapa_ancho }} {{ mapa_alto }}"
+    viewBox="0 0 {{ foot_map.width }} {{ foot_map.height }}"
     class="h-auto w-full"
     :class="captura ? 'cursor-crosshair' : ''"
     @click="marcarPunto($event)"
@@ -40,88 +48,54 @@ espaciadora: el detalle no puede depender de tener ratón.
     focusable="false"
 >
     <title id="mapa-lesiones-titulo">Mapa del pie</title>
-    <desc id="mapa-lesiones-descripcion">Dibujo esquemático del pie con un marcador por cada lesión registrada en la vista y el pie seleccionados. El resumen que acompaña al mapa da los mismos datos en texto. Con el modo de marcado activo, un clic sobre el dibujo sitúa la lesión que se va a registrar; también se puede abrir el formulario sin marcar ningún punto.</desc>
+    <desc id="mapa-lesiones-descripcion">Ilustración anatómica del pie y la vista seleccionados, con un marcador por cada lesión registrada en esa combinación. Cada pie se dibuja con su propia orientación: en dorsal y plantar el lado medial (el del dedo gordo) queda a un lado u otro según el pie, y en las vistas de perfil los dedos apuntan hacia el lado que corresponde. El resumen que acompaña al mapa da los mismos datos en texto. Con el modo de marcado activo, un clic sobre el dibujo sitúa la lesión que se va a registrar; también se puede abrir el formulario sin marcar ningún punto.</desc>
 
-    {# Silueta vista desde arriba: sirve a la vista dorsal y a la plantar. #}
-    <g x-show="vista === 'dorsal' || vista === 'plantar'" x-cloak>
-        <path
-            d="M 118 178 C 110 140, 130 118, 166 114 C 208 110, 252 110, 278 116 C 298 121, 298 148, 291 180 C 283 232, 267 266, 263 310 C 259 356, 271 388, 267 426 C 263 472, 237 502, 200 502 C 163 502, 139 474, 137 428 C 135 388, 147 356, 143 310 C 139 266, 126 230, 118 178 Z"
-            class="fill-surface stroke-line-strong" stroke-width="3" stroke-linejoin="round" />
-        <ellipse cx="146" cy="80" rx="27" ry="31" class="fill-surface stroke-line-strong" stroke-width="3" />
-        <circle cx="193" cy="66" r="17" class="fill-surface stroke-line-strong" stroke-width="3" />
-        <circle cx="226" cy="71" r="15" class="fill-surface stroke-line-strong" stroke-width="3" />
-        <circle cx="254" cy="79" r="13.5" class="fill-surface stroke-line-strong" stroke-width="3" />
-        <circle cx="278" cy="92" r="12" class="fill-surface stroke-line-strong" stroke-width="3" />
+    {% comment %}--- Dibujos ---
+    Uno por vista. El `transform` lo pone Alpine según el pie (`espejo`); el que
+    escribe el servidor es el de la combinación con la que se abre el mapa, para
+    que el primer pintado ya sea correcto.{% endcomment %}
+    {% foot_transform default_view default_laterality as espejo_inicial %}
+    {% for view in foot_map.views %}
+    <g
+        x-show="vista === '{{ view }}'"
+        x-cloak
+        {% if view == default_view and espejo_inicial %}transform="{{ espejo_inicial }}"{% endif %}
+        :transform="espejo ? '{{ foot_map.mirror_transform }}' : null"
+        data-dibujo="{{ view }}"
+        aria-hidden="true"
+    >
+        {% include 'patients/_foot_drawing.html' with view=view %}
+    </g>
+    {% endfor %}
 
-        {# Zonas rotuladas de la vista dorsal #}
-        <g x-show="vista === 'dorsal'" x-cloak class="fill-content-subtle" font-size="12">
-            <circle cx="146" cy="80" r="3" class="fill-content-faint" />
-            <text x="108" y="84" text-anchor="end">Hallux</text>
-            <circle cx="278" cy="92" r="3" class="fill-content-faint" />
-            <text x="296" y="96" text-anchor="start">5.º dedo</text>
-            <circle cx="152" cy="196" r="3" class="fill-content-faint" />
-            <text x="112" y="200" text-anchor="end">1.er meta.</text>
-            <circle cx="268" cy="206" r="3" class="fill-content-faint" />
-            <text x="296" y="210" text-anchor="start">5.º meta.</text>
-            <circle cx="196" cy="320" r="3" class="fill-content-faint" />
-            <text x="128" y="324" text-anchor="end">Mediopié</text>
-            <circle cx="200" cy="470" r="3" class="fill-content-faint" />
-            <text x="258" y="474" text-anchor="start">Tobillo</text>
-        </g>
-
-        {# Zonas rotuladas de la vista plantar #}
-        <g x-show="vista === 'plantar'" x-cloak class="fill-content-subtle" font-size="12">
-            <circle cx="146" cy="80" r="3" class="fill-content-faint" />
-            <text x="108" y="84" text-anchor="end">Hallux</text>
-            <circle cx="152" cy="196" r="3" class="fill-content-faint" />
-            <text x="112" y="200" text-anchor="end">1.er meta.</text>
-            <circle cx="268" cy="206" r="3" class="fill-content-faint" />
-            <text x="296" y="210" text-anchor="start">5.º meta.</text>
-            <circle cx="160" cy="330" r="3" class="fill-content-faint" />
-            <text x="120" y="334" text-anchor="end">Arco medial</text>
-            <circle cx="200" cy="452" r="3" class="fill-content-faint" />
-            <text x="258" y="456" text-anchor="start">Talón</text>
+    {% comment %}--- Rótulos ---
+    Uno por combinación, ya colocados por `foot_map.scene_labels()`: sin
+    reflejar, con el anclaje del texto intercambiado donde toca. Arriba, el pie y
+    la cara que se están viendo; abajo, hacia dónde queda cada lado.{% endcomment %}
+    {% for scene in foot_map.scenes %}
+    <g
+        x-show="vista === '{{ scene.view }}' && pie === '{{ scene.laterality }}'"
+        x-cloak
+        aria-hidden="true"
+        data-rotulos="{{ scene.view }}-{{ scene.laterality }}"
+        data-espejo="{{ scene.mirrored|yesno:'true,false' }}"
+    >
+        <text x="16" y="24" font-size="13" font-weight="600" class="fill-content-muted">{{ scene.caption }}</text>
+        {% for tag in scene.side_tags %}
+        <text x="{{ tag.x }}" y="{% if scene.view == 'dorsal' or scene.view == 'plantar' %}512{% else %}506{% endif %}" text-anchor="{{ tag.anchor }}" font-size="10.5" font-weight="600" letter-spacing="0.08em" class="fill-content-faint">{{ tag.text|upper }}</text>
+        {% endfor %}
+        <g class="fill-content-subtle" font-size="12">
+            {% for label in scene.labels %}
+            <line x1="{{ label.cx }}" y1="{{ label.cy }}" x2="{{ label.lx }}" y2="{{ label.ly }}" class="stroke-content-faint" stroke-width="0.75" />
+            <circle cx="{{ label.cx }}" cy="{{ label.cy }}" r="2.5" class="fill-content-faint" />
+            <text x="{{ label.tx }}" y="{{ label.ty }}" text-anchor="{{ label.anchor }}">{{ label.text }}</text>
+            {% endfor %}
         </g>
     </g>
-
-    {% comment %}Silueta de perfil: sirve a la vista medial y a la lateral. El
-    dibujo definitivo tendrá una para cada lado; este es provisional.{% endcomment %}
-    <g x-show="vista === 'medial' || vista === 'lateral'" x-cloak>
-        <path
-            d="M 46 404 C 42 378, 58 362, 86 358 C 142 350, 194 340, 234 320 C 270 302, 288 270, 294 228 C 298 198, 314 186, 334 190 C 354 194, 362 214, 358 246 C 352 302, 346 350, 338 388 C 332 414, 314 428, 288 428 L 92 428 C 64 428, 48 420, 46 404 Z"
-            class="fill-surface stroke-line-strong" stroke-width="3" stroke-linejoin="round" />
-
-        {# Zonas rotuladas de la vista medial #}
-        <g x-show="vista === 'medial'" x-cloak class="fill-content-subtle" font-size="12">
-            <circle cx="62" cy="392" r="3" class="fill-content-faint" />
-            <text x="62" y="340" text-anchor="middle">Hallux</text>
-            <circle cx="126" cy="382" r="3" class="fill-content-faint" />
-            <text x="126" y="322" text-anchor="middle">1.er meta.</text>
-            <circle cx="200" cy="410" r="3" class="fill-content-faint" />
-            <text x="200" y="462" text-anchor="middle">Arco medial</text>
-            <circle cx="326" cy="400" r="3" class="fill-content-faint" />
-            <text x="330" y="462" text-anchor="middle">Talón</text>
-            <circle cx="330" cy="220" r="3" class="fill-content-faint" />
-            <text x="330" y="176" text-anchor="middle">Tobillo</text>
-        </g>
-
-        {# Zonas rotuladas de la vista lateral #}
-        <g x-show="vista === 'lateral'" x-cloak class="fill-content-subtle" font-size="12">
-            <circle cx="62" cy="392" r="3" class="fill-content-faint" />
-            <text x="62" y="340" text-anchor="middle">5.º dedo</text>
-            <circle cx="128" cy="384" r="3" class="fill-content-faint" />
-            <text x="128" y="322" text-anchor="middle">5.º meta.</text>
-            <circle cx="210" cy="412" r="3" class="fill-content-faint" />
-            <text x="210" y="462" text-anchor="middle">Borde lateral</text>
-            <circle cx="326" cy="400" r="3" class="fill-content-faint" />
-            <text x="330" y="462" text-anchor="middle">Talón</text>
-            <circle cx="330" cy="220" r="3" class="fill-content-faint" />
-            <text x="330" y="176" text-anchor="middle">Tobillo</text>
-        </g>
-    </g>
+    {% endfor %}
 
     {% comment %}--- Marcadores ---
-    Uno por lesión, en unidades del `viewBox`: (x · ancho, y · alto). Van los del
+    Uno por lesión, en unidades del `viewBox` (`{% foot_point %}`). Van los del
     paciente entero y cada uno se enseña solo en su combinación de vista y pie;
     el filtro lo escribe Django en el `x-show`, Alpine solo lo evalúa.
 
@@ -129,8 +103,7 @@ espaciadora: el detalle no puede depender de tener ratón.
     URL, no los datos: las observaciones se piden al servidor al abrir, no se
     precargan aquí (ver `PatientLesionDetailView`).{% endcomment %}
     {% for lesion in lesions %}
-    {% widthratio lesion.x 1 mapa_ancho as marcador_x %}
-    {% widthratio lesion.y 1 mapa_alto as marcador_y %}
+    {% foot_point lesion.view lesion.laterality lesion.x lesion.y as marcador %}
     <g
         x-show="vista === '{{ lesion.view }}' && pie === '{{ lesion.laterality }}'"
         x-cloak
@@ -138,7 +111,7 @@ espaciadora: el detalle no puede depender de tener ratón.
         tabindex="0"
         aria-label="Abrir el detalle: {{ lesion.get_lesion_type_display }} en {{ lesion.get_anatomical_zone_display }}, {{ lesion.get_status_display|lower }}"
         {% if selected_lesion and lesion.pk == selected_lesion.pk %}aria-current="true"{% endif %}
-        class="focus:outline-none"
+        class="group focus:outline-none"
         :class="captura ? '' : 'cursor-pointer'"
         @click="abrirDetalle($event, '{% url 'patients:lesion-detail' patient.id lesion.pk %}')"
         @keydown.enter.prevent="abrirDetalle($event, '{% url 'patients:lesion-detail' patient.id lesion.pk %}', true)"
@@ -146,21 +119,31 @@ espaciadora: el detalle no puede depender de tener ratón.
         data-lesion="{{ lesion.pk }}"
     >
         <title>{{ lesion.get_lesion_type_display }} en {{ lesion.get_anatomical_zone_display }} · {{ lesion.get_status_display|lower }} · detectada el {{ lesion.detected_at|date:"j \d\e F \d\e Y" }}</title>
+        {# Anillo de foco: con teclado hay que ver qué marcador está activo. #}
+        <circle
+            cx="{{ marcador.cx }}" cy="{{ marcador.cy }}" r="23"
+            class="fill-none stroke-brand-fg opacity-0 transition-opacity group-focus-visible:opacity-100"
+            stroke-width="3" />
         {% comment %}La lesión abierta lleva un halo de marca: el panel de al lado
         habla de una lesión concreta y hay que poder ver de cuál.{% endcomment %}
         {% if selected_lesion and lesion.pk == selected_lesion.pk %}
         <circle
-            cx="{{ marcador_x }}" cy="{{ marcador_y }}" r="26"
+            cx="{{ marcador.cx }}" cy="{{ marcador.cy }}" r="23"
             class="fill-none stroke-brand-500" stroke-width="3" stroke-dasharray="6 4"
             data-lesion-seleccionada="{{ lesion.pk }}" />
         {% endif %}
         <circle
-            cx="{{ marcador_x }}" cy="{{ marcador_y }}" r="18"
+            cx="{{ marcador.cx }}" cy="{{ marcador.cy }}" r="15"
             class="{% if lesion.status == 'active' %}fill-danger-soft stroke-danger{% else %}fill-success-soft stroke-success{% endif %}"
             stroke-width="3" />
-        <circle
-            cx="{{ marcador_x }}" cy="{{ marcador_y }}" r="6"
-            class="{% if lesion.status == 'active' %}fill-danger{% else %}fill-success{% endif %}" />
+        {% if lesion.status == 'active' %}
+        <circle cx="{{ marcador.cx }}" cy="{{ marcador.cy }}" r="5.5" class="fill-danger" />
+        {% else %}
+        {# Resuelta: marca de verificación, para no depender solo del color. #}
+        <path
+            d="M {{ marcador.cx|add:'-6' }} {{ marcador.cy }} l 4 4.5 l 8 -9"
+            class="fill-none stroke-success" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" />
+        {% endif %}
     </g>
     {% endfor %}
 
@@ -169,8 +152,7 @@ espaciadora: el detalle no puede depender de tener ratón.
     y el trazo discontinuo para que no se confunda con una lesión ya registrada,
     y solo mientras el formulario está abierto.{% endcomment %}
     {% if lesion_point %}
-    {% widthratio lesion_point.x 1 mapa_ancho as punto_x %}
-    {% widthratio lesion_point.y 1 mapa_alto as punto_y %}
+    {% foot_point lesion_point.view lesion_point.laterality lesion_point.x lesion_point.y as punto %}
     <g
         x-show="vista === '{{ lesion_point.view }}' && pie === '{{ lesion_point.laterality }}'"
         x-cloak
@@ -179,10 +161,9 @@ espaciadora: el detalle no puede depender de tener ratón.
     >
         <title>Punto marcado para la lesión que se está registrando{% if not lesion_point.marked %} (centro de la vista: no se ha marcado ningún punto){% endif %}</title>
         <circle
-            cx="{{ punto_x }}" cy="{{ punto_y }}" r="20"
+            cx="{{ punto.cx }}" cy="{{ punto.cy }}" r="18"
             class="fill-brand-soft stroke-brand-500" stroke-width="3" stroke-dasharray="7 5" />
-        <circle cx="{{ punto_x }}" cy="{{ punto_y }}" r="5" class="fill-brand-600" />
+        <circle cx="{{ punto.cx }}" cy="{{ punto.cy }}" r="5" class="fill-brand-600" />
     </g>
     {% endif %}
 </svg>
-{% endwith %}

@@ -97,6 +97,11 @@ touching it — see `clinical/README.md` for the full picture:
   separately.** `anatomical_zone` is coded (never free text) and survives an SVG
   redesign; `x`/`y` are 0–1 fractions of the SVG, never pixels, and are only for
   rendering. Never derive one from the other. Location is frozen once created.
+  `x`/`y` are fractions of the view's **canonical drawing** (`patients/foot_map.py`):
+  four drawings, one per view and foot, the other foot is the mirror image
+  (`MIRRORED`). The click is un-mirrored on capture and the marker re-mirrored
+  on render (`{% foot_point %}`); labels are never mirrored. Keep that rule in
+  `foot_map.py` only — the template and the JS read it from there.
 - **A lesion is a series, not a datum.** `LesionObservation` holds what was seen
   on each visit (measurements in mm as separate numeric fields — comparing them
   over time is the whole point) and `LesionAttachment` holds that day's photo.

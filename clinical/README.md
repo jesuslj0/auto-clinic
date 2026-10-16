@@ -336,6 +336,15 @@ pantalla y un píxel no significa nada fuera del tamaño en que se marcó. Se
 defiende en tres sitios: validadores del campo (formularios y admin), `save()`
 (el ORM) y un `CheckConstraint` (la base de datos).
 
+Son fracciones del **dibujo canónico** de su vista, no de lo que se ve en
+pantalla. Hay cuatro dibujos (uno por vista, cada uno de un pie concreto) y el
+otro pie se pinta reflejándolo; la regla y los rótulos viven en
+`patients/foot_map.py`. Así `x` pequeña en dorsal es siempre el lado del hallux,
+en los dos pies: el clic se desrefleja al capturarlo y el marcador se vuelve a
+reflejar al pintarlo. El dibujo provisional anterior pintaba las ocho
+combinaciones en esa misma orientación canónica, por lo que las lesiones ya
+registradas no necesitaron migración.
+
 ### Estado y localización
 
 ```python

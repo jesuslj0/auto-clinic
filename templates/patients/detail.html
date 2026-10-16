@@ -14,7 +14,7 @@ Ficha del paciente. Tres piezas, de arriba abajo:
 
 {% block title %}{{ patient }} · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
 {% block page_heading %}{{ patient }}{% endblock %}
-{% block page_subheading %}<p class="truncate text-xs text-content-subtle sm:text-sm">Ficha del paciente</p>{% endblock %}
+{% block page_subheading %}<p class="hidden truncate text-sm text-content-subtle sm:block">Ficha del paciente</p>{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
