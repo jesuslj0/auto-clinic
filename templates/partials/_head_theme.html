@@ -417,14 +417,14 @@ opacidades sobre ellos (bg-surface/90, ring-line/70…).
        grupo está abierto; aquí está lo que cada uno significa.
 
        Abierto: el activo de verdad —borde y degradado— se lo queda el hijo
-       seleccionado, que está a la vista, y la cabecera se conforma con un
-       subrayado suave. Cerrado con un hijo seleccionado: la cabecera es lo
+       seleccionado, que está a la vista, y la cabecera se conforma con el
+       texto en negrita. Cerrado con un hijo seleccionado: la cabecera es lo
        único que queda de él, así que recupera el activo entero. El color del
        icono y del texto cuelga de estas clases, y no de utilidades sueltas en
        la plantilla, porque la cabecera cambia de estado sin recargar. */
     .sidebar-group-open { @apply border-transparent bg-transparent text-content hover:bg-muted; }
     .sidebar-group-open .sidebar-group-icon { @apply text-content-muted; }
-    .sidebar-group-open .sidebar-group-label { @apply font-semibold text-content underline decoration-brand-fg/50 decoration-2 underline-offset-4; }
+    .sidebar-group-open .sidebar-group-label { @apply font-semibold text-content; }
 
     .sidebar-group-active { @apply border-brand-line bg-brand-soft; }
     .sidebar-group-active .sidebar-group-icon { @apply text-brand-fg; }

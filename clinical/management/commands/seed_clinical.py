@@ -294,7 +294,7 @@ LESION_CASES = [
             'laterality': Lesion.Laterality.LEFT,
             'view': Lesion.View.PLANTAR,
             'anatomical_zone': Lesion.AnatomicalZone.FIRST_METATARSAL,
-            'x': 0.38, 'y': 0.62,
+            'x': 0.36, 'y': 0.38,
             'lesion_type': Lesion.LesionType.ULCER,
             'resolve': False,
             # `days_ago` cuenta hacia atrás desde hoy: la serie va de más

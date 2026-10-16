@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.utils.formats import number_format
 
 from clinical.snapshots import is_answered
+from patients import foot_map
 
 register = template.Library()
 
@@ -179,3 +180,36 @@ def answer_display(entry):
     if isinstance(answer, (list, tuple)):
         return ', '.join(str(item) for item in answer)
     return str(answer)
+
+
+# ---------------------------------------------------------------------------
+# Mapa del pie
+# ---------------------------------------------------------------------------
+#
+# La regla de qué combinación se refleja vive en `patients/foot_map.py`; estas
+# etiquetas solo la aplican al pintar. Los marcadores no se reflejan con un
+# `transform`: se calcula aquí su posición en pantalla, para que lo que llevan
+# dentro (el símbolo de «resuelta») se lea derecho en los dos pies.
+
+@register.simple_tag
+def foot_point(view, laterality, x, y):
+    """Dónde se pinta, en unidades del `viewBox`, un punto guardado (x, y).
+
+    `x`/`y` son fracciones del dibujo canónico de la vista; en las combinaciones
+    reflejadas la x se refleja. Se redondea a la unidad, como hacía
+    `{% widthratio %}`: una unidad del `viewBox` es menos que un píxel.
+    """
+    try:
+        fx, fy = float(x), float(y)
+    except (TypeError, ValueError):
+        return {'cx': 0, 'cy': 0}
+    return {
+        'cx': round(foot_map.canonical_x(fx, view, laterality) * foot_map.WIDTH),
+        'cy': round(fy * foot_map.HEIGHT),
+    }
+
+
+@register.simple_tag
+def foot_transform(view, laterality):
+    """El `transform` del dibujo de esa combinación (cadena vacía si no refleja)."""
+    return foot_map.mirror_transform(view, laterality)
