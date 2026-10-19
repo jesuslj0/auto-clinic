@@ -242,7 +242,7 @@ Panel map (namespace in brackets):
 | `/servicios/` (`services`) | `crear/`, `<pk>/editar/`, `<pk>/eliminar/` |
 | `/conocimiento/` (`knowledge`) | `crear/`, `<uuid>/editar/`, `<uuid>/eliminar/` |
 | `/chats/` (`agent`) | `agente/`, `lista/`, `adjuntos/<uuid>/`, `<uuid>/` (`mensajes/`, `enviar/`, `escribiendo/`, `modo/`) |
-| `/agente/` (`agent_settings`, admins only) | test chat at the root («Chat»), `probar/enviar/`, `personalidad/`, `configuracion/` (Meta credentials + webhook, two forms told apart by a hidden `form` field) — views in `agent/settings_views.py` |
+| `/agente/` (`agent_settings`, admins only) | test chat at the root («Chat»), `probar/enviar/`, `personalidad/`, `plantillas/` (+ `nueva/`, `sincronizar/`, `<pk>/` with `enviar/`, `duplicar/`, `eliminar/`), `configuracion/` (Meta credentials + webhook, two forms told apart by a hidden `form` field) — views in `agent/settings_views.py` and `agent/template_views.py` |
 | `/facturacion/` (`billing`) | `nueva/`, `pendientes/`, `<pk>/` (`emitir/`, `anular/`, `cobrar/`, `procedimientos/`, `eliminar/`) |
 | `/clinico/` (`clinical`) | `procedimientos/` (listado global), `adjuntos/<uuid>/`, `consentimientos/<uuid>/firma/` |
 
@@ -260,6 +260,43 @@ WhatsApp and the panel-test path — in the `Cargar Perfil Agente` node, and pas
 the default tone. The fixed rules come *after* the block and it says it cannot
 override them. Free text is flattened to one quoted line, so it cannot open a
 new prompt section. Audited via `audit.registry`.
+
+### WhatsApp templates (`agent.WhatsAppTemplate`)
+
+Outside the 24 h window WhatsApp only allows approved templates. The tab
+`/agente/plantillas/` lists, creates and edits them (admins only) and shows the
+state Meta gave each one: `draft` → `pending` → `approved` / `rejected` (also
+`paused`, `disabled`). Rules:
+
+- **The local state mirrors Meta's.** Only `wa_templates.submit_template()` and
+  `sync_templates()` move it; the panel never marks a template approved by hand.
+- **Editable only as `draft` or `rejected`.** Fixing a rejected one sends it back to
+  `draft`, and resubmitting it *updates* the same template in Meta (`meta_template_id`)
+  instead of creating a duplicate name. Once Meta knows it, `name`/`language` are
+  frozen (they are its identity there). Anything else is read-only: «Duplicar» makes
+  a new draft.
+- **Only unsent drafts can be deleted** (`is_deletable`); the rest also live in Meta.
+- **Text rules are validated before sending** (`WhatsAppTemplateForm`): variables
+  `{{1}}…{{n}}` consecutive, not at the start or end, none in header/footer, one example
+  per variable. Components supported: text header, body, footer. Templates imported by
+  sync with buttons/media/other categories get `has_unsupported_components` and are
+  read-only, so resubmitting never silently drops them.
+- **Needs `Clinic.whatsapp_business_account_id`** (the WABA, not the Phone Number ID),
+  saved in the «Configuración» tab and digits-only because it goes into the Graph URL.
+  Without it the tab still lets staff draft templates.
+- Registered in the audit trail. No REST API, nothing n8n can reach.
+
+**Sending one to a patient.** With the 24 h window closed (`can_send_free_text` false)
+the composer swaps the text box for a template picker (`_composer.html` +
+`static/js/chat_template_picker.js`); with it open there is no picker, since a template
+is a paid send. `POST /chats/<id>/plantilla/` → `agent.services.send_staff_template()`,
+which goes straight to the Cloud API like staff text (no n8n, the agent is not told),
+records a `ChatMessage` of type `template` (body = header + filled body + footer, `raw` =
+template name/language/values) and ends `sent`/`failed`. Only `is_sendable` templates
+(`approved`, no unsupported components) of the thread's own clinic, one non-empty value
+per variable (flattened to one line: Meta refuses newlines in variables). Only body
+parameters are supported. A session must already exist: starting a conversation with a
+patient who never wrote is not built (the patient file says so).
 
 ### REST API
 
@@ -338,10 +375,42 @@ message as **read** in WhatsApp — Meta offers no typing without read.
 ### Background tasks (Celery)
 
 Configured in `config/celery.py`. Beat schedule runs:
-- `dispatch_24h_reminders` — every hour, for appointments in 24h
-- `dispatch_2h_reminders` — every 15 minutes, for appointments in 2h
+- `expire_appointment_holds` — every 10 minutes
+- `send_whatsapp_reminders_24h` — every 15 minutes (see below)
 
 Broker: Redis DB 1. Result backend: Redis DB 2. Channel layer: Redis DB 0.
+
+**24 h reminder by WhatsApp (`notifications/whatsapp_reminders.py`).** Django sends it, not
+n8n (`WA-Reminder-24h-Scheduler` must stay off: it was an unfinished skeleton that never
+marked the send, so it would repeat hourly). Rules:
+
+- **Which appointments**: `appointments.reminders.pending_reminder_queryset()`, the same
+  function behind `GET /api/appointments/pending-reminders/` (accepted by the clinic, patient
+  has not answered, not yet sent), narrowed to 22–24 h before so an outage of up to 2 h loses
+  nothing.
+- **Which template**: the one the clinic marks «Usar como recordatorio» in Agente → Plantillas
+  (`WhatsAppTemplate.purpose = reminder_24h`, one per clinic). It must be approved, with its
+  variables numbered consecutively. **No template marked = that clinic sends no reminders** (it
+  is the on/off switch). The text should ask the patient to answer SÍ or NO.
+- **What goes in each variable**: `WhatsAppTemplate.variable_map` (`{"1": "patient_first_name", …}`),
+  chosen on `/agente/plantillas/<pk>/recordatorio/` from the closed list in
+  `appointments/reminder_fields.py`: patient first/full name, clinic name, date, time (clinic
+  timezone), professional, clinic address. **The service and any clinical data are left out on
+  purpose**: the message goes through Meta, and a service name is health data. Adding a field
+  there is a privacy decision. If an appointment lacks the chosen data (e.g. no professional),
+  nothing is sent with an empty slot (Meta rejects it): a `failed` note with the reason is left
+  in the thread and it counts as an attempt.
+- **State it leaves** (other parts depend on it): `reminder_24h_sent`/`_at` on the appointment —
+  the n8n orchestrator decides «this "sí" answers the reminder» with
+  `reminder_24h_sent=true&reminder_responded=false&status=confirmed`, so do not stop setting it
+  — and a `ChatMessage` of type `template` in the thread, sender `agent` (not `staff`: staff
+  messages pause the agent, and the patient's reply would go unanswered).
+- **Safety**: row lock (`select_for_update(skip_locked)`) against overlapping runs; failures
+  leave a visible `failed` message and are retried every tick up to `MAX_ATTEMPTS` (3) for that
+  appointment time; a rescheduled appointment resets its flags and is reminded again.
+- Pending: the 3 h follow-up (`WA-Reminder-3h-Followup-Scheduler`, off) still has to move over;
+  outside the window it also needs a template. The email tasks `dispatch_*_reminders` stay out
+  of the schedule on purpose.
 
 ### Antelación mínima de reserva
 

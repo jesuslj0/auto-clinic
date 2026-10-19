@@ -229,11 +229,20 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'appointments.tasks.expire_appointment_holds',
         'schedule': 600.0,
     },
-    # Los recordatorios al paciente (24h/3h) los manda n8n por WhatsApp, no Django:
-    # consume `GET /api/appointments/pending-reminders/`. Las tareas
-    # `notifications.tasks.dispatch_*_reminders` (que enviaban un email paralelo)
-    # se dejan fuera del schedule a propósito para no duplicar el aviso. El código
-    # sigue en `notifications/tasks.py` por si algún día se quiere el email.
+    # Recordatorio de cita por WhatsApp a las 24 h: lo manda Django con la
+    # plantilla aprobada que la clínica marque como «Recordatorio de cita». Cada
+    # 15 minutos; la ventana (22-24 h antes) y el flag `reminder_24h_sent`
+    # impiden que se mande dos veces. El workflow `WA-Reminder-24h-Scheduler` de
+    # n8n tiene que seguir APAGADO (o borrado): mandaría el aviso duplicado, y
+    # además no marca el envío, así que lo repetiría cada hora.
+    #
+    # El de 3 h sigue pendiente (lo haría `WA-Reminder-3h-Followup-Scheduler`).
+    # Las tareas `notifications.tasks.dispatch_*_reminders` (email) quedan fuera a
+    # propósito, por el mismo motivo.
+    'send-whatsapp-reminders-24h': {
+        'task': 'notifications.tasks.send_whatsapp_reminders_24h',
+        'schedule': 900.0,
+    },
 }
 
 AGENT_MASTER_API_KEY = config('AGENT_MASTER_API_KEY', default='')

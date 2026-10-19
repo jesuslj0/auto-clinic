@@ -46,6 +46,20 @@
                     {% if meta_form.whatsapp_phone_number_id.errors %}<p class="mt-1 text-xs text-danger">{{ meta_form.whatsapp_phone_number_id.errors|join:", " }}</p>{% endif %}
                 </div>
 
+                {# WhatsApp Business Account ID #}
+                <div>
+                    <label for="{{ meta_form.whatsapp_business_account_id.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ meta_form.whatsapp_business_account_id.label }}</label>
+                    <input type="text"
+                           name="{{ meta_form.whatsapp_business_account_id.html_name }}"
+                           id="{{ meta_form.whatsapp_business_account_id.id_for_label }}"
+                           value="{{ meta_form.whatsapp_business_account_id.value|default:'' }}"
+                           inputmode="numeric"
+                           placeholder="Ej. 109876543210987"
+                           class="block w-full rounded-xl border {% if meta_form.whatsapp_business_account_id.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                    <p class="mt-1.5 text-xs text-content-faint">{{ meta_form.whatsapp_business_account_id.help_text }}</p>
+                    {% if meta_form.whatsapp_business_account_id.errors %}<p class="mt-1 text-xs text-danger">{{ meta_form.whatsapp_business_account_id.errors|join:", " }}</p>{% endif %}
+                </div>
+
                 {# Token permanente #}
                 <div>
                     <div class="mb-1.5 flex items-center justify-between">
@@ -90,7 +104,7 @@
             <h4 class="text-sm font-semibold text-content">Dónde encontrarlas</h4>
             <ol class="mt-4 space-y-3 text-sm text-content-muted">
                 <li class="flex gap-3"><span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-fg">1</span><span>Entra en <span class="font-medium text-content">Meta for Developers</span> y abre la app de tu clínica.</span></li>
-                <li class="flex gap-3"><span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-fg">2</span><span>Ve a <span class="font-medium text-content">WhatsApp → API Setup</span> y copia el <span class="font-medium text-content">Phone Number ID</span>.</span></li>
+                <li class="flex gap-3"><span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-fg">2</span><span>Ve a <span class="font-medium text-content">WhatsApp → API Setup</span> y copia el <span class="font-medium text-content">Phone Number ID</span> y el <span class="font-medium text-content">ID de la cuenta de WhatsApp Business</span>.</span></li>
                 <li class="flex gap-3"><span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-fg">3</span><span>Genera un token <span class="font-medium text-content">permanente</span> desde un usuario del sistema; el temporal caduca en 24 horas.</span></li>
             </ol>
         </aside>

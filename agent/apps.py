@@ -9,7 +9,7 @@ class AgentConfig(AppConfig):
     def ready(self):
         from audit import registry
 
-        from agent.models import AgentProfile, ChatAttachment, ChatMessage
+        from agent.models import AgentProfile, ChatAttachment, ChatMessage, WhatsAppTemplate
 
         # Con conversaciones reales, el hilo contiene texto de salud de
         # pacientes: se audita como dato clínico. `body` y `raw` son sensibles,
@@ -32,3 +32,5 @@ class AgentConfig(AppConfig):
         # No es dato clínico, pero cambia lo que el bot dice a los pacientes:
         # «¿quién cambió el tono el martes?» tiene que tener respuesta.
         registry.register(AgentProfile)
+        # Es lo que se manda a los pacientes fuera de la ventana de 24 h.
+        registry.register(WhatsAppTemplate)

@@ -29,21 +29,22 @@ def _graph_url(clinic, path):
     return f'https://graph.facebook.com/{version}/{clinic.whatsapp_phone_number_id}/{path}'
 
 
-def _call(clinic, path, *, body, content_type, timeout):
-    """POST a la Graph API y devuelve el cuerpo de la respuesta.
+def _call(clinic, path, *, body, content_type, timeout, url=None, method='POST'):
+    """Llama a la Graph API y devuelve el cuerpo de la respuesta.
 
-    Lanza ``WhatsAppError`` con un mensaje en castellano si Meta lo rechaza o no
-    se le puede contactar.
+    `url` sustituye a la del número de teléfono (las plantillas cuelgan de la
+    cuenta de WhatsApp Business, no del número). Lanza ``WhatsAppError`` con un
+    mensaje en castellano si Meta lo rechaza o no se le puede contactar.
     """
     _require_config(clinic)
+    headers = {'Authorization': f'Bearer {clinic.whatsapp_token}'}
+    if body is not None:
+        headers['Content-Type'] = content_type
     request = urllib.request.Request(
-        _graph_url(clinic, path),
+        url or _graph_url(clinic, path),
         data=body,
-        method='POST',
-        headers={
-            'Content-Type': content_type,
-            'Authorization': f'Bearer {clinic.whatsapp_token}',
-        },
+        method=method,
+        headers=headers,
     )
 
     try:
@@ -89,6 +90,29 @@ def send_text(clinic, phone, body):
         'text': {'preview_url': False, 'body': body},
     })
 
+    return _wamid(raw)
+
+
+def send_template(clinic, phone, name, language, body_params=()):
+    """Envía una plantilla aprobada y devuelve el ``wamid``.
+
+    Es lo único que WhatsApp deja mandar fuera de las 24 h desde el último
+    mensaje del paciente. `body_params` son los valores de ``{{1}}``, ``{{2}}``…
+    en orden. Solo cubre cuerpo con texto: es lo que el panel sabe redactar.
+    """
+    template = {'name': name, 'language': {'code': language}}
+    if body_params:
+        template['components'] = [{
+            'type': 'body',
+            'parameters': [{'type': 'text', 'text': value} for value in body_params],
+        }]
+    raw = _post_message(clinic, {
+        'messaging_product': 'whatsapp',
+        'recipient_type': 'individual',
+        'to': phone,
+        'type': 'template',
+        'template': template,
+    })
     return _wamid(raw)
 
 
@@ -159,11 +183,73 @@ def send_typing(clinic, wa_message_id):
     }, timeout=5)
 
 
+def _waba_url(clinic, path):
+    if not clinic.whatsapp_business_account_id:
+        raise WhatsAppError(
+            'Falta el ID de la cuenta de WhatsApp Business. Añádelo en Configuración.'
+        )
+    version = getattr(settings, 'WHATSAPP_GRAPH_API_VERSION', 'v26.0')
+    return f'https://graph.facebook.com/{version}/{path}'.replace(
+        '{waba}', clinic.whatsapp_business_account_id
+    )
+
+
+def _json_request(clinic, url, *, method, payload=None, timeout=20):
+    raw = _call(
+        clinic,
+        '',
+        url=url,
+        method=method,
+        body=json.dumps(payload).encode('utf-8') if payload is not None else None,
+        content_type='application/json',
+        timeout=timeout,
+    )
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise WhatsAppError('WhatsApp devolvió una respuesta que no se entiende.') from exc
+
+
+def create_template(clinic, payload):
+    """Envía una plantilla nueva a revisión y devuelve la respuesta de Meta (`id`, `status`)."""
+    return _json_request(
+        clinic, _waba_url(clinic, '{waba}/message_templates'), method='POST', payload=payload
+    )
+
+
+def update_template(clinic, template_id, payload):
+    """Reenvía a revisión una plantilla que Meta ya conoce (la rechazada y corregida)."""
+    version = getattr(settings, 'WHATSAPP_GRAPH_API_VERSION', 'v26.0')
+    return _json_request(
+        clinic,
+        f'https://graph.facebook.com/{version}/{template_id}',
+        method='POST',
+        payload=payload,
+    )
+
+
+def list_templates(clinic):
+    """Todas las plantillas de la cuenta, con su estado actual, paginando."""
+    fields = 'id,name,language,status,category,rejected_reason,components'
+    url = _waba_url(clinic, f'{{waba}}/message_templates?limit=100&fields={fields}')
+    templates = []
+    # Tope de páginas: una respuesta mal formada no puede dejarnos en bucle.
+    for _ in range(20):
+        data = _json_request(clinic, url, method='GET')
+        templates.extend(data.get('data') or [])
+        url = (data.get('paging') or {}).get('next')
+        if not url:
+            break
+    return templates
+
+
 def _describe_http_error(exc):
     detail = ''
     try:
         payload = json.loads(exc.read().decode('utf-8', errors='replace'))
-        detail = (payload.get('error') or {}).get('message', '')
+        error = payload.get('error') or {}
+        # `error_user_msg` explica el fallo en claro (p. ej. por qué rechaza una plantilla).
+        detail = error.get('error_user_msg') or error.get('message', '')
     except (json.JSONDecodeError, AttributeError, TypeError, ValueError):
         pass
 

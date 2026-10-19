@@ -1,0 +1,181 @@
+{% extends 'agent/settings/_layout.html' %}
+{% load static %}
+{% comment %}
+Crear / editar una plantilla. La vista previa y la detección de variables
+({{n}}) las hace `static/js/wa_template_form.js`; las reglas de verdad las valida
+Django. Una plantilla que ya no se puede editar se muestra en solo lectura.
+{% endcomment %}
+
+{% block tab_heading %}{% if template %}{{ template.name }}{% else %}Nueva plantilla{% endif %}{% endblock %}
+{% block tab_subheading %}{% if readonly %}Esta plantilla ya no se puede modificar. Duplícala para preparar una versión nueva.{% else %}Escribe el mensaje tal como lo recibirá el paciente. Usa {% templatetag openvariable %}1{% templatetag closevariable %}, {% templatetag openvariable %}2{% templatetag closevariable %}… para los datos que cambian en cada envío.{% endif %}{% endblock %}
+
+{% block tab_content %}
+{{ init|json_script:"tpl-init" }}
+<div x-data="waTemplateForm(JSON.parse(document.getElementById('tpl-init').textContent))"
+     class="grid gap-6 [&>*]:min-w-0 lg:grid-cols-5 lg:items-start">
+
+    {# ── Formulario ── #}
+    <form method="post" novalidate
+          @input="dirty = true" @change="dirty = true"
+          class="flex flex-col gap-6 rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6 lg:col-span-3">
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+        <div class="rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line">
+            {% for error in form.non_field_errors %}<p class="text-sm text-danger">{{ error }}</p>{% endfor %}
+        </div>
+        {% endif %}
+
+        {% if template and template.status == 'rejected' %}
+        <div class="rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line">
+            <p class="text-sm font-semibold text-danger">Meta rechazó esta plantilla</p>
+            <p class="mt-0.5 text-sm text-danger">{{ template.rejection_reason|default:"No indicó el motivo. Revisa el texto y vuelve a enviarla." }}</p>
+        </div>
+        {% endif %}
+
+        <fieldset {% if readonly %}disabled{% endif %} class="contents">
+            {# Nombre #}
+            <div>
+                <label for="{{ form.name.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.name.label|capfirst }}</label>
+                <input type="text" name="{{ form.name.html_name }}" id="{{ form.name.id_for_label }}"
+                       value="{{ form.name.value|default:'' }}" x-model="name" @blur="normalizeName()"
+                       {% if form.name.field.disabled %}disabled{% endif %}
+                       maxlength="100" placeholder="Ej. recordatorio_de_cita"
+                       class="block w-full rounded-xl border {% if form.name.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 font-mono text-sm text-content shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 disabled:bg-muted disabled:text-content-subtle">
+                <p class="mt-1.5 text-xs text-content-faint">{{ form.name.help_text }}</p>
+                {% if form.name.errors %}<p class="mt-1 text-xs text-danger">{{ form.name.errors|join:", " }}</p>{% endif %}
+            </div>
+
+            <div class="grid gap-6 sm:grid-cols-2">
+                <div>
+                    <label for="{{ form.language.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.language.label|capfirst }}</label>
+                    <select name="{{ form.language.html_name }}" id="{{ form.language.id_for_label }}"
+                            {% if form.language.field.disabled %}disabled{% endif %}
+                            class="block w-full rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-muted disabled:text-content-subtle">
+                        {% for value, label in form.language.field.choices %}
+                        <option value="{{ value }}" {% if form.language.value == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if form.language.errors %}<p class="mt-1 text-xs text-danger">{{ form.language.errors|join:", " }}</p>{% endif %}
+                </div>
+                <div>
+                    <label for="{{ form.header_text.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.header_text.label|capfirst }} <span class="font-normal text-content-faint">(opcional)</span></label>
+                    <input type="text" name="{{ form.header_text.html_name }}" id="{{ form.header_text.id_for_label }}"
+                           value="{{ form.header_text.value|default:'' }}" x-model="header" maxlength="60" placeholder="Ej. Tu cita"
+                           class="block w-full rounded-xl border {% if form.header_text.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2">
+                    {% if form.header_text.errors %}<p class="mt-1 text-xs text-danger">{{ form.header_text.errors|join:", " }}</p>{% endif %}
+                </div>
+            </div>
+
+            {% include 'agent/settings/_choice_cards.html' with field=form.category columns='2' %}
+            <p class="-mt-4 text-xs text-content-faint"><span class="font-medium">Utilidad</span>: recordatorios, confirmaciones y avisos de una cita ya pedida. <span class="font-medium">Marketing</span>: promociones y novedades; Meta las revisa con más rigor.</p>
+
+            {# Mensaje #}
+            <div>
+                <div class="mb-1.5 flex items-baseline justify-between gap-3">
+                    <label for="{{ form.body.id_for_label }}" class="block text-sm font-medium text-content-muted">{{ form.body.label|capfirst }}</label>
+                    <span class="text-xs tabular-nums text-content-faint"><span x-text="body.length"></span>/1024</span>
+                </div>
+                <textarea name="{{ form.body.html_name }}" id="{{ form.body.id_for_label }}" x-ref="body" x-model="body"
+                          rows="6" maxlength="1024"
+                          placeholder="Hola {% templatetag openvariable %}1{% templatetag closevariable %}, te recordamos tu cita del {% templatetag openvariable %}2{% templatetag closevariable %} en nuestra clínica. Responde a este mensaje si necesitas cambiarla."
+                          class="block w-full rounded-xl border {% if form.body.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2">{{ form.body.value|default:'' }}</textarea>
+                {% if not readonly %}
+                <button type="button" @click="addVariable()" class="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-brand-soft px-2.5 py-1 text-xs font-semibold text-brand-fg ring-1 ring-brand-line transition hover:opacity-80">
+                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                    Insertar variable
+                </button>
+                {% endif %}
+                {% if form.body.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.body.errors|join:" " }}</p>{% endif %}
+            </div>
+
+            {# Ejemplos de las variables #}
+            <div x-show="variables.length" x-cloak class="rounded-2xl bg-muted p-4 ring-1 ring-line">
+                <p class="text-sm font-medium text-content">Ejemplos de las variables</p>
+                <p class="mt-0.5 text-xs text-content-subtle">Meta pide un valor de muestra para cada una al revisar la plantilla. No se envían a nadie.</p>
+                <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                    <template x-for="n in variables" :key="n">
+                        <label class="block">
+                            <span class="mb-1 block text-xs font-medium text-content-muted">Ejemplo de <span class="font-mono" x-text="'{' + '{' + n + '}' + '}'"></span></span>
+                            <input type="text" name="examples" x-model="examples[n - 1]" maxlength="100"
+                                   class="block w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        </label>
+                    </template>
+                </div>
+            </div>
+
+            {# Pie #}
+            <div>
+                <label for="{{ form.footer.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.footer.label|capfirst }} <span class="font-normal text-content-faint">(opcional)</span></label>
+                <input type="text" name="{{ form.footer.html_name }}" id="{{ form.footer.id_for_label }}"
+                       value="{{ form.footer.value|default:'' }}" x-model="footer" maxlength="60" placeholder="Ej. {{ clinic_obj.name }}"
+                       class="block w-full rounded-xl border {% if form.footer.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2">
+                {% if form.footer.errors %}<p class="mt-1 text-xs text-danger">{{ form.footer.errors|join:", " }}</p>{% endif %}
+            </div>
+        </fieldset>
+
+        <div class="flex items-center justify-end gap-3 border-t border-line pt-5">
+            <a href="{% url 'agent_settings:templates' %}" class="btn-secondary">{% if readonly %}Volver{% else %}Cancelar{% endif %}</a>
+            {% if not readonly %}
+            <p x-show="dirty" x-cloak class="text-xs font-medium text-warning">Cambios sin guardar</p>
+            <button type="submit" {% if not form.is_bound and template %}disabled{% endif %}
+                    :disabled="!dirty" class="btn-primary disabled:cursor-not-allowed disabled:opacity-40">
+                {% if template %}Guardar cambios{% else %}Crear plantilla{% endif %}
+            </button>
+            {% endif %}
+        </div>
+    </form>
+
+    {# ── Vista previa + estado ── #}
+    <aside class="space-y-4 lg:sticky lg:top-6 lg:col-span-2">
+        <div class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line">
+            <h3 class="text-sm font-semibold text-content">Así lo verá el paciente</h3>
+            <div class="mt-3 rounded-2xl bg-muted p-4">
+                <div class="rounded-xl rounded-tl-sm bg-surface px-3.5 py-2.5 text-sm leading-relaxed text-content shadow-sm ring-1 ring-line">
+                    <p x-show="header" class="mb-1 break-words font-semibold" x-text="header"></p>
+                    <p class="whitespace-pre-line break-words" x-text="previewBody || 'Escribe el mensaje…'" :class="body ? '' : 'text-content-faint'"></p>
+                    <p x-show="footer" class="mt-1.5 break-words text-xs text-content-subtle" x-text="footer"></p>
+                </div>
+            </div>
+        </div>
+
+        {% if template %}
+        <div class="space-y-3 rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line">
+            <div class="flex items-center justify-between gap-3">
+                <h3 class="text-sm font-semibold text-content">Estado</h3>
+                {% include 'agent/settings/_template_status.html' with status=template.status %}
+            </div>
+            <p class="text-sm text-content-muted">
+                {% if template.status == 'draft' %}Todavía no se ha enviado a Meta. Guárdala y envíala a revisión para poder usarla.
+                {% elif template.status == 'pending' %}Meta la está revisando. Suele tardar unos minutos; usa «Actualizar estados» en el listado.
+                {% elif template.status == 'approved' %}Aprobada: el personal ya puede enviarla desde el chat de un paciente cuya ventana de 24 h esté cerrada.
+                {% elif template.status == 'rejected' %}Corrige el texto, guarda y reenvíala a revisión.
+                {% elif template.status == 'paused' %}Meta la ha pausado por su calidad. Vuelve a activarse sola pasado un tiempo.
+                {% else %}Meta la ha desactivado. Crea una versión nueva.{% endif %}
+            </p>
+            {% if template.status == 'draft' or template.status == 'rejected' %}
+                {% if can_use_meta and not readonly %}
+                <form method="post" action="{% url 'agent_settings:template-submit' template.pk %}"
+                      @submit="if (dirty && !confirm('Hay cambios sin guardar que no se enviarán. ¿Continuar?')) $event.preventDefault()">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-primary w-full">{% if template.status == 'rejected' %}Reenviar a revisión{% else %}Enviar a revisión{% endif %}</button>
+                </form>
+                {% elif not can_use_meta %}
+                <a href="{% url 'agent_settings:config' %}" class="block text-sm font-medium text-brand-fg hover:underline">Conecta la cuenta de WhatsApp Business para enviarla</a>
+                {% endif %}
+            {% endif %}
+            {% if readonly %}
+            <form method="post" action="{% url 'agent_settings:template-duplicate' template.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn-secondary w-full">Duplicar como borrador</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endif %}
+    </aside>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'js/wa_template_form.js' %}"></script>
+{% endblock %}

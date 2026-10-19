@@ -129,6 +129,15 @@ class Clinic(models.Model):
     logo_url = models.URLField(blank=True)
     logo = models.ImageField(upload_to='clinic_logos/', blank=True)
     whatsapp_phone_number_id = models.CharField(max_length=100, blank=True)
+    whatsapp_business_account_id = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        help_text=(
+            "ID de la cuenta de WhatsApp Business (WABA). Meta lo exige para "
+            "gestionar las plantillas de mensaje; el Phone Number ID no sirve."
+        ),
+    )
     whatsapp_token = models.CharField(
         max_length=500,
         blank=True,
