@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from agent.models import AgentMemory, AgentProfile, ChatMessage, ConversationSession, WorkflowError
+from agent.models import AgentMemory, AgentProfile, ChatMessage, ConversationSession, WhatsAppTemplate, WorkflowError
 
 
 @admin.register(AgentMemory)
@@ -40,3 +40,11 @@ class ChatMessageAdmin(admin.ModelAdmin):
 class AgentProfileAdmin(admin.ModelAdmin):
     list_display = ('clinic', 'agent_name', 'tone', 'address_form', 'updated_at')
     readonly_fields = ('updated_at', 'updated_by')
+
+
+@admin.register(WhatsAppTemplate)
+class WhatsAppTemplateAdmin(admin.ModelAdmin):
+    list_display = ('name', 'language', 'clinic', 'category', 'status', 'updated_at')
+    list_filter = ('clinic', 'status', 'category')
+    search_fields = ('name', 'body', 'meta_template_id')
+    readonly_fields = ('created_at', 'updated_at', 'updated_by')

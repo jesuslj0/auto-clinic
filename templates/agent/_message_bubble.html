@@ -58,6 +58,9 @@ cliente para no pintar dos veces un mensaje que llega por el socket.
         {% endif %}
         {% endwith %}
 
+        {% if message.message_type == 'template' %}
+        <p class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-white/70">Plantilla</p>
+        {% endif %}
         {% if message.display_body %}
         <p class="whitespace-pre-line break-words text-sm">{{ message.display_body }}</p>
         {% endif %}

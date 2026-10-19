@@ -71,3 +71,15 @@ def dispatch_24h_reminders():
 @shared_task
 def dispatch_2h_reminders():
     _dispatch_window(2)
+
+
+@shared_task
+def send_whatsapp_reminders_24h():
+    """Recordatorio de cita por WhatsApp (plantilla aprobada) a 24 h de la cita.
+
+    Ver `notifications.whatsapp_reminders`. Es la sustituta del workflow
+    `WA-Reminder-24h-Scheduler` de n8n, que debe seguir apagado.
+    """
+    from notifications.whatsapp_reminders import send_due_reminders
+
+    return send_due_reminders()

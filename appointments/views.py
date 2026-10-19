@@ -29,6 +29,7 @@ from appointments.forms import (
     ProfessionalForm,
     build_schedule_formsets,
 )
+from appointments.reminders import pending_reminder_queryset
 from appointments.models import Appointment, AppointmentStatusHistory, Professional, ProfessionalSchedule
 from appointments.services import (
     booking_cutoff,
@@ -184,53 +185,12 @@ class AppointmentViewSet(ExportMixin, BulkCreateMixin, BulkUpdateMixin, viewsets
 
     @action(detail=False, methods=['get'], url_path='pending-reminders')
     def pending_reminders(self, request):
-        """Citas a las que toca mandarles recordatorio.
+        """Citas a las que toca mandarles recordatorio (`type=24h|3h`).
 
-        Solo se recuerdan las citas que la clínica tiene EN FIRME: una `pending`
-        es una cita a la espera de que el staff la valide, y no tiene sentido
-        pedirle al paciente que confirme algo que la clínica aún no ha aceptado.
-
-        La regla es "que la clínica la haya aceptado", no "que esté ahora mismo
-        en `confirmed`", y `rescheduled` obliga a notar la diferencia: ese estado
-        colapsa dos situaciones que aquí NO son la misma. Una cita que estaba en
-        firme y el agente movió de hora sigue siendo una cita aceptada, y dejar
-        al paciente sin aviso porque nadie del staff ha vuelto a mirarla sería
-        castigarle por un trámite interno. Una que nació `pending` y se movió
-        antes de que nadie la validara no la ha aceptado la clínica todavía, y
-        recordarla rompería la regla de arriba.
-
-        Distinguirlas no necesita campo nuevo: el historial de estados ya sabe si
-        esta cita pasó por `confirmed` alguna vez.
-
-        `patient_confirmed_at` es lo que dice si el paciente ya respondió. Los
-        flags `reminder_*` solo dicen qué se ha ENVIADO, que es lo suyo: ya no
-        hacen de estado. Una reprogramación los limpia (ver
-        `services.reschedule_appointment`), así que la hora nueva vuelve a avisar.
+        La regla vive en `appointments.reminders.pending_reminder_queryset`, que
+        comparte con el envío de WhatsApp desde Celery.
         """
-        reminder_type = request.query_params.get('type', '24h')
-        now = timezone.now()
-
-        if reminder_type == '24h':
-            window = (now + timedelta(hours=23), now + timedelta(hours=25))
-            pendiente_de_envio = {'reminder_24h_sent': False}
-        else:  # 3h
-            window = (now + timedelta(hours=2, minutes=30), now + timedelta(hours=3, minutes=30))
-            pendiente_de_envio = {'reminder_24h_sent': True, 'reminder_3h_sent': False}
-
-        aceptada_por_la_clinica = Q(status=Appointment.Status.CONFIRMED) | Q(
-            status=Appointment.Status.RESCHEDULED,
-            status_history__to_status=Appointment.Status.CONFIRMED,
-        )
-
-        # `distinct()` no es decorativo: el JOIN contra el historial repite la
-        # cita una vez por entrada que coincida, y una cita validada, movida y
-        # vuelta a validar tiene dos `confirmed`. Sin él, n8n manda dos avisos.
-        qs = self.get_queryset().filter(
-            aceptada_por_la_clinica,
-            scheduled_at__range=window,
-            patient_confirmed_at__isnull=True,
-            **pendiente_de_envio,
-        ).distinct()
+        qs = pending_reminder_queryset(self.get_queryset(), request.query_params.get('type', '24h'))
 
         serializer = self.get_serializer(qs, many=True)
         return Response({'results': serializer.data, 'count': qs.count()})

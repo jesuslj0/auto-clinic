@@ -13,10 +13,10 @@ from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 
-from agent.models import ChatAttachment, ChatMessage, ConversationSession
+from agent.models import ChatAttachment, ChatMessage, ConversationSession, WhatsAppTemplate
 from agent.realtime import broadcast_message, broadcast_session
 from agent.files import is_chat_audio
-from agent.whatsapp import WhatsAppError, send_media, send_text, send_typing, upload_media
+from agent.whatsapp import WhatsAppError, send_media, send_template, send_text, send_typing, upload_media
 from patients.models import Guardian, Patient
 from patients.services import normalize_phone_safe
 
@@ -241,7 +241,8 @@ def send_staff_message(*, session: ConversationSession, body: str) -> ChatMessag
     if not session.can_send_free_text:
         raise WhatsAppError(
             'Han pasado más de 24 horas desde el último mensaje del paciente. '
-            'WhatsApp ya no permite responder con texto libre en esta conversación.'
+            'WhatsApp ya no permite responder con texto libre en esta conversación: '
+            'envía una plantilla aprobada.'
         )
 
     message = record_message(
@@ -272,6 +273,139 @@ def send_staff_message(*, session: ConversationSession, body: str) -> ChatMessag
     message.save(update_fields=['status', 'wa_message_id', 'sent_at'])
     broadcast_message(message)
     return message
+
+
+#: Meta rechaza valores de variable con saltos de línea, tabuladores o 4+ espacios
+#: seguidos, y con textos larguísimos.
+TEMPLATE_PARAM_MAX_LENGTH = 200
+
+
+def _send_template(*, session, template, params, sender, extra_raw=None) -> ChatMessage:
+    """Núcleo común del envío de una plantilla: valida, registra, envía y sella el resultado.
+
+    Se comprueba antes de registrar nada, para no dejar burbujas fallidas por
+    cosas que se sabían de antemano: que sea de la clínica del hilo, que esté
+    aprobada y que lleve un valor por cada variable.
+    """
+    if session.clinic is None:
+        raise WhatsAppError('Esta conversación no está asociada a ninguna clínica.')
+    if template.clinic_id != session.clinic_id:
+        raise ValueError('Esa plantilla no pertenece a esta clínica.')
+    if not template.is_sendable:
+        raise ValueError('Solo se pueden enviar plantillas aprobadas por Meta.')
+
+    values = [' '.join(str(value).split()) for value in params]
+    if len(values) != len(template.variables) or not all(values):
+        raise ValueError('Rellena todos los campos de la plantilla antes de enviarla.')
+    if any(len(value) > TEMPLATE_PARAM_MAX_LENGTH for value in values):
+        raise ValueError(f'Cada campo admite como máximo {TEMPLATE_PARAM_MAX_LENGTH} caracteres.')
+
+    message = record_message(
+        clinic=session.clinic,
+        session=session,
+        direction=ChatMessage.Direction.OUTBOUND,
+        sender=sender,
+        body=template.full_text(values),
+        message_type=ChatMessage.MessageType.TEMPLATE,
+        status=ChatMessage.Status.QUEUED,
+        raw={
+            'template': template.name, 'language': template.language, 'params': values,
+            **(extra_raw or {}),
+        },
+    )
+
+    try:
+        wa_message_id = send_template(
+            session.clinic, session.phone, template.name, template.language, values
+        )
+    except WhatsAppError as exc:
+        message.status = ChatMessage.Status.FAILED
+        message.error_message = str(exc)
+        message.save(update_fields=['status', 'error_message'])
+        broadcast_message(message)
+        raise
+
+    message.status = ChatMessage.Status.SENT
+    message.wa_message_id = wa_message_id or None
+    message.sent_at = timezone.now()
+    message.save(update_fields=['status', 'wa_message_id', 'sent_at'])
+    broadcast_message(message)
+    return message
+
+
+def record_unsent_template(*, session, template, reason, extra_raw=None) -> ChatMessage:
+    """Deja en el hilo, como «No enviado», una plantilla que ni se intentó mandar.
+
+    Para cuando el fallo se sabe antes de llamar a Meta (falta un dato de la
+    cita): así el staff lo ve en el chat con el motivo, en vez de que el
+    recordatorio no salga sin que nadie se entere.
+    """
+    return record_message(
+        clinic=session.clinic,
+        session=session,
+        direction=ChatMessage.Direction.OUTBOUND,
+        sender=ChatMessage.Sender.AGENT,
+        body=f'Recordatorio de cita ({template.name})',
+        message_type=ChatMessage.MessageType.TEMPLATE,
+        status=ChatMessage.Status.FAILED,
+        error_message=reason,
+        raw={'template': template.name, 'language': template.language, **(extra_raw or {})},
+    )
+
+
+def send_staff_template(*, session: ConversationSession, template: WhatsAppTemplate, params=()) -> ChatMessage:
+    """Envía una plantilla aprobada al paciente y la deja en el hilo.
+
+    Es la única vía con la ventana de 24 h cerrada. Mismo criterio que el texto:
+    directo a la Cloud API, sin n8n, y el mensaje queda registrado salga o no
+    (`failed` con el motivo). En el hilo se guarda el texto ya rellenado, tal
+    como lo lee el paciente, y en `raw` qué plantilla y qué valores fueron.
+    """
+    return _send_template(
+        session=session, template=template, params=params, sender=ChatMessage.Sender.STAFF
+    )
+
+
+def send_automatic_template(
+    *, session: ConversationSession, template: WhatsAppTemplate, params, extra_raw=None
+) -> ChatMessage:
+    """Como `send_staff_template`, pero lo manda el sistema (recordatorios), no una persona.
+
+    Sale con remitente `agent`, no `staff`: un mensaje de staff abre la pausa
+    temporal del agente (`last_staff_message_at`), y el paciente que contesta al
+    recordatorio se quedaría sin respuesta durante ese plazo.
+    """
+    return _send_template(
+        session=session, template=template, params=params,
+        sender=ChatMessage.Sender.AGENT, extra_raw=extra_raw,
+    )
+
+
+def sendable_templates(session: ConversationSession | None) -> list[dict]:
+    """Plantillas que el staff puede mandar en este hilo, listas para el selector.
+
+    Solo hacen falta con la ventana cerrada (dentro de ella se escribe libre y
+    una plantilla gasta un envío de pago), así que con la ventana abierta no se
+    consulta nada.
+    """
+    if session is None or session.clinic_id is None or session.can_send_free_text:
+        return []
+    templates = session.clinic.whatsapp_templates.filter(status=WhatsAppTemplate.Status.APPROVED)
+    return [
+        {
+            'id': template.pk,
+            'name': template.name,
+            'category': template.get_category_display(),
+            'marketing': template.category == WhatsAppTemplate.Category.MARKETING,
+            'header': template.header_text,
+            'body': template.body,
+            'footer': template.footer,
+            'variables': template.variables,
+            'examples': template.body_examples,
+        }
+        for template in templates
+        if template.is_sendable
+    ]
 
 
 #: Lo que WhatsApp acepta como imagen (el WebP solo vale como sticker).
@@ -305,7 +439,8 @@ def send_staff_media(*, session: ConversationSession, file, caption: str = '') -
     if not session.can_send_free_text:
         raise WhatsAppError(
             'Han pasado más de 24 horas desde el último mensaje del paciente. '
-            'WhatsApp ya no permite responder con texto libre en esta conversación.'
+            'WhatsApp ya no permite responder con texto libre en esta conversación: '
+            'envía una plantilla aprobada.'
         )
 
     is_audio = is_chat_audio(file)

@@ -32,6 +32,7 @@ from agent.models import (
     ChatAttachment,
     ChatMessage,
     ConversationSession,
+    WhatsAppTemplate,
     WorkflowError,
 )
 from agent.serializers import (
@@ -49,6 +50,8 @@ from agent.services import (
     mark_session_read,
     send_staff_media,
     send_staff_message,
+    send_staff_template,
+    sendable_templates,
     signal_staff_typing,
 )
 from agent.whatsapp import WhatsAppError
@@ -482,6 +485,7 @@ class ChatInboxView(LoginRequiredMixin, TemplateView):
 
         context.update(
             {
+                'send_templates': sendable_templates(active_session),
                 'sessions': sessions,
                 'active_session': active_session,
                 'chat_messages': messages_page,
@@ -697,6 +701,35 @@ class ChatSendMessageView(ChatSessionActionMixin, View):
                 django_messages.error(request, ' '.join(exc.messages))
             except ValueError as exc:
                 django_messages.error(request, str(exc))
+
+        return redirect('agent:chat-thread', session_id=session.id)
+
+
+class ChatSendTemplateView(ChatSessionActionMixin, View):
+    """Envía una plantilla aprobada: lo único que vale con la ventana de 24 h cerrada."""
+
+    def post(self, request, session_id):
+        session = self.get_session(session_id)
+        template_id = request.POST.get('template', '')
+        template = (
+            WhatsAppTemplate.objects.filter(clinic_id=session.clinic_id, pk=template_id).first()
+            if template_id.isdigit() else None
+        )
+
+        if template is None:
+            django_messages.error(request, 'Elige una plantilla para enviar.')
+        else:
+            try:
+                send_staff_template(
+                    session=session, template=template, params=request.POST.getlist('params')
+                )
+            except (WhatsAppError, ValueError) as exc:
+                django_messages.error(request, str(exc))
+            else:
+                django_messages.success(
+                    request,
+                    'Plantilla enviada. Cuando el paciente responda podrás escribirle con normalidad.',
+                )
 
         return redirect('agent:chat-thread', session_id=session.id)
 

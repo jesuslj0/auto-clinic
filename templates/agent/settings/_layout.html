@@ -30,12 +30,14 @@ con su formulario; aquí solo se pinta, cada vista marca el suyo con `agent_tab`
     {# ── Apartados ── #}
     {# Enlaces normales: cada apartado es una página con su propio formulario. #}
     <nav aria-label="Apartados del agente">
-        <div class="grid grid-cols-3 gap-1 rounded-2xl bg-muted p-1 ring-1 ring-line sm:inline-flex">
+        <div class="grid grid-cols-2 gap-1 rounded-2xl bg-muted p-1 ring-1 ring-line sm:inline-flex">
             {% url 'agent_settings:test' as url_test %}
             {% url 'agent_settings:persona' as url_persona %}
+            {% url 'agent_settings:templates' as url_templates %}
             {% url 'agent_settings:config' as url_config %}
             {% include 'agent/settings/_tab_link.html' with url=url_test key='test' label='Chat' %}
             {% include 'agent/settings/_tab_link.html' with url=url_persona key='persona' label='Personalidad' %}
+            {% include 'agent/settings/_tab_link.html' with url=url_templates key='templates' label='Plantillas' %}
             {% include 'agent/settings/_tab_link.html' with url=url_config key='config' label='Configuración' done=is_connected %}
         </div>
     </nav>

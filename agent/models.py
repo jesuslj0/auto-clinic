@@ -1,3 +1,4 @@
+import re
 import uuid
 from datetime import timedelta
 
@@ -513,3 +514,198 @@ class AgentProfile(models.Model):
             return clinic.agent_profile
         except cls.DoesNotExist:
             return cls(clinic=clinic)
+
+
+class WhatsAppTemplate(models.Model):
+    """Plantilla de mensaje de WhatsApp de una clínica y su estado ante Meta.
+
+    Fuera de las 24 h desde el último mensaje del paciente, WhatsApp solo deja
+    escribir con una plantilla aprobada. El texto se redacta aquí, se envía a
+    revisión y Meta responde con un estado; el nuestro es un reflejo del suyo
+    (`wa_templates.sync_templates()`), nunca se inventa.
+
+    Solo se edita mientras sea borrador o haya sido rechazada. Si Meta ya la
+    tiene (`meta_template_id`), el nombre y el idioma se quedan fijos: son su
+    identidad allí. Una plantilla importada con elementos que este panel no sabe
+    pintar (botones, cabecera con imagen…) se muestra pero no se edita, para no
+    descartarlos sin querer al reenviarla.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = 'draft', 'Borrador'
+        PENDING = 'pending', 'En revisión'
+        APPROVED = 'approved', 'Aprobada'
+        REJECTED = 'rejected', 'Rechazada'
+        PAUSED = 'paused', 'Pausada'
+        DISABLED = 'disabled', 'Desactivada'
+
+    class Category(models.TextChoices):
+        UTILITY = 'UTILITY', 'Utilidad'
+        MARKETING = 'MARKETING', 'Marketing'
+
+    class Language(models.TextChoices):
+        ES = 'es', 'Español'
+        ES_ES = 'es_ES', 'Español (España)'
+        ES_MX = 'es_MX', 'Español (México)'
+        CA = 'ca', 'Català'
+        EU = 'eu', 'Euskara'
+        GL = 'gl', 'Galego'
+        EN = 'en', 'English'
+
+    class Purpose(models.TextChoices):
+        REMINDER_24H = 'reminder_24h', 'Recordatorio de cita (24 h antes)'
+
+    HEADER_MAX_LENGTH = 60
+    BODY_MAX_LENGTH = 1024
+    FOOTER_MAX_LENGTH = 60
+
+    clinic = models.ForeignKey(
+        Clinic,
+        on_delete=models.CASCADE,
+        related_name='whatsapp_templates',
+        db_column='clinic_id',
+    )
+    name = models.CharField(
+        'nombre',
+        max_length=100,
+        help_text='Identificador interno: minúsculas, números y guiones bajos. No se puede cambiar una vez enviada a Meta.',
+    )
+    language = models.CharField('idioma', max_length=10, choices=Language.choices, default=Language.ES)
+    category = models.CharField(
+        'categoría', max_length=20, choices=Category.choices, default=Category.UTILITY,
+    )
+    header_text = models.CharField('encabezado', max_length=HEADER_MAX_LENGTH, blank=True)
+    body = models.TextField('mensaje', max_length=BODY_MAX_LENGTH)
+    footer = models.CharField('pie', max_length=FOOTER_MAX_LENGTH, blank=True)
+    body_examples = models.JSONField(
+        'ejemplos de las variables',
+        default=list,
+        blank=True,
+        help_text='Un valor de muestra por cada {{n}} del mensaje; Meta los pide para revisar la plantilla.',
+    )
+
+    purpose = models.CharField(
+        'uso',
+        max_length=20,
+        choices=Purpose.choices,
+        blank=True,
+        help_text='Para qué la usa el sistema por su cuenta. Vacío: solo el personal la envía a mano.',
+    )
+    variable_map = models.JSONField(
+        'datos de cada variable',
+        default=dict,
+        blank=True,
+        help_text='Para el recordatorio automático: qué dato de la cita va en cada {{n}} '
+                  '(claves de appointments.reminder_fields).',
+    )
+    status = models.CharField('estado', max_length=10, choices=Status.choices, default=Status.DRAFT)
+    rejection_reason = models.CharField('motivo del rechazo', max_length=255, blank=True)
+    meta_template_id = models.CharField(max_length=64, blank=True)
+    has_unsupported_components = models.BooleanField(
+        default=False,
+        help_text='Importada de Meta con botones, imágenes u otros elementos que este panel no edita.',
+    )
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    status_synced_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        'core.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+
+    class Meta:
+        db_table = 'agent_whatsapp_template'
+        verbose_name = 'plantilla de WhatsApp'
+        verbose_name_plural = 'plantillas de WhatsApp'
+        ordering = ['name', 'language']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['clinic', 'name', 'language'], name='uniq_wa_template_per_clinic_lang'
+            ),
+            # Una por uso y clínica: el sistema no tiene que elegir entre dos.
+            models.UniqueConstraint(
+                fields=['clinic', 'purpose'],
+                condition=~models.Q(purpose=''),
+                name='uniq_wa_template_purpose_per_clinic',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.name} ({self.language})'
+
+    _VARIABLE = re.compile(r'\{\{\s*(\d+)\s*\}\}')
+
+    @classmethod
+    def variables_in(cls, text):
+        """Números de variable `{{n}}` de un texto, sin repetir y en orden."""
+        return sorted({int(n) for n in cls._VARIABLE.findall(text or '')})
+
+    @property
+    def variables(self):
+        return self.variables_in(self.body)
+
+    @property
+    def is_editable(self):
+        return (
+            self.status in (self.Status.DRAFT, self.Status.REJECTED)
+            and not self.has_unsupported_components
+        )
+
+    @property
+    def identity_locked(self):
+        """Meta ya la conoce: nombre e idioma son su clave allí y no se tocan."""
+        return bool(self.meta_template_id)
+
+    @property
+    def is_deletable(self):
+        """Solo un borrador que Meta no conoce; el resto vive también en Meta."""
+        return self.status == self.Status.DRAFT and not self.meta_template_id
+
+    def fill(self, values):
+        """El mensaje con `values` puestos, tal como lo vería el paciente.
+
+        Una variable sin valor se queda como ``{{n}}``.
+        """
+        values = list(values or [])
+
+        def replace(match):
+            index = int(match.group(1)) - 1
+            return str(values[index]) if 0 <= index < len(values) and values[index] else match.group(0)
+
+        return self._VARIABLE.sub(replace, self.body)
+
+    def preview_body(self):
+        """El mensaje con los ejemplos puestos."""
+        return self.fill(self.body_examples)
+
+    def full_text(self, values):
+        """Encabezado, mensaje y pie con `values` puestos: lo que lee el paciente de punta a punta."""
+        parts = [self.header_text, self.fill(values), self.footer]
+        return '\n\n'.join(part for part in parts if part)
+
+    def why_not_reminder_24h(self):
+        """Por qué no puede ser el recordatorio de 24 h, o '' si puede."""
+        if not self.is_sendable:
+            return 'Tiene que estar aprobada por Meta.'
+        if self.variables != list(range(1, len(self.variables) + 1)):
+            return 'Sus variables deben numerarse seguidas desde {{1}}.'
+        return ''
+
+    def reminder_map_problem(self):
+        """Por qué el mapeo de variables no sirve para enviar, o '' si está completo."""
+        from appointments.reminder_fields import BY_KEY
+
+        for number in self.variables:
+            if (self.variable_map or {}).get(str(number)) not in BY_KEY:
+                return f'Falta elegir qué dato va en {{{{{number}}}}}.'
+        return ''
+
+    @property
+    def is_sendable(self):
+        """Si el staff puede mandarla a un paciente: aprobada y con solo lo que el panel sabe rellenar."""
+        return self.status == self.Status.APPROVED and not self.has_unsupported_components
