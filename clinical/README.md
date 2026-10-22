@@ -57,6 +57,61 @@ Addendum (append-only)                # no altera la nota ni su hash
 - **La adenda** es la única vía de añadir algo a una nota firmada. No se edita ni
   se borra, y no toca la nota original ni su hash.
 
+### Desde el panel: la pestaña «Historia»
+
+Todo el curso clínico se usa sin tocar el admin (`patients/history_views.py`).
+Sesión y CSRF, **sin API** (el `Api-Key` del agente no llega aquí):
+
+| Qué | Ruta (`patients:`) |
+|---|---|
+| Índice: episodios → visitas → notas | `<id>/historia/` (`tab-history`) |
+| Abrir / editar / cerrar / reabrir episodio | `historia/episodios/nuevo/`, `…/<id>/editar/`, `…/cerrar/`, `…/reabrir/` |
+| Registrar / corregir visita | `…/episodios/<id>/visitas/nueva/`, `historia/visitas/<id>/editar/` |
+| Nota: alta, detalle, edición, firma, descarte, adenda | `historia/visitas/<id>/notas/nueva/`, `historia/notas/<id>/` + `editar/`, `firmar/`, `eliminar/`, `adenda/` |
+| Desde la cita | `appointments:visit-open` (`citas/<uuid>/visita/`): abre la visita enganchada a la cita y salta a su nota |
+
+- **SOAP con nombres de podología** (`clinical/soap.py`). El modelo es SOAP; el panel
+  muestra **Motivo de consulta** (S), **Exploración** (O), **Diagnóstico** (A) y
+  **Tratamiento y plan** (P), con la letra como etiqueta pequeña junto al nombre.
+  Exploración se divide en subcampos opcionales (Inspección, Palpación, Biomecánica y
+  pisada, Pruebas complementarias) y Tratamiento y plan en *Tratamiento realizado hoy*
+  e *Indicaciones y seguimiento*. **Antecedentes** (calzado, actividad, patologías) es
+  un bloque aparte que solo se ofrece en la **primera nota del paciente** (por
+  paciente, no por episodio). Mapa de columnas de `ClinicalNote`: `subjective` = Motivo,
+  `assessment` = Diagnóstico, `inspection`/`palpation`/`biomechanics`/
+  `complementary_tests` = Exploración, `treatment_done`/`follow_up` = Plan,
+  `background` = Antecedentes. `objective` y `plan` son el **texto anterior** a los
+  subcampos: se siguen leyendo y un borrador antiguo se puede seguir editando, pero las
+  notas nuevas no los usan. Cambiar una etiqueta no necesita migración.
+- **El hash no rompió las notas ya firmadas.** Los campos añadidos después
+  (`hashing.LATER_FIELDS`) entran en el hash solo si traen texto: una nota firmada antes
+  produce el mismo JSON de siempre y su sello sigue verificando; y añadir texto a uno de
+  ellos por debajo del ORM lo rompe. El trigger de PostgreSQL es de fila entera y ya
+  cubre las columnas nuevas.
+- **Autoría del borrador:** `ClinicalNote` solo guarda `signed_by`. Quién escribió o
+  editó un borrador queda en el `ChangeLog` (con el texto enmascarado). Decidido:
+  basta.
+- **Firma.** Solo un usuario con `professional_profile`, y siempre **a su nombre**
+  (el firmante no sale del formulario). La pantalla avisa de que no se podrá editar.
+  Una nota en blanco no se firma. **Ninguna vista acepta una nota firmada**: editar,
+  descartar y firmar de nuevo se rechazan con mensaje, además del modelo y el trigger.
+- **Adenda:** solo sobre una nota firmada y solo de un profesional; `objects.create`,
+  nunca bulk. El detalle muestra además si el sello (`content_hash`) sigue cuadrando.
+- **Episodio cerrado:** no admite visitas ni notas nuevas (se reabre). Una visita con
+  nota firmada ya no se puede editar: su fecha y profesional forman parte de lo firmado.
+- **Visita y cita:** `visit_for_appointment` es la única regla de «qué visita es esta»;
+  abrir la visita desde la cita y registrar un procedimiento después no duplica.
+  Una cita sin ficha o cancelada no llega a la historia.
+- **Lecturas:** toda pantalla con GET lleva `AccessLogMixin`, apuntando al
+  paciente (y a la nota/episodio/visita cuando la hay). La lista solo enseña una línea
+  de vista previa; el texto entero se lee —y se registra— en la nota. El POST que
+  re-pinta la nota con errores (adenda) registra su lectura a mano.
+- **Aislamiento:** paciente de otra clínica, 404 sin `AccessLog`; y episodio, visita
+  o nota se buscan *dentro del paciente de la URL*, así que el id de otra persona de
+  la misma clínica tampoco abre nada.
+- No hay borrado desde el panel de episodios ni de visitas (solo de borradores de
+  nota): se hace desde el admin.
+
 ## Barrera de inmutabilidad (dos niveles)
 
 Una nota firmada y una adenda no admiten `UPDATE` de contenido ni `DELETE`. Se
@@ -230,6 +285,26 @@ ClinicalAlert.objects.for_patient(p).active().critical()   # los helpers encaden
 
 Que ese bloque sea **no descartable en pantalla es cosa de la presentación**: el
 modelo solo expone la consulta y no impone nada sobre cómo se pinta.
+
+### Alertas a mano desde el panel
+
+Además de derivarse de la anamnesis, una alerta se da de alta **a mano** en la pestaña
+«Alertas» (`patients/alert_views.py`; sesión y CSRF, sin API): para lo que el equipo
+sabe y no está en un cuestionario.
+
+- **Alta:** tipo, gravedad y detalle. Siempre `source='manual'` y firmada por el
+  profesional que la registra; lo que llegue por POST sobre procedencia o autor se
+  ignora. «Otra» **no se ofrece** al dar de alta (obliga a clasificar; el motor de derivación
+  sí puede levantarla y las ya guardadas se siguen leyendo y editando). No se duplica
+  si ya hay una vigente del mismo tipo (manual o derivada).
+- **Edición:** solo las manuales, y solo gravedad y detalle: el **tipo no cambia**
+  (si era otro, se desactiva y se da de alta la correcta, para no reescribir lo que se
+  sabía). Una derivada se corrige contestando de nuevo la anamnesis.
+- **No hay borrado.** Desactivar (`deactivate()`) retira la alerta de la ficha y de la
+  banda y conserva la fila; las desactivadas se listan plegadas y se **reactivan**.
+  Cualquier alerta, derivada o manual, se puede desactivar.
+- El motor de derivación sigue sin tocar las manuales. La edición registra
+  `AccessLog` sobre la alerta; la `note` va enmascarada en el `ChangeLog`.
 
 ### Procedencia: `source` y `source_response`
 
@@ -549,6 +624,27 @@ Un consentimiento firmado queda **congelado** (versión, paciente, episodio,
 fecha, copia del texto y fichero con su huella) y **no se borra**: el borrado es
 lógico y el objeto del bucket se conserva. Segundo nivel en la migración `0011`,
 como el resto de la capa.
+
+### Firmar desde el panel
+
+`patients:consent-sign` (`pacientes/<id>/consentimientos/firmar/`). Página propia con
+el texto íntegro y un lienzo táctil (`static/js/signature_pad.js`, eventos de puntero:
+ratón, dedo y lápiz).
+
+- **Solo la versión vigente y publicada** de las plantillas activas de la clínica del
+  paciente. Un borrador no se ofrece y, forzando el POST, tampoco se firma.
+- **Se firma lo que se leyó.** La versión mostrada viaja en un campo oculto; si se
+  publica otra mientras el paciente lee, el formulario se rechaza y hay que volver a
+  leer (`ConsentSignForm.clean_version`).
+- **La firma llega como PNG en un campo oculto** (data URL) y `clinical/signature.py`
+  la convierte en fichero: decodifica, limita tamaño y dimensiones, exige tinta
+  suficiente (lienzo vacío o un toque suelto no valen), aplana sobre blanco y
+  **reescribe el PNG desde los píxeles**. El aviso del JavaScript es comodidad; el
+  control es el del servidor. Después, el alta va **siempre** por
+  `SignedConsent.sign()` (copia el texto y valida por contenido).
+- Episodio: uno abierto del paciente o uno nuevo con motivo (`EpisodeSelectionMixin`),
+  atómico con la firma. Casilla obligatoria de conformidad del paciente.
+- Gestión de plantillas y versiones: **sigue en el admin**.
 
 ## Procedimientos realizados: el precio, congelado
 

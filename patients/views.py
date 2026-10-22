@@ -255,6 +255,7 @@ class PatientListView(AccessLogMixin, LoginRequiredMixin, ListView):
 #: (más su ruta y su parcial).
 PATIENT_TABS = [
     {'key': 'general', 'label': 'Datos generales', 'url_name': 'patients:detail'},
+    {'key': 'history', 'label': 'Historia', 'url_name': 'patients:tab-history'},
     {'key': 'procedures', 'label': 'Procedimientos', 'url_name': 'patients:tab-procedures'},
     {'key': 'lesions', 'label': 'Lesiones', 'url_name': 'patients:tab-lesions'},
     {'key': 'alerts', 'label': 'Alertas', 'url_name': 'patients:tab-alerts'},
@@ -444,8 +445,24 @@ class PatientAnamnesisTabView(PatientTabView):
 
 
 class PatientAlertsTabView(PatientTabView):
+    """Pestaña «Alertas»: las vigentes, y debajo las desactivadas.
+
+    Las desactivadas se enseñan (plegadas) porque una alerta no se borra: son la
+    respuesta a «esto se sabía en aquel momento», y desde aquí se pueden reactivar.
+    """
+
     tab = 'alerts'
     panel_template = 'patients/tabs/_alertas.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['inactive_alerts'] = list(
+            ClinicalAlert.objects.for_patient(self.object)
+            .filter(is_active=False)
+            .select_related('created_by__user')
+            .order_by('-updated_at', '-id')
+        )
+        return context
 
 
 class PatientLesionsTabView(PatientTabView):

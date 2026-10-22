@@ -1,0 +1,26 @@
+{% comment %}
+Elegir un episodio abierto del paciente, o abrir uno nuevo con su motivo.
+
+Lo comparten la firma de un consentimiento y la apertura de la visita de una cita.
+Va dentro de un contenedor con `x-data="{ episodio: '…' }"`: el desplegable lleva
+`x-model="episodio"` (lo pone `EpisodeSelectionMixin`) y el motivo solo se pide
+cuando no hay episodio elegido. Sin JavaScript el motivo se ve siempre y el
+servidor sigue exigiéndolo si no hay episodio.
+{% endcomment %}
+{% if form.has_open_episodes %}
+<div>
+    <label for="{{ form.episode.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.episode.label }}</label>
+    {{ form.episode }}
+    <p id="{{ form.episode.auto_id }}_helptext" class="mt-1.5 text-xs text-content-faint">{{ form.episode.help_text }}</p>
+    {% if form.episode.errors %}<p id="error-episode" class="mt-1.5 text-xs text-danger">{{ form.episode.errors|join:", " }}</p>{% endif %}
+</div>
+{% else %}
+<p class="rounded-xl bg-brand-soft px-4 py-3 text-sm text-brand-fg ring-1 ring-brand-line">
+    Este paciente no tiene ningún episodio abierto: se abrirá uno con el motivo que indiques.
+</p>
+{% endif %}
+<div {% if form.has_open_episodes %}x-show="episodio === ''" x-collapse x-cloak{% endif %}>
+    <label for="{{ form.episode_reason.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.episode_reason.label }}</label>
+    {{ form.episode_reason }}
+    {% if form.episode_reason.errors %}<p id="error-episode_reason" class="mt-1.5 text-xs text-danger">{{ form.episode_reason.errors|join:", " }}</p>{% endif %}
+</div>

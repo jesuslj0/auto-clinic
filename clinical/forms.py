@@ -1,11 +1,12 @@
 """Formularios de la capa clínica.
 
-Son cuatro: el que rellena una anamnesis, el que registra una lesión sobre el
-mapa del pie, el que anota cómo está esa lesión en una visita
-(`LesionObservationForm`) y el que la da por resuelta (`LesionResolveForm`). Los
-dos primeros cuelgan lo que registran de un episodio y comparten para eso
-`EpisodeSelectionMixin`; los dos últimos ya lo tienen resuelto, porque la lesión
-sobre la que trabajan trae el suyo.
+El que rellena una anamnesis, el que registra una lesión sobre el mapa del pie,
+el que anota cómo está esa lesión en una visita (`LesionObservationForm`) y el que
+la da por resuelta (`LesionResolveForm`), el del procedimiento realizado y, al
+final, los del curso clínico (episodio, visita, nota SOAP, adenda) y el de la
+firma de un consentimiento. Los que cuelgan lo que registran de un episodio que
+se puede abrir ahí mismo comparten `EpisodeSelectionMixin`; la lesión observada y
+la nota ya traen el suyo.
 
 El de la anamnesis es un formulario **dinámico**, construido en tiempo de
 ejecución a partir de las preguntas de una `TemplateVersion` concreta —siempre la
@@ -33,21 +34,29 @@ Las clases de los widgets se ponen aquí, con los tokens semánticos del tema
 """
 from __future__ import annotations
 
+from datetime import timedelta
 from decimal import Decimal
 
 from django import forms
 from django.core.exceptions import NON_FIELD_ERRORS
+from django.db.models import Q
 from django.utils import timezone
 
 from clinical.files import ALLOWED_IMAGE_TYPES, validate_clinical_image
 from clinical.models import (
+    Addendum,
+    ClinicalAlert,
+    ClinicalNote,
     Episode,
     Lesion,
     LesionObservation,
     PerformedProcedure,
     Question,
+    SignedConsent,
     Visit,
 )
+from clinical.signature import signature_from_data_url
+from clinical.soap import FIELD_META, FIELDS, LEGACY_FIELDS, SECTIONS
 
 #: Prefijo del nombre de cada campo de pregunta: `q_<id de la pregunta>`.
 QUESTION_FIELD_PREFIX = 'q_'
@@ -445,6 +454,17 @@ class LesionForm(ErrorHighlightMixin, EpisodeSelectionMixin, forms.ModelForm):
         zone.choices = [('', 'Selecciona la zona…')] + [
             choice for choice in zone.choices if choice[0]
         ]
+        # Igual con el tipo, y sin «Otra»: es el valor antiguo del modelo (las
+        # lesiones ya guardadas con él se siguen leyendo), pero registrar una nueva
+        # obliga a clasificarla. Como el campo se valida contra estas opciones,
+        # mandar `other` por POST a mano también es un error de campo.
+        lesion_type = self.fields['lesion_type']
+        lesion_type.choices = [('', 'Selecciona el tipo…')] + [
+            choice for choice in lesion_type.choices
+            if choice[0] and choice[0] != Lesion.LesionType.OTHER
+        ]
+        if not self.is_bound:
+            lesion_type.initial = ''
 
     # -- validación ---------------------------------------------------------
 
@@ -942,3 +962,384 @@ class PerformedProcedureForm(ErrorHighlightMixin, EpisodeSelectionMixin, forms.M
         """¿El servicio ya elegido exige importe? Para repintar con el error puesto."""
         value = self.data.get(self.add_prefix('service')) if self.is_bound else None
         return str(value) in self.variable_price_service_ids if value else False
+
+
+# ---------------------------------------------------------------------------
+# Curso clínico: episodio, visita, nota SOAP y adenda
+# ---------------------------------------------------------------------------
+
+
+class ProfessionalChoiceField(forms.ModelChoiceField):
+    """Selector de profesional, etiquetado con su tratamiento («Dra. López»)."""
+
+    def label_from_instance(self, obj):
+        return obj.display_name
+
+
+class EpisodeForm(ErrorHighlightMixin, forms.ModelForm):
+    """Abrir o editar un episodio: el motivo de consulta y quién lo lleva.
+
+    Las fechas y el estado no se tocan aquí: `opened_at` lo pone el alta, y abrir y
+    cerrar tienen sus propios botones (`Episode.close()` / `reopen()`), que son los
+    que mantienen coherente el estado con la fecha de alta.
+
+    El profesional responsable puede ser uno que ya no esté activo (se editó el
+    episodio de alguien que se fue): su opción se conserva para no borrarle el
+    responsable a un episodio con solo retocar el motivo.
+    """
+
+    responsible_professional = ProfessionalChoiceField(
+        label='Profesional responsable',
+        queryset=None,
+        required=False,
+        empty_label='Sin asignar',
+        widget=forms.Select(attrs={'class': FIELD_CLASS}),
+        help_text='Quien lleva el proceso. Cada visita puede atenderla otra persona.',
+    )
+
+    class Meta:
+        model = Episode
+        fields = ('reason', 'responsible_professional')
+        labels = {'reason': 'Motivo de consulta'}
+        widgets = {
+            'reason': forms.Textarea(attrs={
+                'rows': 3,
+                'class': FIELD_CLASS,
+                'placeholder': 'Ej. Dolor en el talón derecho al caminar',
+            }),
+        }
+
+    def __init__(self, *args, clinic_id, **kwargs):
+        super().__init__(*args, **kwargs)
+        from appointments.models import Professional
+
+        keep = self.instance.responsible_professional_id if self.instance.pk else None
+        queryset = (
+            Professional.objects
+            .filter(clinic_id=clinic_id)
+            .filter(Q(is_active=True) | Q(pk=keep))
+            .select_related('user')
+        )
+        self.fields['responsible_professional'].queryset = queryset
+        self.fields['reason'].required = True
+
+    def clean_reason(self):
+        reason = (self.cleaned_data.get('reason') or '').strip()
+        if not reason:
+            raise forms.ValidationError('Indica el motivo de consulta.')
+        return reason
+
+
+class VisitForm(ErrorHighlightMixin, forms.ModelForm):
+    """Registrar o corregir una visita: quién atendió y cuándo.
+
+    La visita cuelga de un episodio que ya viene resuelto por la vista, así que
+    aquí no se pregunta. La fecha es un instante (`datetime-local`): una visita se
+    cuenta por días, pero dos el mismo día se distinguen por la hora.
+    """
+
+    professional = ProfessionalChoiceField(
+        label='Atendió',
+        queryset=None,
+        empty_label='Selecciona al profesional…',
+        widget=forms.Select(attrs={'class': FIELD_CLASS}),
+    )
+    occurred_at = forms.DateTimeField(
+        label='Fecha y hora',
+        input_formats=['%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M'],
+        widget=forms.DateTimeInput(
+            attrs={'type': 'datetime-local', 'class': FIELD_CLASS}, format='%Y-%m-%dT%H:%M',
+        ),
+    )
+
+    class Meta:
+        model = Visit
+        fields = ('professional', 'occurred_at')
+
+    def __init__(self, *args, clinic_id, default_professional=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        from appointments.models import Professional
+
+        keep = self.instance.professional_id if self.instance.pk else None
+        self.fields['professional'].queryset = (
+            Professional.objects
+            .filter(clinic_id=clinic_id)
+            .filter(Q(is_active=True) | Q(pk=keep))
+            .select_related('user')
+        )
+        if not self.is_bound and not self.instance.pk:
+            self.fields['occurred_at'].initial = timezone.localtime().replace(
+                second=0, microsecond=0
+            )
+            if default_professional is not None:
+                self.fields['professional'].initial = default_professional.pk
+
+    def clean_occurred_at(self):
+        moment = self.cleaned_data.get('occurred_at')
+        if moment and moment > timezone.now() + timedelta(minutes=5):
+            raise forms.ValidationError('Una visita no se puede fechar en el futuro.')
+        return moment
+
+
+class ClinicalNoteForm(ErrorHighlightMixin, forms.ModelForm):
+    """Nota clínica en borrador: SOAP presentado en lenguaje de podología.
+
+    Los apartados, subcampos, explicaciones y ejemplos vienen de
+    `clinical/soap.py`; la plantilla pinta cada apartado con su nombre y su letra
+    SOAP discreta, y el ejemplo sale como `placeholder` (con «Ej.»). **Solo trabaja
+    con borradores**: la vista no ofrece este formulario para una nota firmada, y el
+    modelo la rechazaría de todas formas (`NoteAlreadySigned`).
+
+    Dos campos no siempre se ofrecen:
+
+    - **Antecedentes** (`show_background`): solo en la primera nota del paciente. Lo
+      decide la vista; si la nota ya los trae, se siguen mostrando para no perderlos.
+    - **Texto anterior** de exploración y plan (`objective`, `plan`): solo si el
+      borrador ya los tiene escritos, para poder seguir editándolos. Las notas
+      nuevas no los usan.
+
+    Una nota en blanco no se guarda: un borrador sin una palabra no sirve de nada
+    y, firmado, sería una nota inmutable que no dice nada.
+    """
+
+    class Meta:
+        model = ClinicalNote
+        fields = FIELDS
+
+    def __init__(self, *args, show_background=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, meta in FIELD_META.items():
+            field = self.fields[name]
+            field.required = False
+            field.widget.attrs.update({
+                'rows': meta.rows,
+                'class': FIELD_CLASS,
+                'aria-describedby': f'hint-{name}',
+            })
+            if meta.example:
+                field.widget.attrs['placeholder'] = f'Ej. {meta.example}'
+
+        def has_text(name):
+            return bool((getattr(self.instance, name, '') or '').strip())
+
+        if not show_background and not has_text('background'):
+            del self.fields['background']
+        for name in LEGACY_FIELDS:
+            if not has_text(name):
+                del self.fields[name]
+
+    def clean(self):
+        cleaned = super().clean()
+        if not any((cleaned.get(name) or '').strip() for name in FIELDS):
+            raise forms.ValidationError(
+                'La nota está vacía: escribe al menos en uno de los apartados.'
+            )
+        return cleaned
+
+    def section_rows(self):
+        """Los apartados con sus campos, para pintarlos con nombre, letra y ayuda.
+
+        Solo salen los campos que el formulario tiene (Antecedentes y el texto
+        anterior pueden no estar), y un apartado sin campos no sale.
+        """
+        rows = []
+        for section in SECTIONS:
+            names = [field.field for field in section.fields]
+            if section.legacy:
+                names.append(section.legacy.field)
+            fields = [
+                {'meta': FIELD_META[name], 'bound': self[name]}
+                for name in names if name in self.fields
+            ]
+            if fields:
+                rows.append({
+                    'section': section,
+                    'fields': fields,
+                    # Un apartado de un solo campo se llama como el apartado.
+                    'single': len(section.fields) == 1 and not (
+                        section.legacy and section.legacy.field in self.fields
+                    ),
+                })
+        return rows
+
+
+class AddendumForm(ErrorHighlightMixin, forms.ModelForm):
+    """Adenda a una nota firmada: lo único que se le puede añadir."""
+
+    class Meta:
+        model = Addendum
+        fields = ('text',)
+        labels = {'text': 'Texto de la adenda'}
+        widgets = {
+            'text': forms.Textarea(attrs={
+                'rows': 4,
+                'class': FIELD_CLASS,
+                'placeholder': 'Ej. El paciente llama a los dos días: la crioterapia ha aliviado el dolor matutino.',
+            }),
+        }
+
+    def clean_text(self):
+        text = (self.cleaned_data.get('text') or '').strip()
+        if not text:
+            raise forms.ValidationError('La adenda no puede estar vacía.')
+        return text
+
+
+class VisitOpenForm(ErrorHighlightMixin, EpisodeSelectionMixin, forms.Form):
+    """Abrir la visita de una cita: solo falta saber de qué episodio cuelga."""
+
+    episode_help_text = 'La visita queda colgada del proceso asistencial al que pertenece.'
+
+    def __init__(self, *args, patient, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.build_episode_fields(patient)
+
+    def clean(self):
+        cleaned = super().clean()
+        self.validate_episode_choice(cleaned)
+        return cleaned
+
+
+# ---------------------------------------------------------------------------
+# Firma de un consentimiento
+# ---------------------------------------------------------------------------
+
+
+class ConsentSignForm(ErrorHighlightMixin, EpisodeSelectionMixin, forms.Form):
+    """Recoger la firma de un consentimiento sobre la versión **vigente**.
+
+    Recibe la `version` ya resuelta por la vista —la vigente publicada, nunca un
+    borrador— y comprueba que el paciente firma **lo que se le enseñó**: la
+    versión viaja en un campo oculto y, si entre abrir la pantalla y firmar se
+    publicó otra, el formulario se rechaza. Sin esa comprobación se podría firmar
+    un texto distinto del que se leyó, que es justo lo que el consentimiento
+    informado existe para impedir.
+
+    La firma llega como data URL del lienzo y se convierte en fichero con
+    `clinical.signature`; el alta la hace `SignedConsent.sign()`.
+    """
+
+    episode_help_text = 'El consentimiento queda colgado del proceso asistencial al que pertenece.'
+
+    version = forms.IntegerField(widget=forms.HiddenInput)
+    signature_data = forms.CharField(
+        required=False,   # el vacío lo explica `clean_signature_data`, con su mensaje
+        widget=forms.HiddenInput,
+    )
+    accepted = forms.BooleanField(
+        label='El paciente ha leído el texto, se le han resuelto las dudas y consiente.',
+        error_messages={'required': 'Confirma que el paciente ha leído el texto y consiente.'},
+        widget=forms.CheckboxInput(attrs={'class': CHECKBOX_CLASS}),
+    )
+
+    def __init__(self, *args, patient, consent_version, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.consent_version = consent_version
+        self.build_episode_fields(patient)
+        if not self.is_bound:
+            self.fields['version'].initial = consent_version.pk
+
+    def clean_version(self):
+        shown = self.cleaned_data.get('version')
+        if shown != self.consent_version.pk:
+            raise forms.ValidationError(
+                'El texto del consentimiento ha cambiado mientras se firmaba. '
+                'Léelo de nuevo antes de volver a firmar.'
+            )
+        return shown
+
+    def clean_signature_data(self):
+        return signature_from_data_url(self.cleaned_data.get('signature_data'))
+
+    def clean(self):
+        cleaned = super().clean()
+        self.validate_episode_choice(cleaned)
+        return cleaned
+
+    def signature_file(self):
+        return self.cleaned_data['signature_data']
+
+
+# ---------------------------------------------------------------------------
+# Alertas clínicas manuales
+# ---------------------------------------------------------------------------
+
+
+class ClinicalAlertForm(ErrorHighlightMixin, forms.ModelForm):
+    """Dar de alta (o retocar) una alerta clínica a mano, sin pasar por la anamnesis.
+
+    Es la vía de lo que se sabe y no está en un cuestionario: la alergia que cuenta
+    el paciente por teléfono, la anticoagulación que le pauta su médico. El alta
+    pone `source='manual'` y el profesional que la registra (lo hace la vista, no
+    el formulario). El motor de derivación no las toca nunca.
+
+    - **El tipo no se cambia al editar.** Una alerta de «Diabetes» que en realidad
+      era otra cosa se desactiva y se da de alta la correcta: así la historia de lo
+      que se sabía no se reescribe. Editar solo retoca gravedad y detalle.
+    - **No se duplica un aviso vigente**: si el paciente ya tiene una alerta activa
+      de ese tipo (manual o derivada), no se da de alta otra igual.
+    - **«Otra» no se ofrece.** Es el tipo con el que el motor de derivación recoge lo
+      que no encaja (y las alertas ya guardadas con él se siguen leyendo y editando),
+      pero dar de alta una a mano obliga a clasificarla. Como el campo se valida
+      contra las opciones ofrecidas, mandar `other` por POST es un error de campo.
+    """
+
+    class Meta:
+        model = ClinicalAlert
+        fields = ('alert_type', 'severity', 'note')
+        labels = {
+            'alert_type': 'Tipo de alerta',
+            'severity': 'Gravedad',
+            'note': 'Detalle',
+        }
+        widgets = {
+            'alert_type': forms.Select(attrs={'class': FIELD_CLASS}),
+            'severity': forms.Select(attrs={'class': FIELD_CLASS}),
+            'note': forms.Textarea(attrs={
+                'rows': 3,
+                'class': FIELD_CLASS,
+                'placeholder': 'Ej. Anticoagulado con acenocumarol: cuidado con cortes y sangrado.',
+            }),
+        }
+
+    def __init__(self, *args, patient, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.patient = patient
+        self.editing = bool(self.instance.pk)
+
+        alert_type = self.fields['alert_type']
+        # Editando se conservan todas las opciones: una alerta antigua de tipo
+        # «Otra» tiene que poder validarse con su propio tipo (campo deshabilitado).
+        alert_type.choices = [('', 'Selecciona el tipo…')] + [
+            choice for choice in alert_type.choices
+            if choice[0] and (self.editing or choice[0] != ClinicalAlert.AlertType.OTHER)
+        ]
+        alert_type.help_text = 'Lo que hay que saber antes de tratar al paciente.'
+        self.fields['severity'].help_text = (
+            'Crítica: puede contraindicar o cambiar un tratamiento. Advertencia: conviene tenerlo en cuenta. '
+            'Informativa: dato útil.'
+        )
+        self.fields['note'].help_text = 'Opcional. Texto clínico: no se copia al registro de cambios.'
+        self.fields['note'].required = False
+
+        if self.editing:
+            # El tipo es la identidad del aviso: se enseña, no se cambia.
+            self.fields['alert_type'].disabled = True
+
+    def clean(self):
+        cleaned = super().clean()
+        # `disabled` ya hace que se ignore lo que llegue por POST: el valor es el de la instancia.
+        alert_type = cleaned.get('alert_type') or (self.instance.alert_type if self.editing else None)
+
+        if alert_type and not self.editing:
+            if ClinicalAlert.objects.filter(
+                patient=self.patient, alert_type=alert_type, is_active=True
+            ).exists():
+                self.add_error(
+                    'alert_type',
+                    'Este paciente ya tiene una alerta vigente de este tipo. Edítala o desactívala antes de dar de alta otra.',
+                )
+        return cleaned
+
+    def clean_note(self):
+        return (self.cleaned_data.get('note') or '').strip()

@@ -704,11 +704,24 @@ class DashboardAppointmentManageView(LoginRequiredMixin, TemplateView):
             .count()
         )
 
+    def has_visit(self, appointment):
+        """¿Esta cita ya tiene visita clínica abierta? Un booleano, nada de su contenido.
+
+        Decide solo si el botón dice «Abrir visita» o «Ir a la nota»; por lo mismo
+        que el recuento de procedimientos, no lleva `AccessLog`.
+        """
+        from clinical.models import Visit
+
+        return bool(appointment.patient_id) and Visit.objects.filter(
+            appointment=appointment
+        ).exists()
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         appointment = self._get_scoped_appointment()
         context['appointment'] = appointment
         context['procedure_count'] = self.count_procedures(appointment)
+        context['has_visit'] = self.has_visit(appointment)
         context['section'] = 'dashboard'
         return context
 

@@ -48,7 +48,15 @@ Resumen de `CLAUDE.md`; mandan sobre la comodidad.
 
 Empieza ya; no depende de nadie.
 
-## 1.1 Curso clínico en el panel (M-L)
+## 1.1 Curso clínico en el panel (M-L) — HECHO el 22/10/2026
+
+> **Entregado.** Pestaña «Historia» (`patients/history_views.py`), episodios (abrir,
+> editar, cerrar, reabrir), visitas, nota SOAP en borrador → firma → adenda, y
+> `appointments:visit-open` desde la cita. Todo con `AccessLog` en cada lectura y 404
+> entre clínicas y entre pacientes. Tests: `tests/patients/test_history_course.py`,
+> `tests/appointments/test_visit_open.py`. Detalle en `clinical/README.md`.
+> Fuera de lo hecho, a propósito: borrar episodios o visitas desde el panel (sigue en
+> el admin; solo se descartan borradores de nota).
 
 **Hoy.** `Episode`, `Visit`, `ClinicalNote` (SOAP) y `Addendum` existen, con
 inmutabilidad en modelo y en trigger de PostgreSQL (`clinical/migrations/0002`) y
@@ -74,19 +82,28 @@ registrar un procedimiento (`clinical/procedures.py`: `record_procedure`,
 - Todas las lecturas con `AccessLogMixin`.
 
 **Decisiones previas.**
-1. Etiquetas. El modelo es SOAP; Apclinic usa «Motivo / Diagnóstico / Tratamiento y
-   pruebas / Evolución». Propuesta: mantener el modelo y mostrar etiquetas de
-   podología sobre los mismos 4 campos (S «Motivo y lo que refiere», O «Exploración»,
-   A «Diagnóstico», P «Tratamiento y plan»). **Validar con Elena antes de fijarlas.**
-2. Autoría del borrador: `ClinicalNote` solo guarda `signed_by`. Quién escribió un
-   borrador queda en el `ChangeLog`. Decidir si basta.
+1. Etiquetas. **Cerrada (22/10/2026):** se mantiene SOAP y cada apartado lleva su
+   letra, una explicación y un ejemplo de podología (`clinical/soap.py`): Subjetivo,
+   Objetivo, Análisis, Plan. Cambiar una etiqueta es tocar ese fichero. Elena puede
+   pulir los textos cuando los vea.
+2. Autoría del borrador. **Cerrada (22/10/2026):** basta el `ChangeLog`
+   (`ClinicalNote` solo guarda `signed_by`).
 
 **Hecho cuando.** Un profesional puede abrir una visita desde una cita, escribir,
 firmar y añadir adenda sin tocar el admin; una nota firmada no se puede cambiar por
 ninguna vista; otra clínica ve 404; cada lectura deja `AccessLog`; hay tests de todo
 eso.
 
-## 1.2 Firmar consentimientos desde el panel (M)
+## 1.2 Firmar consentimientos desde el panel (M) — HECHO el 22/10/2026
+
+> **Entregado.** `patients:consent-sign`: texto íntegro de la versión vigente,
+> lienzo táctil (`static/js/signature_pad.js`), episodio abierto o nuevo, alta por
+> `SignedConsent.sign()`. Se firma lo que se leyó (si se publica otra versión
+> mientras tanto, se rechaza). La firma llega como PNG, se valida y se reescribe en el
+> servidor (`clinical/signature.py`). Tests: `tests/patients/test_consent_sign.py`,
+> `tests/clinical/test_signature.py`. Probado en navegador (ratón, lienzo vacío, móvil y
+> tema oscuro); **falta probar con un dedo en una tablet/iOS real**. Plantillas y
+> versiones siguen en el admin.
 
 **Hoy.** `ConsentTemplate`, `ConsentVersion` y `SignedConsent` existen
 (`SignedConsent.sign(version, patient, episode, signature_image)` copia el texto
@@ -341,13 +358,13 @@ Orden sugerido:
 5.x por demanda y, si no, poco a poco
 ```
 
-Empezar por **1.1 y 1.2** en paralelo, y **3.1** en cuanto haya hueco. Al terminar
+**1.1 y 1.2 están hechos** (22/10/2026); siguen **1.3** y **3.1** en cuanto haya hueco. Al terminar
 cada paso, actualizar este documento marcándolo hecho.
 
 ## Decisiones abiertas
 
-1. Etiquetas de la nota clínica (1.1): SOAP o las de podología. Preguntar a Elena.
-2. Autoría de los borradores (1.1).
+1. ~~Etiquetas de la nota clínica (1.1)~~ — cerrada el 22/10/2026: SOAP con etiquetas de podología.
+2. ~~Autoría de los borradores (1.1)~~ — cerrada el 22/10/2026: basta el `ChangeLog`.
 3. Cómo se audita una vista pública sin usuario (1.3).
 4. Informes con IA (4.1): Django directo contra Azure o vía n8n.
 5. Librería de PDF (2.2 y 4.1).

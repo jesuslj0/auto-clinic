@@ -1,6 +1,6 @@
 """Hash de firma de una nota clínica.
 
-Al firmar, se calcula un SHA-256 sobre un JSON canónico del contenido SOAP más
+Al firmar, se calcula un SHA-256 sobre un JSON canónico del contenido de la nota más
 los metadatos de firma. El hash ata *qué* se firmó a *quién* lo firmó y *cuándo*:
 si más adelante alguien lograra alterar el contenido por debajo del ORM y del
 trigger, el hash dejaría de cuadrar y la manipulación sería detectable.
@@ -14,11 +14,27 @@ import json
 
 ALGORITHM = 'sha256'
 
+#: Campos de contenido añadidos DESPUÉS de las primeras notas firmadas (subcampos
+#: de exploración y de plan, y antecedentes). Entran en el hash **solo si traen
+#: texto**: una nota firmada antes de que existieran sigue produciendo exactamente
+#: el mismo JSON que cuando se firmó, y su sello sigue verificando. Y si alguien
+#: añadiera texto a uno de ellos por debajo del ORM, el hash dejaría de cuadrar.
+LATER_FIELDS = (
+    'background',
+    'inspection',
+    'palpation',
+    'biomechanics',
+    'complementary_tests',
+    'treatment_done',
+    'follow_up',
+)
+
 
 def _canonical_payload(note) -> str:
     """JSON canónico del contenido firmado.
 
-    Incluye los cuatro campos SOAP y los metadatos de firma. `signed_at` se
+    Incluye los cuatro campos SOAP originales, los campos posteriores que traigan
+    texto (`LATER_FIELDS`) y los metadatos de firma. `signed_at` se
     serializa en ISO-8601; `note_id` y `signed_by_id` atan el hash a la
     identidad concreta de la nota y del firmante.
     """
@@ -31,6 +47,10 @@ def _canonical_payload(note) -> str:
         'signed_by_id': note.signed_by_id,
         'signed_at': note.signed_at.isoformat() if note.signed_at else None,
     }
+    for name in LATER_FIELDS:
+        value = getattr(note, name, '')
+        if value:
+            payload[name] = value
     return json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(',', ':'))
 
 

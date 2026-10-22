@@ -1,13 +1,25 @@
 {% comment %}
 Panel «Alertas». Lista las alertas vigentes del paciente (`active_alerts`, la
-misma consulta que alimenta la banda superior). Solo lectura en esta fase: dar de
-alta y desactivar alertas llega en una fase posterior — recuerda entonces que una
-alerta no se borra, se desactiva.
+misma consulta que alimenta la banda superior) y, plegadas, las desactivadas.
+
+Se dan de alta a mano (`patients:alert-create`) además de derivarse de la
+anamnesis. Una alerta NO se borra: se desactiva (y se puede reactivar), porque la
+fila conservada es lo que responde a «esto se sabía en aquel momento». Solo las
+manuales se editan; una derivada se corrige contestando de nuevo la anamnesis.
+Desactivar y reactivar son POST con CSRF, nunca enlaces.
 {% endcomment %}
 <section class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
-    <div class="border-b border-line px-6 py-5">
-        <h3 class="text-lg font-semibold text-content">Alertas clínicas</h3>
-        <p class="mt-1 text-sm text-content-subtle">Avisos vigentes del paciente. Las desactivadas se conservan, pero no se muestran aquí.</p>
+    <div class="flex flex-col gap-3 border-b border-line px-6 py-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+            <h3 class="text-lg font-semibold text-content">Alertas clínicas</h3>
+            <p class="mt-1 text-sm text-content-subtle">Avisos vigentes del paciente. Las desactivadas se conservan y están al final, plegadas.</p>
+        </div>
+        <a href="{% url 'patients:alert-create' patient.pk %}" class="btn-primary self-start max-sm:px-3" aria-label="Nueva alerta">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            <span class="hidden sm:inline">Nueva alerta</span>
+        </a>
     </div>
 
     <div class="divide-y divide-line">
@@ -39,6 +51,17 @@ alerta no se borra, se desactiva.
                     {% if alert.created_by %} por {{ alert.created_by }}{% endif %}
                 </p>
             </div>
+
+            <div class="flex flex-shrink-0 flex-wrap items-center gap-2 sm:flex-col sm:items-end">
+                {% if alert.source == 'manual' %}
+                <a href="{% url 'patients:alert-edit' patient.pk alert.pk %}" class="btn-secondary max-sm:px-3">Editar</a>
+                {% endif %}
+                <form method="post" action="{% url 'patients:alert-deactivate' patient.pk alert.pk %}"
+                      onsubmit="return confirm('¿Desactivar esta alerta? Se retira de la ficha pero se conserva en el historial y se puede reactivar.');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-secondary max-sm:px-3">Desactivar</button>
+                </form>
+            </div>
         </article>
         {% empty %}
         <div class="flex flex-col items-center gap-3 px-6 py-14 text-center">
@@ -49,7 +72,34 @@ alerta no se borra, se desactiva.
             </span>
             <p class="text-sm font-semibold text-content">Sin alertas activas</p>
             <p class="max-w-sm text-sm text-content-subtle">Este paciente no tiene ningún aviso vigente. Las alertas aparecerán aquí y en la banda superior de la ficha.</p>
+            <a href="{% url 'patients:alert-create' patient.pk %}" class="btn-secondary">Dar de alta una alerta</a>
         </div>
         {% endfor %}
     </div>
+
+    {% if inactive_alerts %}
+    <details class="border-t border-line">
+        <summary class="cursor-pointer px-6 py-4 text-sm font-semibold text-content-muted hover:text-brand-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+            Desactivadas ({{ inactive_alerts|length }})
+        </summary>
+        <div class="divide-y divide-line">
+            {% for alert in inactive_alerts %}
+            <article class="flex flex-col gap-3 bg-muted px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div class="min-w-0">
+                    <p class="text-sm font-semibold text-content-muted">
+                        {{ alert.get_alert_type_display }}
+                        <span class="ml-1 text-xs font-medium text-content-subtle">· {{ alert.get_severity_display }} · {{ alert.get_source_display }}</span>
+                    </p>
+                    {% if alert.note %}<p class="mt-1 whitespace-pre-line break-words text-sm text-content-subtle">{{ alert.note }}</p>{% endif %}
+                    <p class="mt-1 text-xs text-content-faint">Registrada el {{ alert.created_at|date:"j M, Y" }} · desactivada el {{ alert.updated_at|date:"j M, Y" }}</p>
+                </div>
+                <form method="post" action="{% url 'patients:alert-reactivate' patient.pk alert.pk %}" class="flex-shrink-0">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-secondary max-sm:px-3">Reactivar</button>
+                </form>
+            </article>
+            {% endfor %}
+        </div>
+    </details>
+    {% endif %}
 </section>

@@ -28,7 +28,7 @@ from django.db import transaction
 from clinical.models import Episode, MedicalHistory, Visit
 
 
-def _history_for(patient):
+def history_for(patient):
     """La historia del paciente, creándola si es de antes de la capa clínica."""
     history = MedicalHistory.objects.filter(patient=patient).first()
     if history is None:
@@ -39,7 +39,7 @@ def _history_for(patient):
 def open_episode(patient, *, reason, professional=None) -> Episode:
     """Abre un episodio para el paciente con el motivo indicado."""
     return Episode.objects.create(
-        history=_history_for(patient),
+        history=history_for(patient),
         reason=(reason or '').strip(),
         responsible_professional=professional,
     )
