@@ -75,7 +75,7 @@ class TestCreate:
         general = logged.get(reverse('patients:detail', kwargs={'id': patient_a.pk})).content.decode()
 
         assert 'Tratamiento anticoagulante' in tab
-        assert 'Alertas clínicas activas' in general
+        assert 'data-alerts-badge' in general
 
     def test_the_type_is_required(self, logged, patient_a):
         response = logged.post(url('alert-create', patient_a), {'alert_type': '', 'severity': Severity.INFO})
@@ -202,7 +202,7 @@ class TestDeactivateAndReactivate:
         assert alert_a.is_active is False
         assert ClinicalAlert.all_objects.filter(pk=alert_a.pk).exists()
         general = logged.get(reverse('patients:detail', kwargs={'id': patient_a.pk})).content.decode()
-        assert 'Alertas clínicas activas' not in general
+        assert 'data-alerts-badge' not in general
 
     def test_deactivated_alerts_are_listed_and_can_be_reactivated(self, logged, patient_a, alert_a):
         alert_a.deactivate()

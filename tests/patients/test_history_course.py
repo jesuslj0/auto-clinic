@@ -110,9 +110,11 @@ class TestHistoryTab:
     def test_links_to_the_rest_of_the_record(self, logged, patient_a, episode_a, visit_a):
         html = logged.get(url('tab-history', patient_a)).content.decode()
 
-        for name in ('tab-consents', 'tab-lesions', 'tab-anamnesis', 'tab-procedures',
-                     'consent-sign', 'anamnesis-create'):
+        for name in ('tab-lesions', 'tab-procedures', 'consent-sign', 'anamnesis-create'):
             assert url(name, patient_a) in html
+        # Anamnesis y consentimientos viven en «Documentos», con su ancla.
+        assert f"{url('tab-documents', patient_a)}#consentimientos" in html
+        assert f"{url('tab-documents', patient_a)}#anamnesis" in html
 
     def test_the_tab_bar_includes_history(self, logged, patient_a):
         html = logged.get(reverse('patients:detail', kwargs={'id': patient_a.pk})).content.decode()

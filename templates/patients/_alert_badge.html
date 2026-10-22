@@ -1,0 +1,33 @@
+{% comment %}
+Insignia de alertas vigentes del paciente: el icono de aviso y el NÚMERO, nada más.
+Va en la cabecera, a la derecha del título de la ficha, y sustituye a la antigua banda
+a ancho completo. Si no hay alertas activas no se pinta.
+
+Lleva el color de lo más grave que haya (`has_critical_alerts`): rojo si alguna es
+crítica, ámbar si no. El número solo no dice qué alertas son, así que el nombre
+accesible lo cuenta y el enlace lleva a la pestaña «Alertas», que las detalla.
+
+Sobre el `role`: es un enlace con nombre, no un `role="alert"` (el contenido es
+estático y `alert` interrumpiría al lector de pantalla). Enlace real, con el mismo
+swap de HTMX que la barra de pestañas.
+{% endcomment %}
+{% if active_alerts %}
+<a
+    href="{% url 'patients:tab-alerts' patient.id %}"
+    hx-get="{% url 'patients:tab-alerts' patient.id %}"
+    hx-target="#patient-tab-region"
+    hx-swap="innerHTML"
+    hx-push-url="true"
+    data-alerts-badge
+    title="{{ active_alerts|length }} alerta{{ active_alerts|length|pluralize }} clínica{{ active_alerts|length|pluralize }} activa{{ active_alerts|length|pluralize }}: ver detalle"
+    aria-label="{{ active_alerts|length }} alerta{{ active_alerts|length|pluralize }} clínica{{ active_alerts|length|pluralize }} activa{{ active_alerts|length|pluralize }}. Ver detalle"
+    class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold ring-1 transition hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 {% if has_critical_alerts %}bg-danger-soft text-danger ring-danger-line{% else %}bg-warning-soft text-warning ring-warning-line{% endif %}"
+>
+    <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+    </svg>
+    <span aria-hidden="true">
+        {{ active_alerts_display }}
+    </span>
+</a>
+{% endif %}

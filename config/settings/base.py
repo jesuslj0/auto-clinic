@@ -294,6 +294,12 @@ CLINICAL_ATTACHMENT_MAX_BYTES_EXTERNAL = config(
     'CLINICAL_ATTACHMENT_MAX_BYTES_EXTERNAL', default=5 * 1024 * 1024, cast=int
 )
 
+# Ficha desde el móvil del paciente (`clinical/intake.py`): enlace público de un solo
+# uso. Valores por defecto en `clinical/conf.py`; aquí solo los que merece la pena
+# poder cambiar sin tocar código.
+PATIENT_FORM_LINK_TTL_HOURS = config('PATIENT_FORM_LINK_TTL_HOURS', default=48, cast=int)
+INTAKE_MINOR_AGE = config('INTAKE_MINOR_AGE', default=16, cast=int)
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,

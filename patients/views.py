@@ -31,6 +31,7 @@ from clinical.models import (
     LesionAttachment,
     LesionObservation,
     MedicalHistory,
+    PatientFormLink,
     QuestionnaireResponse,
     QuestionnaireTemplate,
     PerformedProcedure,
@@ -254,13 +255,32 @@ class PatientListView(AccessLogMixin, LoginRequiredMixin, ListView):
 #: las plantillas para que añadir una sección en fases posteriores sea una línea
 #: (más su ruta y su parcial).
 PATIENT_TABS = [
-    {'key': 'general', 'label': 'Datos generales', 'url_name': 'patients:detail'},
-    {'key': 'history', 'label': 'Historia', 'url_name': 'patients:tab-history'},
-    {'key': 'procedures', 'label': 'Procedimientos', 'url_name': 'patients:tab-procedures'},
-    {'key': 'lesions', 'label': 'Lesiones', 'url_name': 'patients:tab-lesions'},
-    {'key': 'alerts', 'label': 'Alertas', 'url_name': 'patients:tab-alerts'},
-    {'key': 'consents', 'label': 'Consentimientos', 'url_name': 'patients:tab-consents'},
-    {'key': 'anamnesis', 'label': 'Anamnesis', 'url_name': 'patients:tab-anamnesis'},
+    # `icon` es el atributo `d` de un único <path> (Heroicons, trazo, 24×24): la
+    # barra lo pinta pequeño junto a la etiqueta (`_patient_tabs.html`).
+    {
+        'key': 'general', 'label': 'Datos generales', 'url_name': 'patients:detail',
+        'icon': 'M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z',
+    },
+    {
+        'key': 'history', 'label': 'Historia', 'url_name': 'patients:tab-history',
+        'icon': 'M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z',
+    },
+    {
+        'key': 'procedures', 'label': 'Procedimientos', 'url_name': 'patients:tab-procedures',
+        'icon': 'M11.35 3.836c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m8.9-4.414c.376.023.75.05 1.124.08 1.131.094 1.976 1.057 1.976 2.192V16.5A2.25 2.25 0 0118 18.75h-2.25m-7.5-10.5H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V18.75m-7.5-10.5h6.375c.621 0 1.125.504 1.125 1.125v9.375m-8.25-3l1.5 1.5 3-3.75',
+    },
+    {
+        'key': 'lesions', 'label': 'Lesiones', 'url_name': 'patients:tab-lesions',
+        'icon': 'M15 10.5a3 3 0 11-6 0 3 3 0 016 0zM19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z',
+    },
+    {
+        'key': 'alerts', 'label': 'Alertas', 'url_name': 'patients:tab-alerts',
+        'icon': 'M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0',
+    },
+    {
+        'key': 'documents', 'label': 'Documentos', 'url_name': 'patients:tab-documents',
+        'icon': 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z',
+    },
 ]
 
 #: Orden de presentación de las alertas: primero lo que puede contraindicar un
@@ -351,7 +371,7 @@ class PatientTabView(PatientScopedMixin, AccessLogMixin, LoginRequiredMixin, Det
     def get_active_alerts(self):
         """Alertas vigentes del paciente, ordenadas por gravedad.
 
-        Alimenta a la vez la banda superior (visible en todas las pestañas) y la
+        Alimenta a la vez la insignia de la cabecera (visible en todas las pestañas) y la
         pestaña de alertas. Las desactivadas y las borradas lógicamente quedan
         fuera: el manager ya excluye las segundas.
         """
@@ -362,6 +382,15 @@ class PatientTabView(PatientScopedMixin, AccessLogMixin, LoginRequiredMixin, Det
             .order_by('_severity_rank', '-created_at', '-id')
         )
 
+    def get_active_alerts_display(self):
+        alerts = self.get_active_alerts()
+        if not alerts:
+            return None
+        if len(alerts) == 1: 
+            return f"1 Alerta activa"
+        else: 
+            return f"{len(alerts)} Alertas activas"
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['section'] = 'patients'
@@ -371,6 +400,7 @@ class PatientTabView(PatientScopedMixin, AccessLogMixin, LoginRequiredMixin, Det
         context['chat_session'], context['chat_state'] = patient_chat_access(self.object)
         alerts = self.get_active_alerts()
         context['active_alerts'] = alerts
+        context['active_alerts_display'] = self.get_active_alerts_display()
         context['has_critical_alerts'] = any(
             alert.severity == ClinicalAlert.Severity.CRITICAL for alert in alerts
         )
@@ -416,20 +446,35 @@ class PatientDetailView(PatientTabView):
         return context
 
 
-class PatientAnamnesisTabView(PatientTabView):
-    """Pestaña «Anamnesis»: los cuestionarios que contestó el paciente.
+class PatientDocumentsTabView(PatientTabView):
+    """Pestaña «Documentos»: la anamnesis y los consentimientos del paciente.
 
-    Lo que se pinta es el `snapshot` de cada respuesta —la copia literal de las
-    preguntas tal y como se le mostraron ese día—, nunca las `Question` vivas por
-    FK. Por eso el queryset no las precarga: no hacen falta para leer la
-    respuesta, y traerlas invitaría a usarlas. La FK a `TemplateVersion` sí, pero
-    solo para decir de qué documento salió (plantilla y número de versión).
+    Son los dos documentos del paciente, y viven juntos para que la barra de
+    pestañas quepa: antes eran dos pestañas. Cada uno es su propio bloque, con su
+    botón de alta y su ancla (`#anamnesis`, `#consentimientos`).
 
-    Solo lectura: una respuesta es inmutable en cuanto existe.
+    **Anamnesis.** Lo que se pinta de cada respuesta es su `snapshot` —la copia
+    literal de las preguntas tal y como se le mostraron ese día—, nunca las
+    `Question` vivas por FK. Por eso el queryset no las precarga: no hacen falta
+    para leer la respuesta, y traerlas invitaría a usarlas. La FK a
+    `TemplateVersion` sí, pero solo para decir de qué documento salió (plantilla y
+    número de versión). Solo lectura: una respuesta es inmutable en cuanto existe.
+
+    **Consentimientos.** Las dos pruebas son el texto literal firmado
+    (`text_copy`, que puede no parecerse al de la versión vigente) y la imagen de
+    la firma. La firma **no** se pinta aquí: vive en el bucket privado y solo se
+    sirve por `clinical:consent-signature`, que comprueba el permiso, firma la URL
+    y deja su propio `AccessLog` de descarga. La plantilla enlaza a esa vista y
+    nada más; nunca a `signature_image.url`. `version__template` se precarga
+    porque de la versión se enseñan el nombre de la plantilla y el número, no su
+    texto actual.
+
+    Las rutas antiguas (`anamnesis/`, `consentimientos/`) siguen existiendo y
+    devuelven esta misma pestaña: están en marcadores y en enlaces ya enviados.
     """
 
-    tab = 'anamnesis'
-    panel_template = 'patients/tabs/_anamnesis.html'
+    tab = 'documents'
+    panel_template = 'patients/tabs/_documentos.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -441,7 +486,29 @@ class PatientAnamnesisTabView(PatientTabView):
             # dos respuestas de la misma fecha bailen entre recargas.
             .order_by('-filled_at', '-id')
         )
+        # Los últimos enlaces de ficha enviados: estado, no contenido. El token no
+        # se guarda, así que ninguno se puede volver a enseñar; se anulan o caducan.
+        context['form_links'] = list(
+            PatientFormLink.objects
+            .filter(patient=self.object)
+            .select_related('questionnaire_template', 'consent_template', 'created_by')
+            .order_by('-created_at', '-id')[:10]
+        )
+        context['consents'] = list(
+            SignedConsent.objects
+            .filter(patient=self.object)
+            .select_related('version', 'version__template')
+            .order_by('-signed_at', '-id')
+        )
         return context
+
+
+class PatientAnamnesisTabView(PatientDocumentsTabView):
+    """Ruta antigua de la pestaña de anamnesis: ahora es «Documentos»."""
+
+
+class PatientConsentsTabView(PatientDocumentsTabView):
+    """Ruta antigua de la pestaña de consentimientos: ahora es «Documentos»."""
 
 
 class PatientAlertsTabView(PatientTabView):
@@ -664,34 +731,6 @@ class PatientLesionsTabView(PatientTabView):
         return context
 
 
-class PatientConsentsTabView(PatientTabView):
-    """Pestaña «Consentimientos»: qué firmó el paciente, y la prueba de ello.
-
-    Las dos pruebas son el texto literal firmado (`text_copy`, que puede no
-    parecerse al de la versión vigente) y la imagen de la firma. La firma **no**
-    se pinta aquí: vive en el bucket privado y solo se sirve por
-    `clinical:consent-signature`, que comprueba el permiso, firma la URL y deja
-    su propio `AccessLog` de descarga. La plantilla enlaza a esa vista y nada
-    más; nunca a `signature_image.url`.
-
-    `version__template` se precarga porque de la versión se enseñan el nombre de
-    la plantilla y el número, no su texto actual.
-    """
-
-    tab = 'consents'
-    panel_template = 'patients/tabs/_consentimientos.html'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['consents'] = list(
-            SignedConsent.objects
-            .filter(patient=self.object)
-            .select_related('version', 'version__template')
-            .order_by('-signed_at', '-id')
-        )
-        return context
-
-
 class PatientProceduresTabView(PatientTabView):
     """Pestaña «Procedimientos»: qué se le hizo al paciente y por cuánto.
 
@@ -871,7 +910,7 @@ class PatientAnamnesisCreateView(
 
         context.update({
             'section': 'patients',
-            'cancel_url': reverse('patients:tab-anamnesis', kwargs={'id': self.object.pk}),
+            'cancel_url': reverse('patients:tab-documents', kwargs={'id': self.object.pk}) + '#anamnesis',
             'questionnaire_templates': templates,
             'questionnaire_template': template,
             'version': version,
@@ -923,7 +962,7 @@ class PatientAnamnesisCreateView(
             )
 
         self.announce(response)
-        return redirect('patients:tab-anamnesis', id=self.object.pk)
+        return redirect(reverse('patients:tab-documents', kwargs={'id': self.object.pk}) + '#anamnesis')
 
     def announce(self, response):
         """Avisa de lo que ha pasado, incluidas las alertas que se han levantado.

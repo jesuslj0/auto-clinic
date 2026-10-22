@@ -23,6 +23,7 @@ class ClinicalConfig(AppConfig):
             LesionAttachment,
             LesionObservation,
             MedicalHistory,
+            PatientFormLink,
             PerformedProcedure,
             Question,
             QuestionnaireResponse,
@@ -132,8 +133,23 @@ class ClinicalConfig(AppConfig):
         registry.register(ConsentVersion)
         registry.register(
             SignedConsent,
-            sensitive=['text_copy', 'signature_image'],
+            sensitive=['text_copy', 'signature_image', 'signer_name'],
             patient_resolver=lambda consent: consent.patient,
+        )
+
+        # Enlace de ficha del paciente. No es dato clínico sino la llave pública a
+        # la capa clínica, y su ciclo de vida (emitido, completado, revocado,
+        # bloqueado) es trazabilidad: se audita entero. Enmascarados: la huella del
+        # token (aunque no sea el token, no hay motivo para copiarla), el motivo del
+        # episodio (texto clínico libre) y los datos de quien rellenó en nombre del
+        # paciente (datos personales de un tercero).
+        registry.register(
+            PatientFormLink,
+            sensitive=[
+                'token_hash', 'episode_reason',
+                'completed_by_name', 'completed_by_relationship',
+            ],
+            patient_resolver=lambda link: link.patient,
         )
 
         # --- Auto-creación de la historia al alta del paciente ---------------

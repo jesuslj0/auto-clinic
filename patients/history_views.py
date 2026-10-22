@@ -73,6 +73,12 @@ def history_url(patient_id, anchor=''):
     return f'{url}#{anchor}' if anchor else url
 
 
+def documents_url(patient_id, anchor=''):
+    """La pestaña «Documentos» (anamnesis y consentimientos), con su ancla."""
+    url = reverse('patients:tab-documents', kwargs={'id': patient_id})
+    return f'{url}#{anchor}' if anchor else url
+
+
 def visit_landing_url(visit, patient_id):
     """Dónde se escribe la nota de una visita: la que ya hay, o una nueva.
 
@@ -829,7 +835,7 @@ class PatientConsentSignView(EpisodeAuthoringMixin, HistoryPageView):
             'consent_template': template,
             'version': version,
             'template_param': self.template_param,
-            'cancel_url': reverse('patients:tab-consents', kwargs={'id': self.object.pk}),
+            'cancel_url': documents_url(self.object.pk, 'consentimientos'),
         })
         if context.get('form') is None:
             context['form'] = self.get_form(version) if state == 'formulario' else None
@@ -868,4 +874,4 @@ class PatientConsentSignView(EpisodeAuthoringMixin, HistoryPageView):
             return self.render_to_response(self.get_context_data(form=form))
 
         messages.success(request, f'«{template.name}» firmado y archivado en la ficha.')
-        return redirect('patients:tab-consents', id=self.object.pk)
+        return redirect(documents_url(self.object.pk, 'consentimientos'))

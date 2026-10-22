@@ -128,6 +128,18 @@ borrador no se puede firmar; el texto firmado queda copiado; la lectura deja
 
 ## 1.3 Ficha y RGPD desde el móvil del paciente (L; después de 1.1 y 1.2)
 
+> **Entregado el 23/10/2026.** `PatientFormLink` (migración `clinical/0016`), página pública
+> `/ficha/<token>/` (`clinical/public_views.py`), envío desde «Documentos»
+> (`patients:form-link-create`, por WhatsApp si la ventana de 24 h está abierta; si no, el enlace
+> se entrega para copiarlo). Token solo como hash, 48 h, un uso, anulable; verificación con la
+> fecha de nacimiento y bloqueo a los 5 fallos; menores (<16) con representante guardado en la
+> firma (migración `0017`, trigger incluido); actor de auditoría = el enlace, origen `public`
+> (decisión abierta nº 3, **cerrada**). Página sin recursos de terceros y con CSP estricta.
+> Revisión RGPD y lista de pendientes en `clinical/README.md`. Tests:
+> `tests/clinical/test_intake.py`, `tests/patients/test_form_link_views.py`.
+> **Pendiente:** revisión legal del aviso (`PRIVACY_NOTICE_VERSION`), envío fuera de la ventana
+> de 24 h con plantilla, y probar con un móvil real.
+
 **Objetivo.** El paciente rellena anamnesis, lee la información de protección de
 datos y firma desde su móvil antes de la visita.
 
@@ -358,14 +370,14 @@ Orden sugerido:
 5.x por demanda y, si no, poco a poco
 ```
 
-**1.1 y 1.2 están hechos** (22/10/2026); siguen **1.3** y **3.1** en cuanto haya hueco. Al terminar
+**1.1 y 1.2 están hechos** (22/10/2026) y **1.3** (23/10/2026); sigue **3.1** en cuanto haya hueco. Al terminar
 cada paso, actualizar este documento marcándolo hecho.
 
 ## Decisiones abiertas
 
 1. ~~Etiquetas de la nota clínica (1.1)~~ — cerrada el 22/10/2026: SOAP con etiquetas de podología.
 2. ~~Autoría de los borradores (1.1)~~ — cerrada el 22/10/2026: basta el `ChangeLog`.
-3. Cómo se audita una vista pública sin usuario (1.3).
+3. ~~Cómo se audita una vista pública sin usuario (1.3)~~ — cerrada el 23/10/2026: el actor es el enlace (`origin='public'`).
 4. Informes con IA (4.1): Django directo contra Azure o vía n8n.
 5. Librería de PDF (2.2 y 4.1).
 6. Base legal de las comunicaciones comerciales (3.4).

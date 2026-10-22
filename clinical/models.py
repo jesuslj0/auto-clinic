@@ -2069,6 +2069,7 @@ class SignedConsent(SoftDeleteModel, TimeStampedModel):
     FROZEN_FIELDS = (
         'version_id', 'patient_id', 'episode_id',
         'signed_at', 'text_copy', 'mime_type', 'size_bytes', 'checksum',
+        'signer_name', 'signer_relationship',
     )
 
     # Identificador público: el que viaja en la URL de la firma. La PK secuencial
@@ -2106,6 +2107,18 @@ class SignedConsent(SoftDeleteModel, TimeStampedModel):
         help_text='sha256:<hexdigest> de la firma tal y como se subió.',
     )
     signed_at = models.DateTimeField(default=timezone.now)
+    # Quién firma cuando no es el propio paciente (su madre, su tutor...). Vacíos
+    # = firmó el paciente. Un menor o una persona sin capacidad no consiente por sí
+    # misma (Ley 41/2002, art. 9.3), y la firma de otra persona sin nombre ni
+    # relación no prueba nada.
+    signer_name = models.CharField(
+        max_length=150, blank=True,
+        help_text='Nombre de quien firma en nombre del paciente. Vacío si firma el propio paciente.',
+    )
+    signer_relationship = models.CharField(
+        max_length=100, blank=True,
+        help_text='Relación con el paciente (madre, padre, tutor legal...).',
+    )
 
     class Meta(SoftDeleteModel.Meta):
         abstract = False
@@ -2205,16 +2218,22 @@ class SignedConsent(SoftDeleteModel, TimeStampedModel):
         self._loaded_file_name = self.signature_image.name
 
     @classmethod
-    def sign(cls, *, version, patient, episode, signature_image, signed_at=None):
+    def sign(cls, *, version, patient, episode, signature_image, signed_at=None,
+             signer_name='', signer_relationship=''):
         """Recoge una firma congelando el texto de la versión.
 
         Es la vía normal de alta. Existe por lo mismo que
         `QuestionnaireResponse.record()`: que el congelado no dependa de que
         quien escribe la vista se acuerde de copiarlo.
+
+        `signer_name` / `signer_relationship` solo se rellenan cuando firma otra
+        persona en nombre del paciente.
         """
         consent = cls(
             version=version, patient=patient, episode=episode,
             signature_image=signature_image,
+            signer_name=(signer_name or '').strip(),
+            signer_relationship=(signer_relationship or '').strip(),
         )
         if signed_at is not None:
             consent.signed_at = signed_at
@@ -2228,3 +2247,159 @@ class SignedConsent(SoftDeleteModel, TimeStampedModel):
         fichero sigue mientras corra el plazo de conservación.
         """
         super().delete(using=using, keep_parents=keep_parents)
+
+
+# ---------------------------------------------------------------------------
+# Enlace de ficha: el paciente rellena su ficha desde el móvil
+# ---------------------------------------------------------------------------
+#
+# La clínica genera un enlace personal que llega al paciente por WhatsApp. Abre
+# una página PÚBLICA (sin sesión) donde contesta la anamnesis vigente y/o firma un
+# consentimiento. Es la única puerta pública que escribe en la capa clínica, y por
+# eso lo que la protege vive en el modelo y no en la vista:
+#
+#   · el token no se guarda: solo su hash SHA-256. Quien lea la base de datos no
+#     puede reconstruir ningún enlace (`clinical/intake.py` lo genera y se lo
+#     entrega una única vez a quien lo emite);
+#   · caduca (`expires_at`) y es de un solo uso (`completed_at`);
+#   · se puede revocar, y se bloquea solo tras varios fallos al verificar la
+#     identidad (`failed_attempts`);
+#   · la página nunca enseña nada de la historia del paciente.
+#
+# Ver `clinical/README.md`, apartado «Ficha desde el móvil del paciente».
+
+
+class PatientFormLink(TimeStampedModel):
+    """Enlace de un solo uso para que el paciente rellene su ficha desde el móvil.
+
+    No es dato clínico: es la llave. Pero cuelga de un paciente y su ciclo de vida
+    (emitido, completado, revocado) es parte de la trazabilidad, así que está en
+    la auditoría y **nunca se borra** (no hay ruta ni método que lo haga).
+    """
+
+    #: Fallos al verificar la identidad tras los cuales el enlace se bloquea.
+    MAX_FAILED_ATTEMPTS = 5
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Pendiente'
+        COMPLETED = 'completed', 'Completado'
+        EXPIRED = 'expired', 'Caducado'
+        REVOKED = 'revoked', 'Revocado'
+
+    class Channel(models.TextChoices):
+        WHATSAPP = 'whatsapp', 'WhatsApp'
+        MANUAL = 'manual', 'Copiado a mano'
+
+    clinic = models.ForeignKey(
+        'core.Clinic', on_delete=models.CASCADE, related_name='patient_form_links'
+    )
+    # Mismo patrón que `MedicalHistory`: dar de baja al paciente no puede arrastrar
+    # ni bloquear este rastro.
+    patient = models.ForeignKey(
+        'patients.Patient', on_delete=models.DO_NOTHING,
+        related_name='form_links', db_constraint=False,
+    )
+    questionnaire_template = models.ForeignKey(
+        QuestionnaireTemplate, on_delete=models.PROTECT, null=True, blank=True,
+        related_name='+', help_text='Cuestionario que se pide rellenar (su versión vigente).',
+    )
+    consent_template = models.ForeignKey(
+        ConsentTemplate, on_delete=models.PROTECT, null=True, blank=True,
+        related_name='+', help_text='Consentimiento que se pide firmar (su versión vigente).',
+    )
+    # El episodio del que colgará lo que el paciente envíe. Si se cierra antes de
+    # que conteste, o no se eligió ninguno, se abre uno con `episode_reason`.
+    episode = models.ForeignKey(
+        Episode, on_delete=models.PROTECT, null=True, blank=True, related_name='+',
+    )
+    episode_reason = models.CharField(max_length=255, blank=True)
+
+    token_hash = models.CharField(
+        max_length=64, unique=True, editable=False,
+        help_text='SHA-256 del token. El token en claro no se guarda.',
+    )
+    created_by = models.ForeignKey(
+        'core.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+    )
+    expires_at = models.DateTimeField(db_index=True)
+    channel = models.CharField(max_length=20, choices=Channel.choices, default=Channel.MANUAL)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    failed_attempts = models.PositiveSmallIntegerField(default=0)
+
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    revoked_by = models.ForeignKey(
+        'core.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+    )
+
+    completed_at = models.DateTimeField(null=True, blank=True)
+    # Quién rellenó, si no fue el propio paciente. Vacío = el paciente.
+    completed_by_name = models.CharField(max_length=150, blank=True)
+    completed_by_relationship = models.CharField(max_length=100, blank=True)
+    #: Versión del aviso de protección de datos que se le enseñó
+    #: (`clinical.intake.PRIVACY_NOTICE_VERSION`).
+    privacy_notice_version = models.CharField(max_length=30, blank=True)
+    questionnaire_response = models.OneToOneField(
+        QuestionnaireResponse, on_delete=models.PROTECT, null=True, blank=True, related_name='+',
+    )
+    signed_consent = models.OneToOneField(
+        SignedConsent, on_delete=models.PROTECT, null=True, blank=True, related_name='+',
+    )
+
+    class Meta:
+        db_table = 'clinical_patient_form_link'
+        ordering = ['-created_at', '-id']
+        verbose_name = 'enlace de ficha'
+        verbose_name_plural = 'enlaces de ficha'
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(questionnaire_template__isnull=False)
+                    | models.Q(consent_template__isnull=False)
+                ),
+                name='clinical_form_link_has_something_to_fill',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['patient', '-created_at'], name='idx_form_link_patient'),
+        ]
+
+    def __str__(self):
+        return f'Enlace de ficha #{self.pk} ({self.get_status_display()})'
+
+    def get_status(self, now=None) -> str:
+        now = now or timezone.now()
+        if self.completed_at:
+            return self.Status.COMPLETED
+        if self.revoked_at:
+            return self.Status.REVOKED
+        if self.expires_at <= now:
+            return self.Status.EXPIRED
+        return self.Status.PENDING
+
+    @property
+    def status(self) -> str:
+        return self.get_status()
+
+    def get_status_display(self):
+        return self.Status(self.get_status()).label
+
+    def is_usable(self, now=None) -> bool:
+        """¿Se puede abrir y enviar ahora? Pendiente, sin bloquear y con el paciente en alta."""
+        return (
+            self.get_status(now) == self.Status.PENDING
+            and self.failed_attempts < self.MAX_FAILED_ATTEMPTS
+        )
+
+    def revoke(self, *, by=None):
+        """Anula el enlace. Con `save()` y no `update()`: así queda en `ChangeLog`."""
+        if self.completed_at or self.revoked_at:
+            return
+        self.revoked_at = timezone.now()
+        self.revoked_by = by
+        self.save(update_fields=['revoked_at', 'revoked_by', 'updated_at'])
+
+    def delete(self, *args, **kwargs):
+        raise ProtectedClinicalRecord(
+            'Un enlace de ficha no se borra: es parte de la trazabilidad. Se revoca.'
+        )

@@ -1,0 +1,10 @@
+{% extends 'intake/base.html' %}
+{% block title %}Enlace no disponible{% endblock %}
+{% block content %}
+{# Una sola página para todo enlace que no vale (desconocido, caducado, usado, revocado o bloqueado): quien tantea no aprende por qué. #}
+<section class="card card--center">
+    <h1>Este enlace ya no está disponible</h1>
+    <p>Puede haber caducado, haberse usado ya o haber sido anulado. Por seguridad, los enlaces de la ficha son personales y de un solo uso.</p>
+    <p>Si todavía tienes que rellenar tu ficha, pide un enlace nuevo a la clínica.</p>
+</section>
+{% endblock %}
