@@ -31,6 +31,7 @@ from clinical.models import (
     LesionAttachment,
     LesionObservation,
     MedicalHistory,
+    PatientFormLink,
     QuestionnaireResponse,
     QuestionnaireTemplate,
     PerformedProcedure,
@@ -484,6 +485,14 @@ class PatientDocumentsTabView(PatientTabView):
             # El modelo ya ordena por `-filled_at`; el desempate por id evita que
             # dos respuestas de la misma fecha bailen entre recargas.
             .order_by('-filled_at', '-id')
+        )
+        # Los últimos enlaces de ficha enviados: estado, no contenido. El token no
+        # se guarda, así que ninguno se puede volver a enseñar; se anulan o caducan.
+        context['form_links'] = list(
+            PatientFormLink.objects
+            .filter(patient=self.object)
+            .select_related('questionnaire_template', 'consent_template', 'created_by')
+            .order_by('-created_at', '-id')[:10]
         )
         context['consents'] = list(
             SignedConsent.objects

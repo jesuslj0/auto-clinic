@@ -243,6 +243,7 @@ with audit_context(user=usuario, origin='command'):
 | `admin` | Admin de Django (`/admin/`) |
 | `n8n` | Agente de WhatsApp, detectado por la cabecera `Authorization: Api-Key` |
 | `command` | Sin petición: comandos, shell, Celery |
+| `public` | Página pública sin sesión (`/ficha/…`, enlace de ficha del paciente). El FK `user` queda a nulo y el actor es el enlace: `user_repr = "paciente (enlace de ficha #N)"` (`clinical.intake.patient_actor`) |
 
 El agente de n8n se autentica con un `ClinicAgent`, que **no es una fila de la
 tabla de usuarios**: en sus registros el FK `user` queda a nulo y la identidad

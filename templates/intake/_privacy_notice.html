@@ -1,0 +1,33 @@
+{% comment %}
+Información básica de protección de datos (primera capa, art. 13 RGPD).
+
+La versión está en `clinical.intake.PRIVACY_NOTICE_VERSION` y se guarda en el enlace
+al completarlo: **si se cambia este texto, hay que subirla**, para saber qué leyó
+cada paciente. Es una redacción de partida construida con los datos de la clínica;
+la definitiva es de la clínica y se revisa con quien lleve lo legal. Los datos del
+responsable salen de `Clinic` (nombre, NIF, dirección, contacto): si faltan, el aviso
+queda incompleto y hay que rellenarlos en «Mi clínica».
+{% endcomment %}
+<section class="card" aria-labelledby="privacy-title">
+    <h2 id="privacy-title">Información sobre protección de datos</h2>
+    <dl class="notice">
+        <dt>Responsable</dt>
+        <dd>{{ clinic.name }}{% if clinic.nif %} · NIF {{ clinic.nif }}{% endif %}{% if clinic.address %} · {{ clinic.address }}{% endif %}</dd>
+        <dt>Finalidad</dt>
+        <dd>Prestarte asistencia sanitaria y mantener tu historia clínica con los datos de salud que facilites en este formulario.</dd>
+        <dt>Base jurídica</dt>
+        <dd>La asistencia sanitaria que has solicitado y las obligaciones legales de documentación clínica (RGPD, art. 6.1.b, 6.1.c y 9.2.h; Ley 41/2002).</dd>
+        <dt>Destinatarios</dt>
+        <dd>No se ceden a terceros salvo obligación legal. Los proveedores tecnológicos que almacenan los datos lo hacen por encargo de la clínica y bajo contrato.</dd>
+        <dt>Conservación</dt>
+        <dd>Como mínimo cinco años desde el alta de cada proceso asistencial, y el tiempo adicional que exija la normativa sanitaria aplicable.</dd>
+        <dt>Tus derechos</dt>
+        <dd>
+            Acceso, rectificación, oposición, limitación y portabilidad, y supresión con el límite de la obligación legal de conservar la historia clínica.
+            {% if clinic.email or clinic.phone %}Puedes ejercerlos escribiendo a {{ clinic.email|default:clinic.phone }}.{% else %}Puedes ejercerlos dirigiéndote a la clínica.{% endif %}
+            Si crees que no se han respetado, puedes reclamar ante la Agencia Española de Protección de Datos (www.aepd.es).
+        </dd>
+        <dt>Este enlace</dt>
+        <dd>No usa cookies de seguimiento ni servicios de terceros. Solo guarda una cookie técnica imprescindible para enviar el formulario con seguridad.</dd>
+    </dl>
+</section>

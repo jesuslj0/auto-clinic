@@ -1,0 +1,30 @@
+{% load static %}
+{% comment %}
+Base de la página pública de la ficha (`/ficha/…`).
+
+**No extiende `base.html` ni incluye `_head_theme.html`, a propósito.** Esos cargan
+Google Fonts, el CDN de Tailwind y Alpine desde jsdelivr: abrir esta página le
+mandaría la IP y el navegador del paciente a esos terceros desde una pantalla de
+datos de salud. Aquí todo es propio: una hoja de estilos (`css/intake.css`) y un
+script (`js/intake.js`) servidos por la propia clínica, sin fuentes remotas, sin
+analítica y sin estilos ni scripts en línea (la CSP de `public_views.py` los
+prohíbe). El tema claro/oscuro sigue al del sistema con `prefers-color-scheme`.
+{% endcomment %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <meta name="referrer" content="same-origin">
+    <meta name="color-scheme" content="light dark">
+    <title>{% block title %}Ficha del paciente{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/intake.css' %}">
+</head>
+<body>
+    <main class="page">
+        {% block content %}{% endblock %}
+    </main>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

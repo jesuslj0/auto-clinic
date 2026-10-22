@@ -22,6 +22,7 @@ from patients.history_views import (
     PatientVisitCreateView,
     PatientVisitEditView,
 )
+from patients.intake_views import PatientFormLinkCreateView, PatientFormLinkRevokeView
 from patients.views import (
     PatientAlertsTabView,
     PatientArchiveView,
@@ -198,6 +199,18 @@ urlpatterns = [
         '<int:id>/consentimientos/firmar/',
         PatientConsentSignView.as_view(),
         name='consent-sign',
+    ),
+    # Mandar la ficha al móvil del paciente por WhatsApp: enlace de un solo uso con
+    # caducidad (`clinical/intake.py`). El que la rellena abre `/ficha/<token>/`.
+    path(
+        '<int:id>/enviar-ficha/',
+        PatientFormLinkCreateView.as_view(),
+        name='form-link-create',
+    ),
+    path(
+        '<int:id>/enlaces-ficha/<int:link_id>/anular/',
+        PatientFormLinkRevokeView.as_view(),
+        name='form-link-revoke',
     ),
     path('<int:id>/procedimientos/', PatientProceduresTabView.as_view(), name='tab-procedures'),
     # Alta sin cita de por medio: urgencia, paciente sin avisar o algo que

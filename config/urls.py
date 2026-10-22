@@ -73,6 +73,9 @@ urlpatterns = [
     # Capa clínica: NO es API. Solo el servido protegido de adjuntos, bajo
     # sesión y con AccessLog. Ver `clinical/README.md`.
     path('clinico/', include('clinical.urls')),
+    # Ficha del paciente desde el móvil: la ÚNICA ruta de la capa clínica sin
+    # sesión. Enlace con token de un solo uso y caducidad. Ver `clinical/intake.py`.
+    path('ficha/', include('clinical.public_urls')),
 
     # REST API
     path(

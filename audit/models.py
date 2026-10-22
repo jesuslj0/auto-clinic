@@ -23,6 +23,7 @@ from audit.context import (
     ORIGIN_API,
     ORIGIN_COMMAND,
     ORIGIN_N8N,
+    ORIGIN_PUBLIC,
     ORIGIN_WEB,
 )
 from audit.managers import AppendOnlyModel
@@ -34,6 +35,7 @@ class Origin(models.TextChoices):
     ADMIN = ORIGIN_ADMIN, 'Admin de Django'
     COMMAND = ORIGIN_COMMAND, 'Comando / tarea'
     N8N = ORIGIN_N8N, 'Agente n8n'
+    PUBLIC = ORIGIN_PUBLIC, 'Enlace público (paciente)'
 
 
 class BaseLog(AppendOnlyModel):

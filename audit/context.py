@@ -33,6 +33,9 @@ ORIGIN_API = 'api'
 ORIGIN_ADMIN = 'admin'
 ORIGIN_COMMAND = 'command'
 ORIGIN_N8N = 'n8n'
+# Página pública sin sesión (enlace de ficha del paciente, `/ficha/…`): el actor no
+# es un usuario sino el propio enlace, y así se anota en `user_repr`.
+ORIGIN_PUBLIC = 'public'
 
 
 @dataclass(frozen=True)
@@ -127,6 +130,8 @@ def _guess_origin(request) -> str:
     if auth.split()[:1] == ['Api-Key']:
         return ORIGIN_N8N
     path = request.path or ''
+    if path.startswith('/ficha/'):
+        return ORIGIN_PUBLIC
     if path.startswith('/admin/'):
         return ORIGIN_ADMIN
     if path.startswith('/api/'):

@@ -1,0 +1,149 @@
+{% extends 'intake/base.html' %}
+{% load static %}
+
+{% comment %}
+Ficha del paciente (página pública). Sin sesión y sin datos de la historia: ver
+`clinical/public_views.py`.
+
+Tres bloques según lo que pidió la clínica al emitir el enlace:
+  · quién contesta (siempre): verificación con la fecha de nacimiento si la ficha la
+    tiene, y datos del representante si es un menor o rellena otra persona;
+  · la anamnesis (`anamnesis`), con la versión vigente;
+  · el consentimiento (`consent`): texto íntegro + lienzo de firma.
+
+Las preguntas salen del formulario, no se escribe ninguna aquí. Sin estilos ni
+scripts en línea (CSP): todo va por clases de `css/intake.css` y por `js/intake.js`.
+{% endcomment %}
+
+{% block title %}Tu ficha · {{ clinic.name }}{% endblock %}
+
+{% block content %}
+<header class="intro">
+    <p class="eyebrow">{{ clinic.name }}</p>
+    <h1>Tu ficha de paciente</h1>
+    <p>
+        Rellénala con calma antes de tu visita.
+        {% if anamnesis and consent %}Te pediremos responder un cuestionario de salud y firmar un documento.
+        {% elif anamnesis %}Te pediremos responder un cuestionario de salud.
+        {% else %}Te pediremos firmar un documento.{% endif %}
+        Solo puedes enviarla una vez.
+    </p>
+</header>
+
+{% include 'intake/_privacy_notice.html' %}
+
+<form method="post" novalidate class="form" data-intake-form>
+    {% csrf_token %}
+
+    {% if identity.non_field_errors %}
+    <div class="alert" role="alert">{% for error in identity.non_field_errors %}<p>{{ error }}</p>{% endfor %}</div>
+    {% endif %}
+
+    {# --- Quién contesta -------------------------------------------------- #}
+    <section class="card">
+        <h2>Quién rellena la ficha</h2>
+
+        {% if identity.requires_birth_date %}
+        <div class="field">
+            <label for="{{ identity.birth_date.id_for_label }}">{{ identity.birth_date.label }}</label>
+            {{ identity.birth_date }}
+            <p class="help">Lo usamos para comprobar que esta ficha es la del paciente.</p>
+            {% include 'intake/_errors.html' with errors=identity.birth_date.errors %}
+        </div>
+        {% endif %}
+
+        {% if identity.behalf_required %}
+        <p class="note">El paciente es menor de edad: la ficha la rellena y la firma su madre, padre o representante legal.</p>
+        <input type="hidden" name="{{ identity.on_behalf.html_name }}" value="on">
+        {% else %}
+        <label class="check" for="{{ identity.on_behalf.id_for_label }}">
+            {{ identity.on_behalf }}
+            <span>{{ identity.on_behalf.label }}</span>
+        </label>
+        {% endif %}
+
+        <div class="behalf" data-behalf {% if identity.behalf_required %}data-always{% endif %}>
+            <div class="field">
+                <label for="{{ identity.signer_name.id_for_label }}">{{ identity.signer_name.label }}</label>
+                {{ identity.signer_name }}
+                {% include 'intake/_errors.html' with errors=identity.signer_name.errors %}
+            </div>
+            <div class="field">
+                <label for="{{ identity.signer_relationship.id_for_label }}">{{ identity.signer_relationship.label }}</label>
+                {{ identity.signer_relationship }}
+                {% include 'intake/_errors.html' with errors=identity.signer_relationship.errors %}
+            </div>
+        </div>
+    </section>
+
+    {# --- Cuestionario ------------------------------------------------------ #}
+    {% if anamnesis %}
+    <section class="card">
+        <h2>{{ questionnaire_template.name }}</h2>
+        <p class="help">Los campos con <span class="req" aria-hidden="true">*</span><span class="visually-hidden">asterisco</span> son obligatorios.</p>
+
+        {{ anamnesis.shown_version }}
+        {% include 'intake/_errors.html' with errors=anamnesis.shown_version.errors %}
+        {% if anamnesis.non_field_errors %}<div class="alert" role="alert">{% for error in anamnesis.non_field_errors %}<p>{{ error }}</p>{% endfor %}</div>{% endif %}
+
+        {% for row in anamnesis.question_rows %}
+        <div class="field">
+            {% if row.question.answer_type == 'boolean' or row.question.answer_type == 'single_choice' or row.question.answer_type == 'multiple_choice' %}
+            <fieldset {% if row.field.errors %}aria-describedby="{{ row.error_id }}"{% endif %}>
+                <legend>{{ row.question.text }}{% if row.question.is_required %} <span class="req" aria-hidden="true">*</span>{% endif %}</legend>
+                <div class="choices {% if row.question.answer_type == 'boolean' %}choices--row{% endif %}">
+                    {% for choice in row.field %}
+                    <label class="check" for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>
+                    {% endfor %}
+                </div>
+            </fieldset>
+            {% else %}
+            <label for="{{ row.field.id_for_label }}">{{ row.question.text }}{% if row.question.is_required %} <span class="req" aria-hidden="true">*</span>{% endif %}</label>
+            {{ row.field }}
+            {% endif %}
+            {% if row.field.errors %}<p id="{{ row.error_id }}" class="error" role="alert">{{ row.field.errors|join:" " }}</p>{% endif %}
+        </div>
+        {% endfor %}
+    </section>
+    {% endif %}
+
+    {# --- Consentimiento ------------------------------------------------------ #}
+    {% if consent %}
+    <section class="card">
+        <h2>{{ consent_template.name }}</h2>
+        <p class="help">Lee el documento completo antes de firmar.</p>
+        {{ consent.version }}
+        {% include 'intake/_errors.html' with errors=consent.version.errors %}
+        {% if consent.non_field_errors %}<div class="alert" role="alert">{% for error in consent.non_field_errors %}<p>{{ error }}</p>{% endfor %}</div>{% endif %}
+
+        <div class="document" tabindex="0" role="region" aria-label="Texto del documento">{{ consent_version.text }}</div>
+
+        <label class="check" for="{{ consent.accepted.id_for_label }}">
+            {{ consent.accepted }}
+            <span>{{ consent.accepted.label }}</span>
+        </label>
+        {% include 'intake/_errors.html' with errors=consent.accepted.errors %}
+
+        <div class="signature" data-signature>
+            <div class="signature__head">
+                <h3>Firma</h3>
+                <button type="button" class="button button--ghost" data-signature-clear hidden>Borrar</button>
+            </div>
+            <p class="help">Firma con el dedo dentro del recuadro.</p>
+            <canvas class="signature__canvas" tabindex="0" role="img" aria-label="Recuadro para dibujar la firma" data-signature-canvas></canvas>
+            {{ consent.signature_data }}
+            <p class="error" role="alert" data-signature-error hidden></p>
+            {% include 'intake/_errors.html' with errors=consent.signature_data.errors %}
+            <noscript><p class="error">Para firmar necesitas activar JavaScript en el navegador.</p></noscript>
+        </div>
+    </section>
+    {% endif %}
+
+    <div class="actions">
+        <button type="submit" class="button" data-submit>Enviar mi ficha</button>
+        <p class="help">Al enviarla, el enlace deja de funcionar.</p>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}<script src="{% static 'js/intake.js' %}" defer></script>{% endblock %}

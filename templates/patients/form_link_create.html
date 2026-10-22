@@ -1,0 +1,157 @@
+{% extends 'base.html' %}
+
+{% comment %}
+Mandar la ficha al móvil del paciente.
+
+Dos estados (`result`):
+
+  · formulario — qué se le pide (cuestionario, firma o ambos) y de qué episodio cuelga.
+  · resultado  — el enlace recién creado. Es la ÚNICA vez que se ve: en la base de datos
+                 solo queda su hash. Por eso la respuesta al POST es esta página y no un
+                 redirect. Dice si salió por WhatsApp o, si no pudo, que hay que copiarlo.
+
+`chat_state` (de `agent.services.patient_chat_access`) decide si se manda solo: únicamente
+con la ventana de 24 h abierta, porque fuera de ella WhatsApp solo admite plantillas.
+
+POST clásico con CSRF. Sin HTMX ni API (capa clínica).
+{% endcomment %}
+
+{% block title %}Enviar ficha · {{ patient }} · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Enviar ficha al paciente{% endblock %}
+{% block page_subheading %}<p class="truncate text-xs text-content-subtle sm:text-sm">{{ patient }}</p>{% endblock %}
+
+{% block page_actions %}
+<a href="{{ cancel_url }}" class="btn-secondary max-sm:px-3" aria-label="Volver a los documentos">
+    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+    </svg>
+    <span class="hidden sm:inline">Volver</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-2xl space-y-6">
+
+    {% if result %}
+    {# ------------------------------------------------------------------- #}
+    {# Enlace creado                                                         #}
+    {# ------------------------------------------------------------------- #}
+    <section class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+        <div class="border-b border-line px-6 py-5">
+            <h3 class="text-lg font-semibold text-content">Enlace creado</h3>
+            <p class="mt-1 text-sm text-content-subtle">Es personal, solo funciona una vez y caduca el {{ expires_at|date:"j \d\e F" }} a las {{ expires_at|date:"H:i" }}.</p>
+        </div>
+        <div class="space-y-4 px-6 py-5">
+            {% if sent %}
+            <p class="rounded-xl bg-success-soft px-4 py-3 text-sm text-success ring-1 ring-success-line" role="status">
+                Enviado por WhatsApp. Verás el mensaje en el chat del paciente.
+            </p>
+            {% else %}
+            <div class="rounded-xl bg-warning-soft px-4 py-3 text-sm text-warning ring-1 ring-warning-line" role="status">
+                {% if send_error %}
+                No se pudo enviar por WhatsApp: {{ send_error }}
+                {% elif chat_state == 'no_phone' %}
+                La ficha no tiene teléfono, así que no se ha enviado nada.
+                {% elif chat_state == 'never_wrote' %}
+                El paciente nunca ha escrito a la clínica por WhatsApp, y WhatsApp no deja iniciar una conversación con texto libre.
+                {% else %}
+                Han pasado más de 24 horas desde el último mensaje del paciente: WhatsApp ya no permite enviarle texto libre.
+                {% endif %}
+                <span class="block pt-1">Copia el enlace y mándaselo por otro medio.</span>
+            </div>
+            {% endif %}
+
+            <div x-data="{ copied: false, copy() { navigator.clipboard.writeText($refs.url.value).then(() => { this.copied = true; setTimeout(() => this.copied = false, 2000) }) } }">
+                <label for="form-link-url" class="mb-1.5 block text-sm font-medium text-content-muted">Enlace</label>
+                <div class="flex gap-2">
+                    <input id="form-link-url" x-ref="url" type="text" readonly value="{{ link_url }}"
+                           class="block w-full rounded-xl border border-line-strong bg-muted px-4 py-2.5 text-sm text-content focus:outline-none focus:ring-2 focus:ring-brand-500"
+                           @focus="$el.select()">
+                    <button type="button" class="btn-secondary flex-shrink-0" @click="copy()">
+                        <span x-show="!copied">Copiar</span><span x-show="copied" x-cloak>Copiado</span>
+                    </button>
+                </div>
+                <p class="mt-1.5 text-xs text-content-faint">No se vuelve a mostrar: por seguridad solo guardamos una huella del enlace. Si lo pierdes, crea otro (anula este).</p>
+            </div>
+        </div>
+        <div class="flex justify-end border-t border-line px-6 py-5">
+            <a href="{{ cancel_url }}" class="btn-primary">Volver a los documentos</a>
+        </div>
+    </section>
+
+    {% elif archived %}
+    <section class="rounded-3xl bg-surface px-6 py-10 text-center shadow-soft ring-1 ring-line">
+        <p class="text-sm font-semibold text-content">La ficha está archivada</p>
+        <p class="mx-auto mt-1 max-w-md text-sm text-content-subtle">A un paciente archivado no se le envía nada. Restaura la ficha primero.</p>
+    </section>
+
+    {% elif not form.has_choices %}
+    <section class="rounded-3xl bg-surface px-6 py-10 text-center shadow-soft ring-1 ring-line">
+        <p class="text-sm font-semibold text-content">No hay nada que enviar</p>
+        <p class="mx-auto mt-1 max-w-md text-sm text-content-subtle">
+            Hace falta un cuestionario o un consentimiento activo con una versión publicada y vigente.
+            Se gestionan por ahora desde el administrador de la clínica.
+        </p>
+    </section>
+
+    {% else %}
+    {# ------------------------------------------------------------------- #}
+    {# Qué se le pide                                                        #}
+    {# ------------------------------------------------------------------- #}
+    <form method="post" novalidate class="space-y-6" x-data="{ sending: false }" @submit="sending = true">
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+        <div class="rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line" role="alert">
+            {% for error in form.non_field_errors %}<p class="text-sm text-danger">{{ error }}</p>{% endfor %}
+        </div>
+        {% endif %}
+
+        <section class="space-y-4 rounded-3xl bg-surface px-6 py-5 shadow-soft ring-1 ring-line">
+            <div>
+                <h4 class="text-sm font-semibold text-content">Qué se le pide</h4>
+                <p class="mt-1 text-sm text-content-subtle">Se le muestra siempre la versión vigente de cada documento.</p>
+            </div>
+            {% for field in form.visible_fields %}{% if field.name == 'questionnaire' or field.name == 'consent' %}
+            <div>
+                <label for="{{ field.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ field.label }}</label>
+                {{ field }}
+                {% if field.errors %}<p id="error-{{ field.name }}" class="mt-1.5 text-xs text-danger">{{ field.errors|join:", " }}</p>{% endif %}
+            </div>
+            {% endif %}{% endfor %}
+        </section>
+
+        <section class="space-y-4 rounded-3xl bg-surface px-6 py-5 shadow-soft ring-1 ring-line"
+                 x-data="{ episodio: '{{ form.episode.value|default_if_none:'' }}' }">
+            <div>
+                <h4 class="text-sm font-semibold text-content">Episodio</h4>
+                <p class="mt-1 text-sm text-content-subtle">Elige un episodio abierto o indica el motivo para abrir uno cuando el paciente envíe la ficha.</p>
+            </div>
+            {% include 'clinical/_episode_picker.html' %}
+        </section>
+
+        <section class="space-y-3 rounded-3xl bg-surface px-6 py-5 shadow-soft ring-1 ring-line">
+            <h4 class="text-sm font-semibold text-content">Cómo llega</h4>
+            {% if chat_state == 'open' %}
+            <p class="text-sm text-content-muted">Se enviará ahora mismo por el chat de WhatsApp del paciente.</p>
+            {% elif chat_state == 'no_phone' %}
+            <p class="text-sm text-content-muted">La ficha no tiene teléfono: se creará el enlace para que lo copies y lo mandes tú.</p>
+            {% elif chat_state == 'never_wrote' %}
+            <p class="text-sm text-content-muted">El paciente nunca ha escrito por WhatsApp, así que no se puede enviar solo: se creará el enlace para que lo copies y lo mandes tú.</p>
+            {% else %}
+            <p class="text-sm text-content-muted">La ventana de 24 h de WhatsApp está cerrada: se creará el enlace para que lo copies y lo mandes tú.</p>
+            {% endif %}
+            <p class="text-xs text-content-faint">El enlace es personal, de un solo uso y caduca solo. Crear uno nuevo anula el anterior.</p>
+        </section>
+
+        <div class="flex items-center justify-between gap-3">
+            <a href="{{ cancel_url }}" class="btn-secondary">Cancelar</a>
+            {# Una sola pulsación: cada envío emite un enlace nuevo y anula el anterior. #}
+            <button type="submit" class="btn-primary" :disabled="sending">
+                {% if chat_state == 'open' %}Crear y enviar{% else %}Crear enlace{% endif %}
+            </button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

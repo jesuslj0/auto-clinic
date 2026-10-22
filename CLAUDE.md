@@ -184,12 +184,33 @@ touching it — see `clinical/README.md` for the full picture:
   rejects the signature), the canvas PNG is decoded, checked for ink and rewritten
   server-side (`clinical/signature.py`), and the write goes through
   `SignedConsent.sign()`. Templates/versions are still managed in the admin.
+- **Patient form by link (`/ficha/<token>/`, `clinical/intake.py`).** The only
+  clinical-layer route **without a session**: the patient fills the current
+  anamnesis and/or signs a consent from their phone, with a link the clinic sends
+  by WhatsApp (`PatientFormLink`, issued from the «Documentos» tab,
+  `patients:form-link-create`; only for a patient **with a file**). Rules — see
+  `clinical/README.md` («Ficha desde el móvil del paciente») for the RGPD review:
+  the token is **never stored** (SHA-256 only, shown once), expires (48 h), is
+  single-use and revocable; a GET never consumes it and the page shows **nothing
+  of the history**; every dead link gives the same 404, unknown tokens are
+  throttled per IP; if the file has a birth date it is asked again (5 failures lock
+  the link); under 16 the representative's name and relationship are mandatory and
+  stored with the signature (`SignedConsent.signer_*`, immutable). Writes go
+  through `QuestionnaireResponse.record(source=patient_web)` and
+  `SignedConsent.sign()`, atomically in `complete_link()`. The audit actor is the
+  link itself (`origin='public'`, `patient_actor`). **The page loads nothing from
+  third parties** (own `static/css/intake.css` + `js/intake.js`, strict CSP, no
+  `unsafe-inline`): never make `templates/intake/` extend `base.html` or include
+  `_head_theme.html` (Google Fonts / CDNs would leak the patient's IP). The privacy
+  notice (`_privacy_notice.html`) is a starting draft for the clinic's lawyer; bump
+  `PRIVACY_NOTICE_VERSION` when it changes. Outside the 24 h window nothing is sent
+  (no template yet): the link is handed over to copy.
 - **Off-limits to the n8n token.** This layer has **no REST API** on purpose, so
   the agent's `Api-Key` cannot reach clinical data. `Visit` links *to*
   `Appointment`, never the reverse. The HTTP surface is session-only: the
-  attachment views above and the panel views of the two bullets before. **Any new
-  endpoint over this layer must instrument `AccessLog` and stay denied to the
-  agent.**
+  attachment views above, the panel views of the two bullets before, and the
+  public patient-form page (token-gated, see above). **Any new endpoint over this
+  layer must instrument `AccessLog` and stay denied to the agent.**
 - **Retention is not fixed in code.** `CLINICAL_RETENTION_YEARS` is a setting with
   a conservative default; there is no automatic purge (pending autonomic law).
 
@@ -262,13 +283,14 @@ Panel map (namespace in brackets):
 | `/` (`core`) | `buscar/`, `login/`, `logout/`, `cuenta/` (`perfil/`, `horario/`, `contrasena/`), `clinica/` (`editar/`, `integraciones/` → redirect to `/agente/`), `panel/citas/<uuid>/` (`gestionar/`, `accion/`, `resumen/`) |
 | `/citas/` (`appointments`) | `crear/`, `listado/`, `<uuid>/procedimiento/`, `<uuid>/visita/`, `mi-perfil/` (redirect) |
 | `/profesionales/` (`professionals`) | `crear/`, `<pk>/editar/` — top-level, views live in `appointments` (`appointments/professional_urls.py`) |
-| `/pacientes/` (`patients`) | `crear/`, `<id>/` + tabs `historia/` (+ `episodios/…`, `visitas/…`, `notas/…`), `documentos/` (anamnesis + consentimientos in one tab; the old `anamnesis/` and `consentimientos/` routes return the same tab), `alertas/` (+ `nueva/`, `<id>/editar|desactivar|reactivar/`), `lesiones/`, `consentimientos/firmar/`, `procedimientos/`, `editar/`, `foto/` |
+| `/pacientes/` (`patients`) | `crear/`, `<id>/` + tabs `historia/` (+ `episodios/…`, `visitas/…`, `notas/…`), `documentos/` (anamnesis + consentimientos in one tab; the old `anamnesis/` and `consentimientos/` routes return the same tab), `alertas/` (+ `nueva/`, `<id>/editar|desactivar|reactivar/`), `lesiones/`, `consentimientos/firmar/`, `enviar-ficha/`, `enlaces-ficha/<id>/anular/`, `procedimientos/`, `editar/`, `foto/` |
 | `/servicios/` (`services`) | `crear/`, `<pk>/editar/`, `<pk>/eliminar/` |
 | `/conocimiento/` (`knowledge`) | `crear/`, `<uuid>/editar/`, `<uuid>/eliminar/` |
 | `/chats/` (`agent`) | `agente/`, `lista/`, `adjuntos/<uuid>/`, `<uuid>/` (`mensajes/`, `enviar/`, `escribiendo/`, `modo/`) |
 | `/agente/` (`agent_settings`, admins only) | test chat at the root («Chat»), `probar/enviar/`, `personalidad/`, `plantillas/` (+ `nueva/`, `sincronizar/`, `<pk>/` with `enviar/`, `duplicar/`, `eliminar/`), `configuracion/` (Meta credentials + webhook, two forms told apart by a hidden `form` field) — views in `agent/settings_views.py` and `agent/template_views.py` |
 | `/facturacion/` (`billing`) | `nueva/`, `pendientes/`, `<pk>/` (`emitir/`, `anular/`, `cobrar/`, `procedimientos/`, `eliminar/`) |
 | `/clinico/` (`clinical`) | `procedimientos/` (listado global), `adjuntos/<uuid>/`, `consentimientos/<uuid>/firma/` |
+| `/ficha/` (`intake`, **public, no session**) | `<token>/` (the patient's form), `gracias/` — views in `clinical/public_views.py` |
 
 ### Agent personality (`agent.AgentProfile`)
 

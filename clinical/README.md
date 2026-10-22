@@ -646,6 +646,122 @@ ratón, dedo y lápiz).
   atómico con la firma. Casilla obligatoria de conformidad del paciente.
 - Gestión de plantillas y versiones: **sigue en el admin**.
 
+## Ficha desde el móvil del paciente
+
+El paciente rellena su anamnesis y/o firma un consentimiento desde el móvil, con un
+**enlace público** que la clínica le manda por WhatsApp. Es la **única** ruta de la
+capa clínica sin sesión (`/ficha/<token>/`, `clinical/public_urls.py`, namespace
+`intake`), y por eso casi todo lo que hay aquí es defensa. Código: `clinical/intake.py`
+(lógica), `clinical/intake_forms.py`, `clinical/public_views.py` (página pública),
+`patients/intake_views.py` (lado de la clínica).
+
+### El enlace (`PatientFormLink`)
+
+- **El token no se guarda**: 256 bits de `secrets`, entregado una sola vez a quien emite
+  el enlace; en la base solo queda su SHA-256 (`token_hash`). Un volcado de la tabla no
+  abre ninguna ficha. Consecuencia: ninguna pantalla puede volver a enseñar un enlace
+  ya creado; si se pierde, se emite otro (que **revoca** los pendientes del paciente).
+- **Caduca** (`PATIENT_FORM_LINK_TTL_HOURS`, 48 h) y es de **un solo uso**
+  (`completed_at`). Se puede **anular** desde la pestaña «Documentos».
+- Lo escribe la clínica, para un paciente **con ficha** de su clínica y no archivado, y
+  pide un cuestionario, un consentimiento o ambos (siempre la versión vigente
+  publicada). Cuelga de un episodio que elige la clínica; si se cerró antes de que
+  conteste (o no se eligió ninguno) se abre uno con el motivo indicado.
+- **Nunca se borra** (`delete()` lanza); su ciclo de vida está en la auditoría.
+
+### Qué hace la página pública
+
+- **No enseña nada de la historia**: solo el cuestionario en blanco, el texto del
+  consentimiento, el nombre de la clínica y el aviso de protección de datos. Ni el nombre
+  del paciente ni respuestas previas.
+- **Un GET no gasta el enlace** (los previsualizadores y antivirus abren las URL). Solo
+  se consume al enviar, y `complete_link()` lo hace en una transacción con bloqueo de
+  fila: o entra todo (episodio, anamnesis, firma, sello de completado) o nada, y dos
+  envíos a la vez no escriben dos veces.
+- **Todo enlace muerto da la misma página y el mismo 404** (desconocido, caducado, usado,
+  anulado, bloqueado, paciente archivado): quien tantea no aprende por qué. Los tokens
+  *desconocidos* se cuentan por IP y, pasado el límite, `429` (`INTAKE_THROTTLE_*`).
+- **Se verifica a quien contesta.** Si la ficha tiene fecha de nacimiento, hay que
+  repetirla; cinco fallos bloquean el enlace (`failed_attempts`). Es una segunda llave
+  contra un enlace reenviado o un móvil compartido, no autenticación fuerte. Sin fecha en
+  la ficha, no se pide.
+- **Se contesta y se firma lo que se leyó.** La versión mostrada viaja en un campo oculto;
+  si se publica otra mientras tanto, se rechaza (igual que `consent-sign`).
+- **Menores y representantes.** Por debajo de `INTAKE_MINOR_AGE` (16, Ley 41/2002 art.
+  9.3.c) nombre y relación de quien rellena son obligatorios; cualquier otro paciente
+  puede marcar «en nombre del paciente». Se guardan en el enlace y en la firma
+  (`SignedConsent.signer_name/_relationship`, inmutables también en el trigger,
+  migración 0017). Sin fecha de nacimiento no se sabe que es menor: no se asume.
+- **Escribe por las vías de siempre**: `QuestionnaireResponse.record(source=patient_web,
+  created_by=None)` (dispara las alertas) y `SignedConsent.sign()`.
+
+### Cabeceras y recursos de terceros
+
+`Cache-Control: no-store`, `Referrer-Policy: same-origin` (no `no-referrer`: Chrome would send `Origin: null` on the POST and CSRF would reject it), `X-Robots-Tag: noindex`,
+`X-Frame-Options: DENY` y una CSP sin `unsafe-inline` que solo admite recursos propios.
+La plantilla **no extiende `base.html`**: esa carga Google Fonts, el CDN de Tailwind y
+Alpine desde jsdelivr, y abrir la ficha le mandaría la IP del paciente a esos terceros
+desde una pantalla de datos de salud. `templates/intake/` usa `static/css/intake.css` y
+`static/js/intake.js`, propios, sin librerías. **No se vuelve a `base.html` ni a un CDN
+aquí.**
+
+### Auditoría de una vista sin usuario
+
+Decidido: el actor es el propio enlace. `patient_actor(link)` fija `user_repr =
+"paciente (enlace de ficha #N)"` y `origin = "public"` (nuevo en `audit`; `/ficha/…` lo
+deduce el middleware). Lo escrito (`ChangeLog`) y la apertura (`AccessLog`, `view`) llevan
+esa identidad, la IP y el user agent. Un token desconocido no genera `AccessLog`: no hay
+paciente al que atribuirlo (se limita por IP).
+
+### Revisión de protección de datos (RGPD / LOPDGDD / Ley 41/2002)
+
+Hecho:
+
+- **Información al interesado (art. 13)**: aviso de primera capa en la propia página
+  (`templates/intake/_privacy_notice.html`), con responsable, finalidad, base jurídica,
+  destinatarios, conservación, derechos y AEPD, **antes** de pedir ningún dato. Su versión
+  (`PRIVACY_NOTICE_VERSION`) se guarda en cada enlace completado.
+- **Base jurídica**: la anamnesis es necesaria para la asistencia (art. 6.1.b y 9.2.h),
+  no se pide «consentimiento» para ella; el consentimiento informado sanitario es otra
+  cosa y va como documento firmado aparte.
+- **Minimización**: la página no muestra datos del paciente; el WhatsApp lleva solo el
+  nombre de pila y el enlace, sin ningún dato clínico (el mensaje atraviesa a Meta).
+- **Integridad y confidencialidad (art. 32)**: token hasheado, caducidad corta, un uso,
+  verificación con bloqueo, HTTPS (HSTS en prod), cabeceras cerradas, firma en el bucket
+  privado, respuestas inmutables.
+- **Sin terceros ni cookies de seguimiento**: nada remoto en la página; solo la cookie
+  técnica CSRF (exenta de aviso).
+- **Rendición de cuentas (art. 5.2)**: quién abrió, desde dónde, qué texto vio y quién
+  firmó en nombre de quién, todo en la auditoría.
+
+Pendiente o a decidir (no es código):
+
+1. **El texto del aviso es una redacción de partida.** Es de la clínica: revisarlo con
+   quien lleve lo legal. Sale de `Clinic` (nombre, NIF, dirección, email/teléfono); si
+   faltan, queda incompleto. Si cambia, **subir `PRIVACY_NOTICE_VERSION`**.
+2. **Segunda capa**: el aviso enlaza a nada. Si la clínica tiene política completa,
+   conviene un campo/URL en `Clinic` (no existe).
+3. **El token queda en claro en el hilo del chat** (`ChatMessage.body`, y en WhatsApp).
+   Es inherente a mandarlo por ahí; lo acotan la caducidad y el un uso. Tras completarse
+   o caducar, esa URL no vale.
+4. **El token viaja en la ruta**, así que acaba en los logs de acceso de nginx/Traefik. Mismo
+   acotamiento. No se puede evitar con un enlace de un clic; sí conviene que esos logs
+   tengan retención corta.
+5. **La IP del límite sale de `X-Forwarded-For`**, que un cliente puede falsear detrás de un
+   solo proxy mal configurado: es defensa en profundidad, no la barrera (la barrera son los
+   256 bits). Y el contador va en la caché por defecto, que es **local al proceso**; con
+   varios workers se reparte. Moverla a Redis lo arregla.
+6. **Fuera de la ventana de 24 h** no se manda por WhatsApp (haría falta una plantilla
+   aprobada con el enlace): se entrega el enlace para copiarlo. Paso aparte.
+7. **Datos del paciente archivado o dado de baja**: el enlace muere; no se rellena a
+   ciegas la ficha de alguien que ya no está en alta.
+8. **Contactos responsables (`Guardian`)**: el representante se anota como texto
+   libre en el enlace y la firma; no se enlaza con `Guardian`. Decisión consciente: ese
+   modelo es solo logística de citas y nunca ve datos clínicos.
+9. Lo que el paciente contesta entra **sin revisión previa** del profesional (con
+   `source=patient_web` visible en la ficha). Si se quiere una bandeja de «pendiente de
+   revisar», es un cambio de producto.
+
 ## Procedimientos realizados: el precio, congelado
 
 `PerformedProcedure` es la costura entre la visita y la facturación: qué se le
