@@ -12,12 +12,15 @@ parte de la página. Metiéndola dentro, el servidor devuelve una sola respuesta
 coherente (barra y panel siempre concuerdan) y no hay que mantener un segundo
 bloque fuera de banda ni duplicar `id`. htmx devuelve el foco al elemento con el
 mismo `id` tras el intercambio, así que la pestaña pulsada no lo pierde.
+
+La barra y el panel van pegados (sin margen entre ellos): la pestaña activa se une al
+panel como un separador de carpetas (ver `_patient_tabs.html`).
 {% endcomment %}
 {% include 'patients/_patient_tabs.html' %}
 
 <div
     id="patient-tab-panel"
-    class="mt-4 focus:outline-none"
+    class="focus:outline-none"
     role="tabpanel"
     tabindex="0"
     aria-labelledby="patient-tab-{{ active_tab }}"

@@ -136,7 +136,9 @@ class TestSigning:
         assert consent.episode == episode_a
         assert consent.signature_image
         assert consent.mime_type == 'image/png'
-        assert response['Location'] == reverse('patients:tab-consents', kwargs={'id': patient_a.pk})
+        assert response['Location'] == (
+            reverse('patients:tab-documents', kwargs={'id': patient_a.pk}) + '#consentimientos'
+        )
 
     def test_republishing_afterwards_does_not_rewrite_what_was_signed(
         self, logged, patient_a, episode_a, consent_template

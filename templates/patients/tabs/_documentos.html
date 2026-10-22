@@ -1,0 +1,17 @@
+{% comment %}
+Panel «Documentos»: la anamnesis y los consentimientos del paciente, uno debajo del
+otro. Antes eran dos pestañas; se juntaron para que la barra de pestañas quepa.
+
+Cada bloque es el parcial de siempre, con su propio botón de alta. Las anclas
+(`#anamnesis`, `#consentimientos`) son a donde vuelven las pantallas de alta tras
+guardar, para no dejar al usuario arriba del todo con el documento recién creado
+por debajo. `scroll-mt-24` deja sitio a la cabecera fija.
+{% endcomment %}
+<div class="space-y-6">
+    <div id="anamnesis" class="scroll-mt-24">
+        {% include 'patients/tabs/_anamnesis.html' %}
+    </div>
+    <div id="consentimientos" class="scroll-mt-24">
+        {% include 'patients/tabs/_consentimientos.html' %}
+    </div>
+</div>

@@ -28,6 +28,7 @@ from patients.views import (
     PatientAnamnesisCreateView,
     PatientAnamnesisTabView,
     PatientConsentsTabView,
+    PatientDocumentsTabView,
     PatientCreateView,
     PatientDetailView,
     PatientEditView,
@@ -121,6 +122,9 @@ urlpatterns = [
         PatientAddendumCreateView.as_view(),
         name='addendum-create',
     ),
+    # «Documentos» reúne anamnesis y consentimientos en una sola pestaña. Las rutas
+    # antiguas (`anamnesis/`, `consentimientos/`) devuelven esta misma pestaña.
+    path('<int:id>/documentos/', PatientDocumentsTabView.as_view(), name='tab-documents'),
     path('<int:id>/anamnesis/', PatientAnamnesisTabView.as_view(), name='tab-anamnesis'),
     # Rellenar una anamnesis. Página propia y no un modal: es un formulario
     # largo, y su alta congela un documento clínico.

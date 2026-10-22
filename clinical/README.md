@@ -301,7 +301,7 @@ sabe y no está en un cuestionario.
   (si era otro, se desactiva y se da de alta la correcta, para no reescribir lo que se
   sabía). Una derivada se corrige contestando de nuevo la anamnesis.
 - **No hay borrado.** Desactivar (`deactivate()`) retira la alerta de la ficha y de la
-  banda y conserva la fila; las desactivadas se listan plegadas y se **reactivan**.
+  insignia de la cabecera y conserva la fila; las desactivadas se listan plegadas y se **reactivan**.
   Cualquier alerta, derivada o manual, se puede desactivar.
 - El motor de derivación sigue sin tocar las manuales. La edición registra
   `AccessLog` sobre la alerta; la `note` va enmascarada en el `ChangeLog`.

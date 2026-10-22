@@ -10,10 +10,12 @@ from django.urls import reverse
 
 from audit.models import AccessLog
 from clinical.models import ClinicalAlert
+from patients.views import PATIENT_TABS
 
 
 TABS = [
     'patients:detail',
+    'patients:tab-documents',
     'patients:tab-anamnesis',
     'patients:tab-alerts',
     'patients:tab-lesions',
@@ -63,8 +65,8 @@ def test_history_restore_returns_full_page(client, admin_user, patient_a):
 
 
 @pytest.mark.django_db
-def test_alert_banner_and_ordering(client, admin_user, patient_a):
-    """La banda pinta las vigentes, lo crítico primero, y omite las desactivadas."""
+def test_alert_badge_counts_and_the_tab_orders(client, admin_user, patient_a):
+    """La cabecera lleva solo el número de vigentes; la pestaña las detalla, lo crítico primero."""
     ClinicalAlert.objects.create(
         patient=patient_a, alert_type=ClinicalAlert.AlertType.OTHER,
         severity=ClinicalAlert.Severity.INFO, note='Nota informativa',
@@ -82,21 +84,39 @@ def test_alert_banner_and_ordering(client, admin_user, patient_a):
     client.force_login(admin_user)
     r = client.get(reverse('patients:detail', kwargs={'id': patient_a.pk}))
     html = r.content.decode()
-    assert 'Alertas clínicas activas' in html
+    assert 'data-alerts-badge' in html
+    assert 'aria-label="2 alertas clínicas activas. Ver detalle"' in html     # las desactivadas no cuentan
     assert 'Neuropatía' not in html
-    assert html.index('Diabetes') < html.index('Otra')
+    # Solo el número: ya no se listan los nombres en la cabecera.
+    assert 'Diabetes' not in html and 'Nota informativa' not in html
+    assert 'text-danger ring-danger-line' in html.split('data-alerts-badge')[1][:900]
     assert r.context['has_critical_alerts'] is True
 
     r2 = client.get(reverse('patients:tab-alerts', kwargs={'id': patient_a.pk}))
-    assert 'Nota informativa' in r2.content.decode()
+    tab = r2.content.decode()
+    assert 'Nota informativa' in tab
+    assert tab.index('Diabetes') < tab.index('Otra')
 
 
 @pytest.mark.django_db
-def test_no_banner_without_alerts(client, admin_user, patient_a):
-    """Sin alertas activas, la banda no ocupa espacio."""
+def test_badge_is_amber_without_critical_alerts(client, admin_user, patient_a):
+    ClinicalAlert.objects.create(
+        patient=patient_a, alert_type=ClinicalAlert.AlertType.NEUROPATHY,
+        severity=ClinicalAlert.Severity.WARNING,
+    )
+    client.force_login(admin_user)
+    html = client.get(reverse('patients:detail', kwargs={'id': patient_a.pk})).content.decode()
+
+    assert 'aria-label="1 alerta clínica activa. Ver detalle"' in html
+    assert 'text-warning ring-warning-line' in html.split('data-alerts-badge')[1][:900]
+
+
+@pytest.mark.django_db
+def test_no_badge_without_alerts(client, admin_user, patient_a):
+    """Sin alertas activas no se pinta nada."""
     client.force_login(admin_user)
     r = client.get(reverse('patients:detail', kwargs={'id': patient_a.pk}))
-    assert 'Alertas clínicas activas' not in r.content.decode()
+    assert 'data-alerts-badge' not in r.content.decode()
 
 
 @pytest.mark.django_db
@@ -108,3 +128,31 @@ def test_isolation_and_login(client, admin_user, patient_b, name):
     client.force_login(admin_user)
     assert client.get(url).status_code == 404
     assert not AccessLog.objects.exists()
+
+
+@pytest.mark.django_db
+def test_anamnesis_and_consents_share_one_documents_tab(client, admin_user, patient_a):
+    """Dos pestañas en una para que la barra quepa: «Documentos» con los dos bloques."""
+    client.force_login(admin_user)
+    html = client.get(reverse('patients:tab-documents', kwargs={'id': patient_a.pk})).content.decode()
+
+    assert 'id="anamnesis"' in html and 'id="consentimientos"' in html
+    assert reverse('patients:anamnesis-create', kwargs={'id': patient_a.pk}) in html
+    assert reverse('patients:consent-sign', kwargs={'id': patient_a.pk}) in html
+    labels = [tab['label'] for tab in PATIENT_TABS]
+    assert 'Documentos' in labels
+    assert 'Anamnesis' not in labels and 'Consentimientos' not in labels
+    assert len(labels) <= 6
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('name', ['patients:tab-anamnesis', 'patients:tab-consents'])
+def test_the_old_routes_return_the_documents_tab(client, admin_user, patient_a, name):
+    """Las rutas antiguas están en marcadores y enlaces: siguen valiendo, y marcan «Documentos»."""
+    client.force_login(admin_user)
+    response = client.get(reverse(name, kwargs={'id': patient_a.pk}))
+
+    assert response.status_code == 200
+    assert response.context['active_tab'] == 'documents'
+    assert 'responses' in response.context and 'consents' in response.context
+    assert 'id="patient-tab-documents"' in response.content.decode()

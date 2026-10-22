@@ -12,11 +12,60 @@ propósito. Al ser enlaces, todos son alcanzables con el tabulador; forzar
 `tabindex="-1"` en los inactivos exigiría implementar la navegación con flechas
 en JavaScript y, sin ella, dejaría cinco pestañas fuera del alcance del teclado.
 {% endcomment %}
-<div class="-mx-1 overflow-x-auto px-1 pb-1">
+{% comment %}
+Estilo «separador de carpetas»: la barra no tiene fondo ni borde, solo la pestaña
+activa está resaltada y **unida hacia abajo** con el panel de contenido.
+
+La unión se consigue con tres piezas que van juntas:
+  · la barra queda por encima del panel (`relative z-10`) y lo solapa 1 px
+    (`-mb-px`), de modo que la pestaña activa tapa el trazo superior del panel justo
+    debajo de ella;
+  · la pestaña activa tiene borde arriba y a los lados pero NO abajo, y el mismo
+    fondo (`bg-surface`) que el panel;
+  · la base de la activa se abre en dos curvas cóncavas (`.tab-flare-l/-r`, en
+    `_head_theme.html`) con el radio de las esquinas del panel;
+  · si la activa es la primera, el panel pierde su esquina superior izquierda
+    redondeada (`_tab_region.html`) y no lleva curva a la izquierda, para que no
+    quede un hueco.
+La barra se desliza en horizontal cuando no caben las pestañas (con el dedo en
+móvil), pero sin barra de desplazamiento visible; mientras quede alguna fuera por la
+derecha se muestra una flecha que desliza la barra (Alpine, `more`). Al cargar, la pestaña activa se
+centra si queda fuera de la vista. El relleno derecho (`pr-6`) deja sitio a la
+curva de la última pestaña, que si no quedaría recortada.
+Las inactivas llevan un borde transparente para ocupar lo mismo y no mover nada al
+cambiar de pestaña.
+{% endcomment %}
+<div
+    class="relative z-10 -mx-1 -mb-px"
+    x-data="{
+        more: false,
+        check() {
+            const s = this.$refs.scroller;
+            this.more = s.scrollWidth - s.scrollLeft - s.clientWidth > 4;
+        },
+        next() {
+            const s = this.$refs.scroller;
+            s.scrollBy({ left: s.clientWidth * 0.6, behavior: 'smooth' });
+        },
+    }"
+    x-init="$nextTick(() => {
+        const s = $refs.scroller;
+        const tab = s.querySelector('[aria-selected=true]');
+        if (tab) s.scrollLeft = tab.offsetLeft - (s.clientWidth - tab.offsetWidth) / 2;
+        check();
+    })"
+    @resize.window.debounce.100ms="check()"
+>
+<div
+    x-ref="scroller"
+    @scroll.passive="check()"
+    class="overflow-x-auto overscroll-x-contain px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    style="touch-action: pan-x pan-y;"
+>
     <div
         role="tablist"
         aria-label="Secciones de la ficha del paciente"
-        class="flex w-max min-w-full items-center gap-1 rounded-2xl bg-muted p-1 ring-1 ring-line"
+        class="flex w-max min-w-full items-end gap-1 pr-6"
     >
         {% for tab in patient_tabs %}
             {% if tab.key == active_tab %}
@@ -26,8 +75,13 @@ en JavaScript y, sin ella, dejaría cinco pestañas fuera del alcance del teclad
                     aria-selected="true"
                     aria-controls="patient-tab-panel"
                     href="{% url tab.url_name patient.id %}"
-                    class="whitespace-nowrap rounded-xl bg-surface px-3.5 py-2 text-sm font-semibold text-brand-fg shadow-sm ring-1 ring-line transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:px-4"
-                >{{ tab.label }}</a>
+                    class="relative inline-flex items-center gap-1.5 whitespace-nowrap rounded-t-xl border border-b-0 border-line bg-surface px-5 py-2.5 text-sm font-semibold text-brand-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                >
+                    <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="{{ tab.icon }}" /></svg>
+                    {{ tab.label }}
+                    {% if not forloop.first %}<span class="tab-flare-l" aria-hidden="true"></span>{% endif %}
+                    <span class="tab-flare-r" aria-hidden="true"></span>
+                </a>
             {% else %}
                 <a
                     id="patient-tab-{{ tab.key }}"
@@ -40,17 +94,34 @@ en JavaScript y, sin ella, dejaría cinco pestañas fuera del alcance del teclad
                     hx-swap="innerHTML"
                     hx-push-url="true"
                     hx-indicator="#patient-tab-spinner"
-                    class="whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-medium text-content-subtle transition hover:bg-surface/70 hover:text-content focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:px-4"
-                >{{ tab.label }}</a>
+                    class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-t-xl border border-transparent px-5 py-2.5 text-sm font-medium text-content-subtle transition hover:text-content focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                >
+                    <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="{{ tab.icon }}" /></svg>
+                    {{ tab.label }}
+                </a>
             {% endif %}
         {% endfor %}
 
         {# Indicador de carga: htmx le pone la clase `htmx-request` mientras vuela la petición. #}
-        <span id="patient-tab-spinner" class="htmx-indicator ml-auto pl-2 pr-1 text-brand-fg" aria-hidden="true">
+        <span id="patient-tab-spinner" class="htmx-indicator ml-auto self-center pl-2 pr-1 text-brand-fg" aria-hidden="true">
             <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
                 <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"></path>
             </svg>
         </span>
     </div>
+</div>
+
+    {# Aviso de que hay más pestañas a la derecha; desaparece al llegar al final. #}
+    <button
+        type="button"
+        x-show="more"
+        x-cloak
+        x-transition.opacity
+        @click="next()"
+        aria-label="Ver más pestañas"
+        class="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-surface text-brand-fg shadow-soft ring-1 ring-line transition hover:bg-brand-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+    >
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+    </button>
 </div>

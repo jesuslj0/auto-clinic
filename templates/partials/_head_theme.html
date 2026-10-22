@@ -294,6 +294,31 @@ opacidades sobre ellos (bg-surface/90, ring-line/70…).
 
 <!-- Componentes reutilizables (botones e iconos del sistema de diseño) -->
 <style type="text/tailwindcss">
+    /* Pestaña activa «de carpeta» (barra de la ficha, `patients/_patient_tabs.html`):
+       las dos curvas cóncavas con las que su base se abre hacia el panel. El radio (0.75rem)
+       es el de las esquinas superiores de la pestaña (`rounded-t-xl`). Cada curva es un
+       cuadrado de ese tamaño junto a la pestaña con un degradado radial centrado en su
+       esquina: transparente dentro del círculo, el trazo de la línea en su borde y el
+       color de la superficie fuera, que es lo que une la pestaña con el panel. Se
+       colocan 1 px por encima de la base para que el trazo coincida con el borde
+       superior del panel (que la barra solapa 1 px). Solo con variables del tema, así
+       que sirve igual en claro y en oscuro. */
+    .tab-flare-l, .tab-flare-r {
+        position: absolute;
+        bottom: 1px;
+        width: 0.75rem;
+        height: 0.75rem;
+        pointer-events: none;
+    }
+    .tab-flare-l {
+        left: -0.75rem;
+        background: radial-gradient(circle at 0 0, transparent calc(0.75rem - 1px), rgb(var(--c-line)) calc(0.75rem - 1px) 0.75rem, rgb(var(--c-surface)) 0.75rem);
+    }
+    .tab-flare-r {
+        right: -0.75rem;
+        background: radial-gradient(circle at 100% 0, transparent calc(0.75rem - 1px), rgb(var(--c-line)) calc(0.75rem - 1px) 0.75rem, rgb(var(--c-surface)) 0.75rem);
+    }
+
     /* Acciones de la barra de sección en móvil: más compactas, para no
        quitarle sitio al título. Una sola regla para todas las páginas en vez
        de clases `max-sm:` repetidas en cada plantilla. Los puntitos de estado

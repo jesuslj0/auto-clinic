@@ -262,7 +262,7 @@ Panel map (namespace in brackets):
 | `/` (`core`) | `buscar/`, `login/`, `logout/`, `cuenta/` (`perfil/`, `horario/`, `contrasena/`), `clinica/` (`editar/`, `integraciones/` → redirect to `/agente/`), `panel/citas/<uuid>/` (`gestionar/`, `accion/`, `resumen/`) |
 | `/citas/` (`appointments`) | `crear/`, `listado/`, `<uuid>/procedimiento/`, `<uuid>/visita/`, `mi-perfil/` (redirect) |
 | `/profesionales/` (`professionals`) | `crear/`, `<pk>/editar/` — top-level, views live in `appointments` (`appointments/professional_urls.py`) |
-| `/pacientes/` (`patients`) | `crear/`, `<id>/` + tabs `historia/` (+ `episodios/…`, `visitas/…`, `notas/…`), `anamnesis/`, `alertas/` (+ `nueva/`, `<id>/editar|desactivar|reactivar/`), `lesiones/`, `consentimientos/` (+ `firmar/`), `procedimientos/`, `editar/`, `foto/` |
+| `/pacientes/` (`patients`) | `crear/`, `<id>/` + tabs `historia/` (+ `episodios/…`, `visitas/…`, `notas/…`), `documentos/` (anamnesis + consentimientos in one tab; the old `anamnesis/` and `consentimientos/` routes return the same tab), `alertas/` (+ `nueva/`, `<id>/editar|desactivar|reactivar/`), `lesiones/`, `consentimientos/firmar/`, `procedimientos/`, `editar/`, `foto/` |
 | `/servicios/` (`services`) | `crear/`, `<pk>/editar/`, `<pk>/eliminar/` |
 | `/conocimiento/` (`knowledge`) | `crear/`, `<uuid>/editar/`, `<uuid>/eliminar/` |
 | `/chats/` (`agent`) | `agente/`, `lista/`, `adjuntos/<uuid>/`, `<uuid>/` (`mensajes/`, `enviar/`, `escribiendo/`, `modo/`) |
