@@ -161,11 +161,35 @@ touching it — see `clinical/README.md` for the full picture:
   warn of **completed appointments with a patient file and no procedure** in the
   last 90 days (`appointments.filters.completed_without_procedure`): work done
   that was never recorded, hence never billed.
+- **Course of care in the panel** (`patients/history_views.py`, tab «Historia»).
+  Episode → visit → SOAP note (draft → signed) → addendum, all session views.
+  The note keeps the SOAP model but is shown as Motivo de consulta / Exploración
+  (4 optional subfields) / Diagnóstico / Tratamiento y plan (2 subfields), SOAP letter
+  as a small tag, plus an Antecedentes block only on the patient's first note
+  (`clinical/soap.py`; `objective`/`plan` are legacy free text, kept; new fields enter
+  the signature hash only when non-empty so old seals still verify). Rules: only a user with `professional_profile` signs, in
+  their own name; **no view accepts a signed note** (edit/discard/sign again are
+  refused); the author of a draft lives in `ChangeLog` (`ClinicalNote` only stores
+  `signed_by`); a closed episode takes no new visits or notes; every GET logs
+  `AccessLog`, and episode/visit/note are looked up *inside the URL's patient*.
+  `appointments:visit-open` opens a visit from an appointment (reuses
+  `visit_for_appointment`). See `clinical/README.md`.
+- **Manual clinical alerts** (`patients/alert_views.py`, tab «Alertas»): create/edit
+  (manual only; the type is frozen)/deactivate/reactivate from the panel, no delete
+  route; no duplicate active alert of the same type; `other` is no longer offered by hand
+  (the derivation engine can still raise it, old ones stay editable);
+  the derivation engine still never touches `source='manual'`.
+- **Signing a consent in the panel** (`patients:consent-sign`): current published
+  version only, the shown version travels in the form (a republish mid-reading
+  rejects the signature), the canvas PNG is decoded, checked for ink and rewritten
+  server-side (`clinical/signature.py`), and the write goes through
+  `SignedConsent.sign()`. Templates/versions are still managed in the admin.
 - **Off-limits to the n8n token.** This layer has **no REST API** on purpose, so
   the agent's `Api-Key` cannot reach clinical data. `Visit` links *to*
-  `Appointment`, never the reverse. The only HTTP surface is the session-only
-  attachment view above. **Any new endpoint over this layer must instrument
-  `AccessLog` and stay denied to the agent.**
+  `Appointment`, never the reverse. The HTTP surface is session-only: the
+  attachment views above and the panel views of the two bullets before. **Any new
+  endpoint over this layer must instrument `AccessLog` and stay denied to the
+  agent.**
 - **Retention is not fixed in code.** `CLINICAL_RETENTION_YEARS` is a setting with
   a conservative default; there is no automatic purge (pending autonomic law).
 
@@ -236,9 +260,9 @@ Panel map (namespace in brackets):
 | Prefix | Routes |
 |---|---|
 | `/` (`core`) | `buscar/`, `login/`, `logout/`, `cuenta/` (`perfil/`, `horario/`, `contrasena/`), `clinica/` (`editar/`, `integraciones/` → redirect to `/agente/`), `panel/citas/<uuid>/` (`gestionar/`, `accion/`, `resumen/`) |
-| `/citas/` (`appointments`) | `crear/`, `listado/`, `<uuid>/procedimiento/`, `mi-perfil/` (redirect) |
+| `/citas/` (`appointments`) | `crear/`, `listado/`, `<uuid>/procedimiento/`, `<uuid>/visita/`, `mi-perfil/` (redirect) |
 | `/profesionales/` (`professionals`) | `crear/`, `<pk>/editar/` — top-level, views live in `appointments` (`appointments/professional_urls.py`) |
-| `/pacientes/` (`patients`) | `crear/`, `<id>/` + tabs `anamnesis/`, `alertas/`, `lesiones/`, `consentimientos/`, `procedimientos/`, `editar/`, `foto/` |
+| `/pacientes/` (`patients`) | `crear/`, `<id>/` + tabs `historia/` (+ `episodios/…`, `visitas/…`, `notas/…`), `anamnesis/`, `alertas/` (+ `nueva/`, `<id>/editar|desactivar|reactivar/`), `lesiones/`, `consentimientos/` (+ `firmar/`), `procedimientos/`, `editar/`, `foto/` |
 | `/servicios/` (`services`) | `crear/`, `<pk>/editar/`, `<pk>/eliminar/` |
 | `/conocimiento/` (`knowledge`) | `crear/`, `<uuid>/editar/`, `<uuid>/eliminar/` |
 | `/chats/` (`agent`) | `agente/`, `lista/`, `adjuntos/<uuid>/`, `<uuid>/` (`mensajes/`, `enviar/`, `escribiendo/`, `modo/`) |

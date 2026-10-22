@@ -315,10 +315,25 @@ class ClinicalNote(SoftDeleteModel, TimeStampedModel):
         SIGNED = 'signed', 'Firmada'
 
     visit = models.ForeignKey(Visit, on_delete=models.PROTECT, related_name='notes')
-    subjective = models.TextField(blank=True, help_text='S: lo que refiere el paciente.')
-    objective = models.TextField(blank=True, help_text='O: hallazgos de la exploración.')
-    assessment = models.TextField(blank=True, help_text='A: análisis / juicio clínico.')
-    plan = models.TextField(blank=True, help_text='P: plan de actuación.')
+    # El modelo sigue siendo SOAP; el panel lo presenta con etiquetas de podología
+    # (`clinical/soap.py`). `subjective` = Motivo de consulta, `assessment` =
+    # Diagnóstico. Exploración y Tratamiento y plan se dividen en subcampos.
+    background = models.TextField(
+        blank=True,
+        help_text='Antecedentes (calzado, actividad física, patologías). Solo se pide en la primera visita.',
+    )
+    subjective = models.TextField(blank=True, help_text='S: motivo de consulta; lo que refiere el paciente.')
+    # `objective` y `plan` son el texto libre ANTERIOR a los subcampos: las notas
+    # ya escritas (y firmadas) los conservan tal cual y las nuevas no los usan.
+    objective = models.TextField(blank=True, help_text='O: exploración, texto libre (anterior a los subcampos).')
+    inspection = models.TextField(blank=True, help_text='O · Inspección.')
+    palpation = models.TextField(blank=True, help_text='O · Palpación.')
+    biomechanics = models.TextField(blank=True, help_text='O · Biomecánica y pisada.')
+    complementary_tests = models.TextField(blank=True, help_text='O · Pruebas complementarias.')
+    assessment = models.TextField(blank=True, help_text='A: diagnóstico / juicio clínico.')
+    plan = models.TextField(blank=True, help_text='P: tratamiento y plan, texto libre (anterior a los subcampos).')
+    treatment_done = models.TextField(blank=True, help_text='P · Tratamiento realizado hoy.')
+    follow_up = models.TextField(blank=True, help_text='P · Indicaciones y seguimiento.')
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT, db_index=True)
     signed_by = models.ForeignKey(
         'appointments.Professional', on_delete=models.SET_NULL,
@@ -327,7 +342,7 @@ class ClinicalNote(SoftDeleteModel, TimeStampedModel):
     signed_at = models.DateTimeField(null=True, blank=True)
     content_hash = models.CharField(
         max_length=100, blank=True,
-        help_text='sha256:<hexdigest> del contenido SOAP y los metadatos de firma.',
+        help_text='sha256:<hexdigest> del contenido de la nota y los metadatos de firma.',
     )
 
     class Meta(SoftDeleteModel.Meta):
@@ -934,15 +949,30 @@ class ClinicalAlert(SoftDeleteModel, TimeStampedModel):
     """
 
     class AlertType(models.TextChoices):
-        # Las críticas de podología: las que cambian el tratamiento o lo
-        # contraindican. `OTHER` existe para no forzar el encaje de lo que no
-        # esté en la lista, con el detalle en `note`.
+        # Lo que cambia el tratamiento o lo contraindica en podología. Primero las
+        # condiciones de salud, luego las alergias, luego el riesgo del propio pie.
         DIABETES = 'diabetes', 'Diabetes'
         PERIPHERAL_VASCULAR_DISEASE = 'peripheral_vascular_disease', 'Enfermedad vascular periférica'
         NEUROPATHY = 'neuropathy', 'Neuropatía'
+        CARDIOVASCULAR = 'cardiovascular', 'Cardiopatía / hipertensión'
         ANTICOAGULANTS = 'anticoagulants', 'Tratamiento anticoagulante'
+        BLEEDING_DISORDER = 'bleeding_disorder', 'Alteración de la coagulación'
+        IMMUNOSUPPRESSION = 'immunosuppression', 'Inmunosupresión'
+        CHEMOTHERAPY = 'chemotherapy', 'Quimioterapia / radioterapia'
+        BLOODBORNE_INFECTION = 'bloodborne_infection', 'Infección transmisible por sangre'
+        PACEMAKER = 'pacemaker', 'Marcapasos / dispositivo implantado'
+        PREGNANCY = 'pregnancy', 'Embarazo'
+        FRAGILE_SKIN = 'fragile_skin', 'Piel frágil'
+        FALL_RISK = 'fall_risk', 'Riesgo de caídas / movilidad reducida'
         ALLERGY_LATEX = 'allergy_latex', 'Alergia al látex'
         ALLERGY_LOCAL_ANESTHETICS = 'allergy_local_anesthetics', 'Alergia a anestésicos locales'
+        ALLERGY_ADHESIVES = 'allergy_adhesives', 'Alergia a adhesivos / esparadrapo'
+        ALLERGY_MEDICATION = 'allergy_medication', 'Alergia a medicamentos'
+        HIGH_RISK_FOOT = 'high_risk_foot', 'Pie de riesgo'
+        PREVIOUS_AMPUTATION = 'previous_amputation', 'Amputación previa'
+        # Lo levanta el motor de derivación cuando una anamnesis dice algo que no
+        # encaja en los anteriores (`clinical/rules.py`). Ya no se ofrece al dar de
+        # alta una alerta a mano (`ClinicalAlertForm`): obliga a clasificarla.
         OTHER = 'other', 'Otra'
 
     class Severity(models.TextChoices):
@@ -1126,10 +1156,28 @@ class Lesion(SoftDeleteModel, TimeStampedModel):
         OTHER = 'other', 'Otra zona'
 
     class LesionType(models.TextChoices):
+        # Piel
         ULCER = 'ulcer', 'Úlcera'
-        HYPERKERATOSIS = 'hyperkeratosis', 'Hiperqueratosis'
         WOUND = 'wound', 'Herida'
         BLISTER = 'blister', 'Ampolla'
+        HYPERKERATOSIS = 'hyperkeratosis', 'Hiperqueratosis / callosidad'
+        HELOMA = 'heloma', 'Heloma (callo con núcleo)'
+        FISSURE = 'fissure', 'Fisura / grieta'
+        VERRUCA = 'verruca', 'Verruga plantar'
+        XEROSIS = 'xerosis', 'Xerosis (piel seca)'
+        MACERATION = 'maceration', 'Maceración interdigital'
+        TINEA = 'tinea', 'Tiña (pie de atleta)'
+        CYST = 'cyst', 'Quiste / ganglión'
+        # Uña
+        ONYCHOCRYPTOSIS = 'onychocryptosis', 'Uña encarnada (onicocriptosis)'
+        ONYCHOMYCOSIS = 'onychomycosis', 'Onicomicosis (hongos en la uña)'
+        PARONYCHIA = 'paronychia', 'Paroniquia (infección periungueal)'
+        SUBUNGUAL_HEMATOMA = 'subungual_hematoma', 'Hematoma subungueal'
+        NAIL_DYSTROPHY = 'nail_dystrophy', 'Distrofia ungueal'
+        # Deformidad con repercusión local
+        BUNION = 'bunion', 'Juanete (hallux valgus)'
+        # Valor antiguo. Hay lesiones ya guardadas como «Otra» y tienen que seguir
+        # leyéndose, pero ya no se ofrece al registrar una nueva (`LesionForm`).
         OTHER = 'other', 'Otra'
 
     class Status(models.TextChoices):

@@ -6,6 +6,7 @@ from appointments.views import (
     AppointmentCreateView,
     AppointmentListView,
     AppointmentProcedureCreateView,
+    AppointmentVisitOpenView,
 )
 
 app_name = 'appointments'
@@ -21,6 +22,13 @@ urlpatterns = [
         '<uuid:appointment_id>/procedimiento/',
         AppointmentProcedureCreateView.as_view(),
         name='procedure-create',
+    ),
+    # Puerta de la agenda a la historia: abre la visita de la cita y lleva a su
+    # nota. Con visita ya abierta redirige directamente a la nota.
+    path(
+        '<uuid:appointment_id>/visita/',
+        AppointmentVisitOpenView.as_view(),
+        name='visit-open',
     ),
     # El perfil propio vive ahora en «Mi cuenta» (`core:account`), junto a los
     # datos de acceso y la contraseña, que es donde se va a buscarlo. La ruta se

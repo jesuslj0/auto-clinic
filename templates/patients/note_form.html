@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% comment %}
+Nota clínica en borrador (alta y edición). Es SOAP presentado en podología: Motivo
+de consulta, Exploración (con cuatro subcampos), Diagnóstico y Tratamiento y plan
+(con dos). La letra SOAP va como etiqueta discreta junto al nombre. Antecedentes
+solo sale en la primera nota del paciente. Todo sale de `clinical/soap.py` a través
+de `form.section_rows`; cambiar una etiqueta es tocar ese fichero, no esta plantilla.
+
+El ejemplo sale como `placeholder` del propio campo (con «Ej.»): desaparece al
+escribir, así que no se confunde con contenido.
+
+Aquí solo llega un BORRADOR: la vista rechaza una nota firmada antes de enseñar el
+formulario. Guardar no firma; la firma es un paso aparte y consciente.
+
+POST clásico con CSRF, sin HTMX y sin API (capa clínica).
+{% endcomment %}
+
+{% block title %}{% if note %}Editar borrador{% else %}Nueva nota{% endif %} · {{ patient }} · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}{% if note %}Editar borrador{% else %}Nueva nota clínica{% endif %}{% endblock %}
+{% block page_subheading %}<p class="truncate text-xs text-content-subtle sm:text-sm">{{ patient }} · visita del {{ visit.occurred_at|date:"d/m/Y H:i" }}</p>{% endblock %}
+
+{% block page_actions %}
+<a href="{{ cancel_url }}" class="btn-secondary max-sm:px-3" aria-label="Volver">
+    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+    </svg>
+    <span class="hidden sm:inline">Volver</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-3xl space-y-6">
+    <p class="rounded-2xl bg-muted px-4 py-3 text-sm text-content-subtle ring-1 ring-line">
+        <span class="font-medium text-content-muted">Episodio:</span> {{ episode.reason|default:"sin motivo indicado"|truncatechars:160 }}.
+        Se guarda como <span class="font-medium text-content-muted">borrador</span>: podrás editarlo hasta que lo firmes.
+        Una vez firmada, la nota no se puede modificar; solo admite adendas.
+    </p>
+
+    <form method="post" novalidate class="space-y-6">
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+        <div class="rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line" role="alert">
+            {% for error in form.non_field_errors %}<p class="text-sm text-danger">{{ error }}</p>{% endfor %}
+        </div>
+        {% endif %}
+
+        <section class="divide-y divide-line overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+            {% for row in form.section_rows %}
+            <div class="px-6 py-5">
+                <div class="flex items-center gap-2">
+                    <h3 class="text-sm font-semibold text-content">
+                        {% if row.single %}<label for="{{ row.fields.0.bound.id_for_label }}">{{ row.section.title }}</label>{% else %}{{ row.section.title }}{% endif %}
+                    </h3>
+                    {# La letra SOAP, como referencia discreta: a quien conoce el formato le sirve, a quien no, no le molesta. #}
+                    {% if row.section.letter %}
+                    <span class="rounded-md px-1.5 py-px text-[10px] font-semibold leading-4 text-content-faint ring-1 ring-line"
+                          title="{{ row.section.letter_name }}" aria-hidden="true">{{ row.section.letter }}</span>
+                    {% endif %}
+                </div>
+                <p class="mt-1.5 text-xs leading-relaxed text-content-subtle">{{ row.section.hint }}</p>
+
+                <div class="mt-3 space-y-4">
+                    {% for item in row.fields %}
+                    <div>
+                        {% if not row.single %}
+                        <label for="{{ item.bound.id_for_label }}" class="block text-sm font-medium text-content-muted">{{ item.meta.label }}</label>
+                        <p class="mt-0.5 text-xs text-content-faint">{{ item.meta.hint }}</p>
+                        {% endif %}
+                        <p id="hint-{{ item.bound.name }}" class="sr-only">{{ item.meta.hint|default:row.section.hint }}</p>
+                        <div class="{% if not row.single %}mt-1.5{% endif %}">{{ item.bound }}</div>
+                        {% if item.bound.errors %}
+                        <p id="error-{{ item.bound.name }}" class="mt-1.5 text-xs text-danger">{{ item.bound.errors|join:", " }}</p>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </section>
+
+        <div class="flex items-center justify-between gap-3">
+            <a href="{{ cancel_url }}" class="btn-secondary">Cancelar</a>
+            <button type="submit" class="btn-primary">Guardar borrador</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

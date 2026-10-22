@@ -7,6 +7,7 @@ import django_filters
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
@@ -42,8 +43,8 @@ from appointments.services import (
     register_patient_confirmation,
 )
 from appointments.serializers import AppointmentSerializer, ProfessionalScheduleSerializer, ProfessionalSerializer
-from clinical.forms import PerformedProcedureForm
-from clinical.procedures import record_procedure
+from clinical.forms import PerformedProcedureForm, VisitOpenForm
+from clinical.procedures import open_episode, record_procedure, visit_for_appointment
 from audit.mixins import AccessLogMixin, log_access
 from audit.models import AccessLog
 from core.authentication import ClinicAgent
@@ -1234,3 +1235,122 @@ class AppointmentProcedureCreateView(AccessLogMixin, LoginRequiredMixin, Templat
             f'en la cita de {procedure.performed_at:%d/%m/%Y}.',
         )
         return redirect('core:dashboard-manage-appointment', appointment_id=self.appointment.pk)
+
+
+class AppointmentVisitOpenView(AccessLogMixin, LoginRequiredMixin, TemplateView):
+    """Abrir la visita clínica de una cita y pasar a escribir su nota.
+
+    Es la puerta desde la agenda a la historia: la visita queda **enganchada a la
+    cita** (`Visit.appointment`), con el profesional y la hora de la cita, y de ahí
+    se salta a la nota. Reutiliza `visit_for_appointment`, la misma función que el
+    alta de procedimientos, así que abrir la visita aquí y registrar un
+    procedimiento después no crea dos visitas para el mismo encuentro.
+
+    - Si la cita **ya tiene visita**, no hay nada que preguntar: se va derecho a su
+      nota (el borrador pendiente, la última firmada, o una nota nueva).
+    - Si no, solo falta saber de qué episodio cuelga: el abierto más reciente viene
+      preseleccionado, o se abre uno nuevo con su motivo.
+
+    Una cita sin ficha de paciente no llega a la historia (la historia clínica
+    cuelga del paciente), y una cancelada tampoco. Sesión y CSRF, nunca API.
+    La pantalla de elegir episodio lista motivos de consulta (texto clínico): la
+    lectura queda en `AccessLog`, a nombre del paciente.
+    """
+
+    template_name = 'appointments/visit_open.html'
+
+    def get_appointment(self):
+        if not hasattr(self, 'appointment'):
+            self.appointment = get_object_or_404(
+                Appointment.objects.select_related('patient', 'service', 'professional__user', 'clinic'),
+                pk=self.kwargs['appointment_id'],
+            )
+            user = self.request.user
+            if (user.clinic_id and self.appointment.clinic_id != user.clinic_id) or (
+                not user.clinic_id and not user.is_superuser
+            ):
+                raise PermissionDenied('No tienes permiso para gestionar esta cita.')
+        return self.appointment
+
+    def get_professional(self):
+        return getattr(self.request.user, 'professional_profile', None)
+
+    def get_access_patient(self):
+        return self.get_appointment().patient
+
+    def get_access_object(self):
+        return self.get_appointment()
+
+    def manage_url(self):
+        return reverse('core:dashboard-manage-appointment', args=[self.get_appointment().pk])
+
+    def refusal(self, request):
+        """Por qué no se puede abrir la visita, o `None` si se puede."""
+        appointment = self.get_appointment()
+        if not appointment.patient_id:
+            return 'Crea la ficha del paciente antes de abrir su visita: la historia clínica cuelga de ella.'
+        if appointment.status == Appointment.Status.CANCELLED:
+            return 'La cita está cancelada: no se puede abrir una visita.'
+        return None
+
+    def existing_visit(self):
+        from clinical.models import Visit
+
+        return Visit.objects.filter(appointment=self.get_appointment()).order_by('id').first()
+
+    def landing(self, visit):
+        from patients.history_views import visit_landing_url
+
+        return visit_landing_url(visit, self.get_appointment().patient_id)
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            reason = self.refusal(request)
+            if reason:
+                messages.error(request, reason)
+                return redirect(self.manage_url())
+            visit = self.existing_visit()
+            if visit is not None:
+                return redirect(self.landing(visit))
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form(self, data=None):
+        return VisitOpenForm(data, patient=self.get_appointment().patient)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        appointment = self.get_appointment()
+        context.update({
+            'appointment': appointment,
+            'patient': appointment.patient,
+            'form': kwargs.get('form') or self.get_form(),
+            'section': 'appointments',
+            'cancel_url': self.manage_url(),
+        })
+        return context
+
+    def post(self, request, *args, **kwargs):
+        form = self.get_form(data=request.POST)
+        if not form.is_valid():
+            return self.render_to_response(self.get_context_data(form=form))
+
+        appointment = self.get_appointment()
+        professional = self.get_professional()
+        # La visita exige profesional: el de la cita o, si la cita no lo tiene, el
+        # de quien la abre. Sin ninguno de los dos no hay a quién atribuirla.
+        if appointment.professional is None and professional is None:
+            messages.error(
+                request,
+                'La cita no tiene profesional asignado y tu usuario no tiene perfil de profesional.',
+            )
+            return redirect(self.manage_url())
+
+        with transaction.atomic():
+            episode = form.cleaned_data.get('episode') or open_episode(
+                appointment.patient,
+                reason=form.cleaned_data['episode_reason'],
+                professional=appointment.professional or professional,
+            )
+            visit = visit_for_appointment(appointment, episode=episode, professional=professional)
+        messages.success(request, 'Visita abierta. Escribe la nota cuando quieras.')
+        return redirect(self.landing(visit))

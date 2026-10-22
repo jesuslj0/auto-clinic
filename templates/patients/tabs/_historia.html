@@ -1,0 +1,193 @@
+{% comment %}
+Panel «Historia». El curso clínico del paciente: episodios → visitas → notas.
+
+Es el índice desde el que se llega a todo lo demás. Cada episodio enseña lo que
+cuelga de él con enlaces a su pestaña (consentimientos, lesiones, anamnesis) y
+cada visita, sus notas y sus procedimientos.
+
+Del texto de una nota solo se pinta UNA línea de vista previa: la nota entera se
+lee en su propia pantalla (`patients:note-detail`), que registra su propio
+`AccessLog`. Esta pestaña ya está registrada por `AccessLogMixin`.
+
+Las acciones que cambian estado (cerrar, reabrir) son formularios POST con CSRF,
+no enlaces. Cada ancla (`#episodio-<id>`, `#visita-<id>`) es a donde vuelven las
+vistas tras guardar, para no perder el sitio en una historia larga.
+{% endcomment %}
+<section class="overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+    <div class="flex flex-col gap-3 border-b border-line px-6 py-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+            <h3 class="text-lg font-semibold text-content">Historia clínica</h3>
+            <p class="mt-1 text-sm text-content-subtle">
+                Cada proceso asistencial es un episodio; dentro, las visitas y la nota de cada una.
+                {% if patient.medical_history %}Historia nº <span class="font-medium text-content-muted">{{ patient.medical_history.number }}</span>.{% endif %}
+            </p>
+        </div>
+        <div class="flex flex-shrink-0 flex-wrap items-center gap-2 self-start">
+            <a href="{% url 'patients:episode-create' patient.pk %}" class="btn-primary max-sm:px-3" aria-label="Nuevo episodio">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                <span class="hidden sm:inline">Nuevo episodio</span>
+            </a>
+        </div>
+    </div>
+
+    {% if not can_sign %}
+    <p class="border-b border-line bg-muted px-6 py-3 text-xs text-content-subtle">
+        Tu usuario no tiene perfil de profesional: puedes preparar borradores, pero firmar notas y añadir adendas
+        corresponde a un profesional.
+    </p>
+    {% endif %}
+
+    <div class="divide-y divide-line">
+        {% for episode in episodes %}
+        <article id="episodio-{{ episode.pk }}" class="scroll-mt-24 px-6 py-5">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                        {% if episode.status == 'open' %}
+                        <span class="inline-flex items-center rounded-full bg-success-soft px-2.5 py-0.5 text-xs font-semibold text-success ring-1 ring-success-line">Abierto</span>
+                        {% else %}
+                        <span class="inline-flex items-center rounded-full bg-muted-strong px-2.5 py-0.5 text-xs font-semibold text-content-muted">Cerrado</span>
+                        {% endif %}
+                        {% if episode.draft_count %}
+                        <span class="inline-flex items-center rounded-full bg-warning-soft px-2.5 py-0.5 text-xs font-semibold text-warning ring-1 ring-warning-line">{{ episode.draft_count }} borrador{{ episode.draft_count|pluralize:",es" }} sin firmar</span>
+                        {% endif %}
+                    </div>
+                    <p class="mt-2 whitespace-pre-line break-words text-sm font-semibold text-content">{{ episode.reason|default:"Sin motivo indicado" }}</p>
+                    <p class="mt-1 text-sm text-content-subtle">
+                        Abierto el {{ episode.opened_at|date:"j \d\e F \d\e Y" }}
+                        {% if episode.discharged_at %} · alta el {{ episode.discharged_at|date:"j \d\e F \d\e Y" }}{% endif %}
+                        {% if episode.responsible_professional %} · {{ episode.responsible_professional.display_name }}{% endif %}
+                    </p>
+                </div>
+                <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                    {% if episode.status == 'open' %}
+                    <a href="{% url 'patients:visit-create' patient.pk episode.pk %}" class="btn-secondary max-sm:px-3">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        Nueva visita
+                    </a>
+                    {% endif %}
+                    <a href="{% url 'patients:episode-edit' patient.pk episode.pk %}" class="btn-secondary max-sm:px-3" aria-label="Editar episodio">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                        </svg>
+                        <span class="hidden sm:inline">Editar</span>
+                    </a>
+                    {% if episode.status == 'open' %}
+                    <form method="post" action="{% url 'patients:episode-close' patient.pk episode.pk %}"
+                          onsubmit="return confirm('¿Dar de alta este episodio? No admitirá visitas nuevas hasta que lo reabras.');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn-secondary max-sm:px-3">Cerrar episodio</button>
+                    </form>
+                    {% else %}
+                    <form method="post" action="{% url 'patients:episode-reopen' patient.pk episode.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn-secondary max-sm:px-3">Reabrir</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# --- Lo que cuelga del episodio, a un clic ------------------------- #}
+            <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                <a href="{% url 'patients:tab-consents' patient.pk %}"
+                   class="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 font-medium text-content-muted ring-1 ring-line transition hover:text-brand-fg">
+                    {{ episode.consent_list|length }} consentimiento{{ episode.consent_list|length|pluralize }}
+                </a>
+                <a href="{% url 'patients:tab-lesions' patient.pk %}"
+                   class="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 font-medium text-content-muted ring-1 ring-line transition hover:text-brand-fg">
+                    {{ episode.lesion_count }} lesi{{ episode.lesion_count|pluralize:"ón,ones" }}
+                </a>
+                <a href="{% url 'patients:tab-anamnesis' patient.pk %}"
+                   class="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 font-medium text-content-muted ring-1 ring-line transition hover:text-brand-fg">
+                    {{ episode.anamnesis_count }} anamnesis
+                </a>
+                {% if episode.status == 'open' %}
+                <span class="text-content-faint" aria-hidden="true">·</span>
+                <a href="{% url 'patients:anamnesis-create' patient.pk %}" class="font-semibold text-brand-fg hover:opacity-80">+ Anamnesis</a>
+                <a href="{% url 'patients:consent-sign' patient.pk %}" class="font-semibold text-brand-fg hover:opacity-80">+ Consentimiento</a>
+                <a href="{% url 'patients:lesion-create' patient.pk %}" class="font-semibold text-brand-fg hover:opacity-80">+ Lesión</a>
+                {% endif %}
+            </div>
+
+            {# --- Visitas ------------------------------------------------------- #}
+            <div class="mt-4 space-y-3">
+                {% for visit in episode.visit_list %}
+                <div id="visita-{{ visit.pk }}" class="scroll-mt-24 rounded-2xl bg-muted ring-1 ring-line">
+                    <div class="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="min-w-0">
+                            <p class="text-sm font-semibold text-content">
+                                Visita del {{ visit.occurred_at|date:"j \d\e F \d\e Y" }} · {{ visit.occurred_at|date:"H:i" }}
+                            </p>
+                            <p class="mt-0.5 text-xs text-content-subtle">
+                                Atendió {{ visit.professional.display_name }}
+                                {% if visit.appointment_id %}
+                                · <a href="{% url 'core:dashboard-manage-appointment' visit.appointment_id %}" class="font-medium text-brand-fg hover:opacity-80">ver la cita</a>
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="flex flex-shrink-0 flex-wrap items-center gap-2 text-xs">
+                            <a href="{% url 'patients:tab-procedures' patient.pk %}"
+                               class="inline-flex items-center rounded-full bg-surface px-2.5 py-1 font-medium text-content-muted ring-1 ring-line transition hover:text-brand-fg">
+                                {{ visit.procedure_count }} procedimiento{{ visit.procedure_count|pluralize }}
+                            </a>
+                            {% if not visit.has_signed %}
+                            <a href="{% url 'patients:visit-edit' patient.pk visit.pk %}" class="font-semibold text-content-muted hover:text-brand-fg">Editar visita</a>
+                            {% endif %}
+                            {% if episode.status == 'open' %}
+                            <a href="{% url 'patients:note-create' patient.pk visit.pk %}" class="font-semibold text-brand-fg hover:opacity-80">+ Nota</a>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {% if visit.note_list %}
+                    <ul class="divide-y divide-line border-t border-line">
+                        {% for note in visit.note_list %}
+                        <li>
+                            <a href="{% url 'patients:note-detail' patient.pk note.pk %}"
+                               class="flex flex-col gap-1 px-4 py-3 transition hover:bg-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:flex-row sm:items-center sm:justify-between">
+                                <span class="min-w-0 text-sm text-content-muted">
+                                    <span class="block truncate">{{ note.preview }}</span>
+                                </span>
+                                <span class="flex flex-shrink-0 flex-wrap items-center gap-2 text-xs">
+                                    {% if note.status == 'signed' %}
+                                    <span class="inline-flex items-center gap-1 rounded-full bg-success-soft px-2.5 py-0.5 font-semibold text-success ring-1 ring-success-line">Firmada</span>
+                                    <span class="text-content-subtle">{{ note.signed_by.display_name }} · {{ note.signed_at|date:"d/m/Y" }}</span>
+                                    {% if note.addenda_count %}
+                                    <span class="text-content-subtle">· {{ note.addenda_count }} adenda{{ note.addenda_count|pluralize }}</span>
+                                    {% endif %}
+                                    {% else %}
+                                    <span class="inline-flex items-center rounded-full bg-warning-soft px-2.5 py-0.5 font-semibold text-warning ring-1 ring-warning-line">Borrador</span>
+                                    {% endif %}
+                                </span>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                </div>
+                {% empty %}
+                <p class="rounded-2xl bg-muted px-4 py-3 text-sm text-content-subtle ring-1 ring-line">
+                    Este episodio aún no tiene visitas.
+                    {% if episode.status == 'open' %}<a href="{% url 'patients:visit-create' patient.pk episode.pk %}" class="font-semibold text-brand-fg hover:opacity-80">Registrar la primera</a>.{% endif %}
+                </p>
+                {% endfor %}
+            </div>
+        </article>
+        {% empty %}
+        <div class="flex flex-col items-center gap-3 px-6 py-14 text-center">
+            <span aria-hidden="true" class="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-soft text-brand-fg ring-1 ring-brand-line">
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                </svg>
+            </span>
+            <p class="text-sm font-semibold text-content">Aún no hay episodios</p>
+            <p class="max-w-sm text-sm text-content-subtle">Abre un episodio con el motivo de consulta; después registra las visitas y escribe la nota de cada una.</p>
+            <a href="{% url 'patients:episode-create' patient.pk %}" class="btn-primary">Abrir el primer episodio</a>
+        </div>
+        {% endfor %}
+    </div>
+</section>

@@ -52,7 +52,11 @@ class ClinicalConfig(AppConfig):
         )
         registry.register(
             ClinicalNote,
-            sensitive=['subjective', 'objective', 'assessment', 'plan'],
+            sensitive=[
+                'background', 'subjective', 'objective', 'inspection', 'palpation',
+                'biomechanics', 'complementary_tests', 'assessment', 'plan',
+                'treatment_done', 'follow_up',
+            ],
             patient_resolver=lambda n: n.visit.episode.history.patient,
         )
         registry.register(

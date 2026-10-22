@@ -472,3 +472,49 @@ def test_la_escritura_queda_en_el_registro_y_la_lectura_tambien(
     assert ChangeLog.objects.filter(
         content_type__model='lesion', action=ChangeLog.Action.CREATE
     ).exists()
+
+
+@pytest.mark.django_db
+class TestLesionTypeChoices:
+    """«Otra» ya no se ofrece al registrar; los tipos de podología sí."""
+
+    def test_the_form_does_not_offer_other_but_offers_podiatry_types(self, logged_client, patient_a):
+        html = logged_client.get(create_url(patient_a)).content.decode()
+        select = html[html.index('name="lesion_type"'):]
+        select = select[:select.index('</select>')]
+
+        assert 'value="other"' not in select
+        for value in ('heloma', 'verruca', 'onychocryptosis', 'onychomycosis', 'fissure', 'ulcer'):
+            assert f'value="{value}"' in select
+        assert 'Selecciona el tipo' in select
+
+    def test_other_cannot_be_forced_by_post(self, logged_client, patient_a, episode_a):
+        response = logged_client.post(
+            create_url(patient_a), payload(episode_a, lesion_type=Lesion.LesionType.OTHER)
+        )
+
+        assert response.status_code == 200
+        assert not Lesion.objects.filter(episode__history__patient=patient_a).exists()
+
+    def test_the_type_is_required(self, logged_client, patient_a, episode_a):
+        response = logged_client.post(create_url(patient_a), payload(episode_a, lesion_type=''))
+
+        assert response.status_code == 200
+        assert not Lesion.objects.filter(episode__history__patient=patient_a).exists()
+
+    def test_a_new_type_is_saved(self, logged_client, patient_a, episode_a):
+        logged_client.post(
+            create_url(patient_a), payload(episode_a, lesion_type=Lesion.LesionType.ONYCHOCRYPTOSIS)
+        )
+
+        lesion = Lesion.objects.get(episode__history__patient=patient_a)
+        assert lesion.get_lesion_type_display() == 'Uña encarnada (onicocriptosis)'
+
+    def test_an_old_lesion_saved_as_other_still_reads(self, patient_a, episode_a):
+        lesion = Lesion.objects.create(
+            episode=episode_a, laterality=Lesion.Laterality.LEFT, view=Lesion.View.PLANTAR,
+            x=0.5, y=0.5, anatomical_zone=Lesion.AnatomicalZone.FIRST_METATARSAL,
+        )
+
+        assert lesion.lesion_type == Lesion.LesionType.OTHER
+        assert lesion.get_lesion_type_display() == 'Otra'

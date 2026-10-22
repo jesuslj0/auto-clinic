@@ -20,14 +20,23 @@ Dos pruebas, y las dos con su regla:
             <h3 class="text-lg font-semibold text-content">Consentimientos</h3>
             <p class="mt-1 text-sm text-content-subtle">Documentos firmados por el paciente. Se conserva el texto exacto que aceptó, aunque después se publiquen versiones nuevas.</p>
         </div>
-        {% if consents %}
-        <span class="inline-flex flex-shrink-0 items-center gap-1.5 self-start rounded-full bg-muted-strong px-3 py-1 text-xs font-semibold text-content-muted">
-            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            {{ consents|length }} firmado{{ consents|length|pluralize:"s" }}
-        </span>
-        {% endif %}
+        <div class="flex flex-shrink-0 items-center gap-2 self-start">
+            {% if consents %}
+            <span class="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-muted-strong px-3 py-1 text-xs font-semibold text-content-muted">
+                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {{ consents|length }} firmado{{ consents|length|pluralize:"s" }}
+            </span>
+            {% endif %}
+            {# Enlace normal: es una página propia con el texto íntegro y el lienzo. #}
+            <a href="{% url 'patients:consent-sign' patient.pk %}" class="btn-primary max-sm:px-3" aria-label="Firmar consentimiento">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                </svg>
+                <span class="hidden sm:inline">Firmar consentimiento</span>
+            </a>
+        </div>
     </div>
 
     <div class="divide-y divide-line">
@@ -38,6 +47,7 @@ Dos pruebas, y las dos con su regla:
                     <p class="break-words text-sm font-semibold text-content">{{ consent.version.template.name }}</p>
                     <p class="mt-1 text-sm text-content-subtle">
                         Firmado el {{ consent.signed_at|date:"j \d\e F \d\e Y" }} · {{ consent.signed_at|date:"H:i" }}
+                        · <a href="{% url 'patients:tab-history' patient.pk %}#episodio-{{ consent.episode_id }}" class="font-medium text-brand-fg hover:opacity-80">ver el episodio</a>
                     </p>
                 </div>
                 <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
@@ -93,6 +103,7 @@ Dos pruebas, y las dos con su regla:
             </span>
             <p class="text-sm font-semibold text-content">Aún no hay consentimientos firmados</p>
             <p class="max-w-sm text-sm text-content-subtle">Cuando el paciente firme un consentimiento informado, se guardará aquí con el texto exacto que aceptó y su firma.</p>
+            <a href="{% url 'patients:consent-sign' patient.pk %}" class="btn-primary">Firmar el primero</a>
         </div>
         {% endfor %}
     </div>
