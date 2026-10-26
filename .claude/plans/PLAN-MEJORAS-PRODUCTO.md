@@ -200,7 +200,20 @@ mención de exención que indique el asesor y total; envío por email y WhatsApp
 Reutiliza el sistema de plantillas de WhatsApp ya entregado
 (`agent.WhatsAppTemplate`, `notifications/whatsapp_reminders.py`).
 
-## 3.1 Avisos de cita: confirmación, cambio y cancelación (M)
+## 3.1 Avisos de cita: confirmación, cambio y cancelación (M) — HECHO el 26/10/2026
+
+> **Entregado.** `notifications/whatsapp_notices.py` + tarea `send_appointment_notice`; tres usos nuevos
+> en `WhatsAppTemplate.Purpose` (migración `agent/0016`), con el mismo «Usar como…» y el mismo
+> interruptor que el recordatorio; la pestaña Plantillas muestra el estado de los cuatro mensajes
+> automáticos. Ganchos en `appointments/services.py` y en el PATCH de staff del serializer. Variables
+> `previous_date`/`previous_time` solo en el aviso de cambio. Tests: `tests/notifications/test_whatsapp_notices.py`.
+> Detalle y reglas en `CLAUDE.md` («Appointment notices by WhatsApp»).
+> **Decisiones tomadas al implementar:** archivar una ficha cancela sus citas **sin** avisar
+> (`notify=False`); la caducidad de un hold y la cancelación del paciente tampoco avisan.
+> **Pendiente:** un PATCH de staff con `status=cancelled` por la API no avisa (no pasa por
+> `cancel_appointment`). El hueco de que el panel no tuviera pantalla para mover citas se cerró el
+> 26/10/2026 con `appointments:update` (editar/reagendar, ver `CLAUDE.md`). Avisar a Xexu de
+> los costes para `PRICING.md`.
 
 **Hoy.** Lo único que Django manda solo es el recordatorio de 24 h. Una cita creada,
 movida o cancelada desde el panel no avisa al paciente.
@@ -370,7 +383,7 @@ Orden sugerido:
 5.x por demanda y, si no, poco a poco
 ```
 
-**1.1 y 1.2 están hechos** (22/10/2026) y **1.3** (23/10/2026); sigue **3.1** en cuanto haya hueco. Al terminar
+**1.1 y 1.2 están hechos** (22/10/2026) y **1.3** (23/10/2026); **3.1** (26/10/2026); sigue **3.2** o **2.1**. Al terminar
 cada paso, actualizar este documento marcándolo hecho.
 
 ## Decisiones abiertas

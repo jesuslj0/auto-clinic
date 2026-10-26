@@ -263,6 +263,77 @@ class AppointmentForm(forms.Form):
         return cleaned
 
 
+class AppointmentEditForm(forms.Form):
+    """Modificar una cita viva desde el panel: servicio, profesional, fecha, hora y notas.
+
+    El paciente no se edita (cuelga historia clínica y facturación). La hora se
+    introduce en el timezone de la clínica y se convierte a UTC en `clean()`.
+
+    Los desplegables ofrecen lo activo **más lo que la cita ya tiene**: un servicio
+    retirado o un profesional dado de baja no puede dejar la cita sin poder
+    guardarse por una nota.
+    """
+
+    service = forms.ModelChoiceField(
+        queryset=Service.objects.none(), label='Servicio', empty_label='— Selecciona un servicio —',
+    )
+    professional = forms.ModelChoiceField(
+        queryset=Professional.objects.none(), label='Profesional',
+        empty_label='— Selecciona un profesional —',
+    )
+    date = forms.DateField(label='Fecha', widget=forms.DateInput(attrs={'type': 'date'}))
+    time = forms.TimeField(label='Hora', widget=forms.TimeInput(attrs={'type': 'time'}))
+    notes = forms.CharField(label='Notas', required=False, widget=forms.Textarea(attrs={'rows': 3}))
+    notify_patient = forms.BooleanField(
+        label='Avisar al paciente por WhatsApp', required=False, initial=True,
+    )
+
+    def __init__(self, *args, appointment, **kwargs):
+        self.appointment = appointment
+        clinic = appointment.clinic
+        self.clinic = clinic
+        self.tz = ZoneInfo(clinic.timezone)
+        local = appointment.scheduled_at.astimezone(self.tz)
+        initial = {
+            'service': appointment.service_id,
+            'professional': appointment.professional_id,
+            'date': local.date(),
+            'time': local.time().replace(second=0, microsecond=0),
+            'notes': appointment.notes,
+            'notify_patient': True,
+            **kwargs.pop('initial', {}),
+        }
+        super().__init__(*args, initial=initial, **kwargs)
+
+        self.fields['service'].queryset = Service.objects.filter(
+            Q(is_active=True) | Q(pk=appointment.service_id), clinic=clinic,
+        ).order_by('name')
+        self.fields['professional'].queryset = Professional.objects.filter(
+            Q(is_active=True) | Q(pk=appointment.professional_id), clinic=clinic,
+        ).select_related('user').order_by('user__first_name', 'user__last_name')
+
+    def clean(self):
+        cleaned = super().clean()
+        date, time_value = cleaned.get('date'), cleaned.get('time')
+        if date and time_value:
+            scheduled_at = datetime.combine(date, time_value).replace(tzinfo=self.tz).astimezone(
+                ZoneInfo('UTC')
+            )
+            # El formulario enseña la hora redondeada al minuto, pero una cita puede
+            # tener segundos (la creó la API o el agente). Reenviar esa misma hora no
+            # es moverla: sin esto, guardar solo una nota la daría por movida y
+            # avisaría al paciente de un cambio que no existe.
+            current = self.appointment.scheduled_at.astimezone(self.tz)
+            if (date, time_value) == (current.date(), current.time().replace(second=0, microsecond=0)):
+                scheduled_at = self.appointment.scheduled_at
+            # Una cita de hoy a la que solo se le cambia una nota no puede fallar por
+            # estar ya «en el pasado»: solo importa si la hora se mueve.
+            if scheduled_at != self.appointment.scheduled_at and scheduled_at < timezone.now():
+                raise forms.ValidationError({'date': 'La cita no puede programarse en el pasado.'})
+            cleaned['scheduled_at'] = scheduled_at
+        return cleaned
+
+
 # ---------------------------------------------------------------------------
 # Horario recurrente y ausencias del profesional (inline formsets del edit)
 # ---------------------------------------------------------------------------

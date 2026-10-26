@@ -15,9 +15,39 @@ from agent.forms import WhatsAppTemplateForm
 from agent.models import WhatsAppTemplate
 from agent.settings_views import AgentSettingsMixin
 from agent.whatsapp import WhatsAppError
-from appointments.reminder_fields import BY_KEY, FIELDS, default_map
+from appointments.reminder_fields import default_map, fields_for
 
 Status = WhatsAppTemplate.Status
+Purpose = WhatsAppTemplate.Purpose
+
+#: Los envíos automáticos que una plantilla puede cubrir y cómo se explican en el panel.
+#: `when` completa «Cada paciente… recibirá este mensaje {when}».
+PURPOSE_COPY = {
+    Purpose.REMINDER_24H: {
+        'name': 'Recordatorio de cita',
+        'action': 'Usar como recordatorio',
+        'when': '24 horas antes de la cita, si la tiene confirmada y aún no ha respondido',
+        'hint': 'Recuerda que el texto debe pedir que respondan SÍ o NO: el agente gestiona la respuesta.',
+    },
+    Purpose.BOOKING_CONFIRMED: {
+        'name': 'Aviso de cita confirmada',
+        'action': 'Usar como aviso de cita confirmada',
+        'when': 'cuando la clínica confirma su cita (o la da de alta ya confirmada)',
+        'hint': 'Solo avisa de lo que hace la clínica: si el paciente pidió la cita por WhatsApp, no se repite.',
+    },
+    Purpose.BOOKING_CHANGED: {
+        'name': 'Aviso de cambio de cita',
+        'action': 'Usar como aviso de cambio',
+        'when': 'cuando la clínica le cambia la hora de la cita',
+        'hint': 'Puedes usar la fecha y la hora anteriores además de las nuevas.',
+    },
+    Purpose.BOOKING_CANCELLED: {
+        'name': 'Aviso de cita cancelada',
+        'action': 'Usar como aviso de cancelación',
+        'when': 'cuando la clínica le cancela la cita',
+        'hint': 'No se envía si cancela el propio paciente ni cuando una cita sin confirmar caduca.',
+    },
+}
 
 
 class TemplateScopedMixin(AgentSettingsMixin):
@@ -69,7 +99,27 @@ class TemplateListView(TemplateScopedMixin, View):
             filters=filters,
             current_status=current,
             total=filters[0]['count'],
+            automatic_uses=self._automatic_uses(clinic),
+            use_options=[
+                {'value': value, 'action': copy['action']} for value, copy in PURPOSE_COPY.items()
+            ],
         )
+
+    @staticmethod
+    def _automatic_uses(clinic):
+        """Estado de cada envío automático: sin plantilla marcada está apagado, y no se ve de otra forma."""
+        marked = {t.purpose: t for t in clinic.whatsapp_templates.exclude(purpose='')}
+        uses = []
+        for value, copy in PURPOSE_COPY.items():
+            template = marked.get(value)
+            if template is None:
+                state = 'off'
+            elif template.why_not_automatic() or template.reminder_map_problem():
+                state = 'blocked'
+            else:
+                state = 'on'
+            uses.append({'purpose': value, 'name': copy['name'], 'state': state, 'template': template})
+        return uses
 
 
 class TemplateFormView(TemplateScopedMixin, View):
@@ -154,10 +204,15 @@ class TemplateActionView(TemplateScopedMixin, View):
         return redirect('agent_settings:templates')
 
     def do_clear_purpose(self, request, template):
+        copy = PURPOSE_COPY.get(template.purpose)
         template.purpose = ''
         template.updated_by = request.user
         template.save()
-        messages.success(request, 'Los recordatorios de cita por WhatsApp quedan desactivados.')
+        messages.success(
+            request,
+            f'«{copy["name"]}» queda desactivado: no se enviará por WhatsApp hasta que marques otra plantilla.'
+            if copy else 'La plantilla deja de usarse en envíos automáticos.',
+        )
         return redirect('agent_settings:templates')
 
     def do_duplicate(self, request, template):
@@ -203,75 +258,86 @@ class TemplateClearPurposeView(TemplateActionView):
 
 
 class TemplateReminderView(TemplateScopedMixin, View):
-    """Elegir qué dato de la cita va en cada variable y dejarla como recordatorio de 24 h."""
+    """Elegir qué dato de la cita va en cada variable y dejar la plantilla para un envío automático.
+
+    El envío (`?uso=`) es uno de `PURPOSE_COPY`: el recordatorio de 24 h o un aviso de cita.
+    """
 
     template_name = 'agent/settings/template_reminder.html'
 
-    def get_reminder_template(self, pk):
+    def get_use(self, request, pk):
+        """La plantilla y el uso pedido, o None si el uso no existe o la plantilla no sirve."""
         template = self.get_template(pk)
-        return template, template.why_not_reminder_24h()
+        purpose = request.POST.get('uso') or request.GET.get('uso') or template.purpose or Purpose.REMINDER_24H
+        if purpose not in PURPOSE_COPY:
+            return template, None, 'Ese envío automático no existe.'
+        return template, purpose, template.why_not_automatic()
 
     def get(self, request, pk):
-        template, reason = self.get_reminder_template(pk)
+        template, purpose, reason = self.get_use(request, pk)
         if reason:
-            messages.error(request, f'No se puede usar como recordatorio. {reason}')
+            messages.error(request, f'No se puede usar así. {reason}')
             return redirect('agent_settings:templates')
-        chosen = template.variable_map or default_map(template.variables)
-        return self._render(request, template, chosen)
+        keep = template.variable_map if template.purpose == purpose else None
+        chosen = keep or default_map(template.variables)
+        return self._render(request, template, purpose, chosen)
 
     def post(self, request, pk):
-        template, reason = self.get_reminder_template(pk)
+        template, purpose, reason = self.get_use(request, pk)
         if reason:
-            messages.error(request, f'No se puede usar como recordatorio. {reason}')
+            messages.error(request, f'No se puede usar así. {reason}')
             return redirect('agent_settings:templates')
 
+        allowed = {field.key for field in fields_for(purpose)}
         chosen = {str(n): request.POST.get(f'field_{n}', '') for n in template.variables}
-        if any(key not in BY_KEY for key in chosen.values()):
+        if any(key not in allowed for key in chosen.values()):
             messages.error(request, 'Elige un dato para cada variable.')
-            return self._render(request, template, chosen)
+            return self._render(request, template, purpose, chosen)
 
         with transaction.atomic():
-            # Una por clínica: la que lo era hasta ahora deja de serlo. Con save(),
+            # Una por uso y clínica: la que lo era hasta ahora deja de serlo. Con save(),
             # no con update(): está en la auditoría.
             for previous in request.user.clinic.whatsapp_templates.filter(
-                purpose=WhatsAppTemplate.Purpose.REMINDER_24H
+                purpose=purpose
             ).exclude(pk=template.pk):
                 previous.purpose = ''
                 previous.updated_by = request.user
                 previous.save()
-            template.purpose = WhatsAppTemplate.Purpose.REMINDER_24H
+            template.purpose = purpose
             template.variable_map = chosen
             template.updated_by = request.user
             template.save()
+        copy = PURPOSE_COPY[purpose]
         messages.success(
             request,
-            f'«{template.name}» es ahora el recordatorio de cita. Se enviará a los pacientes '
-            'con la cita confirmada 24 horas antes.',
+            f'«{template.name}» es ahora el «{copy["name"].lower()}». '
+            f'Cada paciente lo recibirá {copy["when"]}.',
         )
         return redirect('agent_settings:templates')
 
-    def _render(self, request, template, chosen):
+    def _render(self, request, template, purpose, chosen):
         clinic = request.user.clinic
         examples = {'clinic_name': clinic.name}
         address = ', '.join(part for part in (clinic.address, clinic.city) if part)
         if address:
             examples['clinic_address'] = address
+        fields = [
+            {'key': f.key, 'label': f.label, 'example': examples.get(f.key, f.example)}
+            for f in fields_for(purpose)
+        ]
         return self.render_tab(
             request,
             template=template,
-            fields=[
-                {'key': f.key, 'label': f.label, 'example': examples.get(f.key, f.example)}
-                for f in FIELDS
-            ],
+            purpose=purpose,
+            copy=PURPOSE_COPY[purpose],
+            fields=fields,
             init={
                 'body': template.body,
                 'header': template.header_text,
                 'footer': template.footer,
                 'variables': template.variables,
                 'chosen': chosen,
-                'fields': [
-                    {'key': f.key, 'example': examples.get(f.key, f.example)} for f in FIELDS
-                ],
+                'fields': [{'key': f['key'], 'example': f['example']} for f in fields],
             },
             variables=template.variables,
             chosen=chosen,

@@ -40,3 +40,6 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 100,
 }
+
+# Los avisos de cita se encolan con Celery: en tests se ejecutan en el acto, sin broker.
+CELERY_TASK_ALWAYS_EAGER = True

@@ -333,19 +333,22 @@ def _send_template(*, session, template, params, sender, extra_raw=None) -> Chat
     return message
 
 
-def record_unsent_template(*, session, template, reason, extra_raw=None) -> ChatMessage:
+def record_unsent_template(
+    *, session, template, reason, extra_raw=None, label='Recordatorio de cita'
+) -> ChatMessage:
     """Deja en el hilo, como «No enviado», una plantilla que ni se intentó mandar.
 
     Para cuando el fallo se sabe antes de llamar a Meta (falta un dato de la
     cita): así el staff lo ve en el chat con el motivo, en vez de que el
-    recordatorio no salga sin que nadie se entere.
+    recordatorio o el aviso no salga sin que nadie se entere. `label` dice de
+    qué se trataba («Aviso de cita cancelada»…).
     """
     return record_message(
         clinic=session.clinic,
         session=session,
         direction=ChatMessage.Direction.OUTBOUND,
         sender=ChatMessage.Sender.AGENT,
-        body=f'Recordatorio de cita ({template.name})',
+        body=f'{label} ({template.name})',
         message_type=ChatMessage.MessageType.TEMPLATE,
         status=ChatMessage.Status.FAILED,
         error_message=reason,

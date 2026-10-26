@@ -121,6 +121,8 @@ def archive_patient(patient, *, user):
                 actor=AppointmentStatusHistory.Actor.STAFF,
                 actor_label=actor_label,
                 cancelled_by=Appointment.CancelledBy.STAFF,
+                # Ordenar la agenda al archivar no es un mensaje que el staff quiera mandar.
+                notify=False,
             )
             cancelled += 1
         patient.archive(by=user)

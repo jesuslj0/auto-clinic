@@ -281,7 +281,7 @@ Panel map (namespace in brackets):
 | Prefix | Routes |
 |---|---|
 | `/` (`core`) | `buscar/`, `login/`, `logout/`, `cuenta/` (`perfil/`, `horario/`, `contrasena/`), `clinica/` (`editar/`, `integraciones/` → redirect to `/agente/`), `panel/citas/<uuid>/` (`gestionar/`, `accion/`, `resumen/`) |
-| `/citas/` (`appointments`) | `crear/`, `listado/`, `<uuid>/procedimiento/`, `<uuid>/visita/`, `mi-perfil/` (redirect) |
+| `/citas/` (`appointments`) | `crear/`, `listado/`, `<uuid>/editar/`, `<uuid>/procedimiento/`, `<uuid>/visita/`, `mi-perfil/` (redirect) |
 | `/profesionales/` (`professionals`) | `crear/`, `<pk>/editar/` — top-level, views live in `appointments` (`appointments/professional_urls.py`) |
 | `/pacientes/` (`patients`) | `crear/`, `<id>/` + tabs `historia/` (+ `episodios/…`, `visitas/…`, `notas/…`), `documentos/` (anamnesis + consentimientos in one tab; the old `anamnesis/` and `consentimientos/` routes return the same tab), `alertas/` (+ `nueva/`, `<id>/editar|desactivar|reactivar/`), `lesiones/`, `consentimientos/firmar/`, `enviar-ficha/`, `enlaces-ficha/<id>/anular/`, `procedimientos/`, `editar/`, `foto/` |
 | `/servicios/` (`services`) | `crear/`, `<pk>/editar/`, `<pk>/eliminar/` |
@@ -435,7 +435,7 @@ marked the send, so it would repeat hourly). Rules:
   has not answered, not yet sent), narrowed to 22–24 h before so an outage of up to 2 h loses
   nothing.
 - **Which template**: the one the clinic marks «Usar como recordatorio» in Agente → Plantillas
-  (`WhatsAppTemplate.purpose = reminder_24h`, one per clinic). It must be approved, with its
+  (`WhatsAppTemplate.purpose = reminder_24h`, one per clinic and purpose). It must be approved, with its
   variables numbered consecutively. **No template marked = that clinic sends no reminders** (it
   is the on/off switch). The text should ask the patient to answer SÍ or NO.
 - **What goes in each variable**: `WhatsAppTemplate.variable_map` (`{"1": "patient_first_name", …}`),
@@ -457,6 +457,52 @@ marked the send, so it would repeat hourly). Rules:
 - Pending: the 3 h follow-up (`WA-Reminder-3h-Followup-Scheduler`, off) still has to move over;
   outside the window it also needs a template. The email tasks `dispatch_*_reminders` stay out
   of the schedule on purpose.
+
+**Appointment notices by WhatsApp (`notifications/whatsapp_notices.py`).** Confirmed, changed
+and cancelled, sent by Django with an approved template, one per purpose and clinic
+(`WhatsAppTemplate.Purpose`: `booking_confirmed`, `booking_changed`, `booking_cancelled`; same
+«Usar como…» flow and same switch as the reminder: **no template marked = that notice is off**; the
+Plantillas tab lists the four automatic messages with their state). Rules:
+
+- **Only when the clinic acts.** A patient who asked through the agent or the public link already got
+  an answer. Hooks live in `appointments/services.py` (`_queue_notice`): `create_appointment` with
+  `source=STAFF` (born confirmed — `source`, not `actor`, which is just a label there), `confirm_by_clinic`
+  (including a move the agent made), `cancel_appointment` with `actor=STAFF` (`notify=False` silences it:
+  `archive_patient` does), `reschedule_appointment` with `actor=STAFF`, and the staff `PATCH` of the
+  API in `AppointmentSerializer.update`, and the panel edit screen (below). Hold expiry (`SYSTEM`) and
+  patient cancellations never notify.
+- **Queued, never inline.** `queue_notice()` uses `transaction.on_commit` + Celery task
+  `send_appointment_notice`; if the broker is down it logs and the booking still goes through.
+- **No duplicates, no stale messages.** Each event has an `event_id` kept in `ChatMessage.raw`
+  (`notice_event`): a sent event is never sent again, failures are capped at `MAX_ATTEMPTS`. Before
+  sending, the notice must still be true (not cancelled/moved/past since it was queued). Row lock,
+  visible `failed` note in the thread and no empty variable, as in the reminder.
+- **Variables:** the same closed list (`appointments/reminder_fields.py`, no service, no clinical
+  data), plus `previous_date`/`previous_time` offered **only** in the change notice (`fields_for()`).
+  `booked_for_other` greets and writes to the requester, like the reminder.
+- **Leaves no mark on the appointment** (no flags): `reminder_24h_sent` and what n8n reads stay untouched.
+- Each notice is a paid utility template: recompute WhatsApp costs in `PRICING.md` when a clinic turns them on.
+
+**Editing and rescheduling an appointment from the panel (`appointments:update`, `/citas/<uuid>/editar/`).**
+Staff and admins, live appointments only (`pending`/`confirmed`/`rescheduled`); button «Modificar o
+reagendar» on the manage page. Everything goes through `services.update_appointment()`:
+
+- Edits service, professional, date/time and notes; **never the patient** (it hangs clinical history).
+  Same eligibility as creation (schedule, time off, overlap, service offered), no minimum notice (that
+  is an online-booking rule). The row is re-read under lock, so an appointment the patient cancelled
+  while the form was open is refused, not overwritten.
+- **Keeps the status — it does NOT set `rescheduled`.** That mark tells the clinic what the *agent*
+  did behind its back; staff moving a confirmed appointment must not send it back to «to validate».
+- A time move forgets what was known about the old time (reminder flags, patient «sí», hold) through
+  `_forget_what_was_known_about_the_old_time`, shared with `reschedule_appointment`.
+- **Notifies the patient** (`booking_changed`, with the old time) only if the time moved, the box
+  «Avisar al paciente» is ticked **and the clinic had already confirmed it** (a `pending` one has nothing
+  to correct). Changing only professional/service/notes notifies nobody. The screen says beforehand
+  whether the patient will be told (`notice_blocker()`: no WhatsApp, no active template, no phone, not
+  confirmed) and the success message says what happened.
+- The form shows HH:MM but an appointment can carry seconds: resubmitting the same minute keeps the
+  exact `scheduled_at`, so saving a note is never read as a move (it would send a false change notice).
+- Another clinic's appointment is a 404. Not clinical data, so no `AccessLog`; changes land in `ChangeLog`.
 
 ### Antelación mínima de reserva
 

@@ -352,6 +352,7 @@ class AppointmentSerializer(ClinicScopedSerializerMixin, serializers.ModelSerial
         # Mover una cita a un hueco libre es una carrera igual que crearla: entre
         # el `validate()` de arriba y esta escritura, otro POST puede haberse
         # llevado el hueco. Se revalida con el recurso bloqueado.
+        hora_anterior = instance.scheduled_at
         with transaction.atomic():
             lock_agenda(
                 clinic=validated_data.get('clinic', instance.clinic),
@@ -365,7 +366,16 @@ class AppointmentSerializer(ClinicScopedSerializerMixin, serializers.ModelSerial
             except AppointmentDomainError as error:
                 campo = 'scheduled_at' if isinstance(error, BookingTooSoon) else 'professional'
                 raise serializers.ValidationError({campo: error.detail['message']})
-            return super().update(instance, validated_data)
+            appointment = super().update(instance, validated_data)
+
+            # El agente ya salió por la rama de arriba, así que quien mueve la hora
+            # aquí es el staff: al paciente hay que contárselo. Sin usuario
+            # (`bulk-update`) no se sabe quién es, y no se avisa.
+            if mueve_la_hora and usuario is not None:
+                from notifications.whatsapp_notices import queue_notice
+
+                queue_notice(appointment, 'booking_changed', previous_scheduled_at=hora_anterior)
+            return appointment
 
     def create(self, validated_data):
         # La creación real (cálculo de end_at, status inicial, auto-asignación de

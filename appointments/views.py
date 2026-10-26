@@ -26,6 +26,7 @@ from appointments.filters import (
     annotate_procedures,
 )
 from appointments.forms import (
+    AppointmentEditForm,
     AppointmentForm,
     ProfessionalForm,
     build_schedule_formsets,
@@ -33,14 +34,17 @@ from appointments.forms import (
 from appointments.reminders import pending_reminder_queryset
 from appointments.models import Appointment, AppointmentStatusHistory, Professional, ProfessionalSchedule
 from appointments.services import (
+    LIVE_STATUSES,
     booking_cutoff,
     AppointmentDomainError,
+    InvalidTransition,
     cancel_appointment,
     confirm_by_clinic,
     create_appointment,
     get_clinic_available_slots,
     get_professional_availability,
     register_patient_confirmation,
+    update_appointment,
 )
 from appointments.serializers import AppointmentSerializer, ProfessionalScheduleSerializer, ProfessionalSerializer
 from clinical.forms import PerformedProcedureForm, VisitOpenForm
@@ -51,6 +55,7 @@ from core.authentication import ClinicAgent
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ClinicAdminRequiredMixin, ExportMixin, is_clinic_admin
 from core.models import Clinic
 from core.permissions import IsAgentClinicKey, IsStaffOrAdmin
+from notifications.whatsapp_notices import notice_blocker
 from patients.models import Patient
 from services.models import Service
 
@@ -998,6 +1003,91 @@ class AppointmentCreateView(LoginRequiredMixin, FormView):
         if week:
             return f'{url}?{urlencode({"week": week})}'
         return url
+
+
+class AppointmentUpdateView(LoginRequiredMixin, FormView):
+    """Modificar o reagendar una cita viva desde el panel (staff y admin).
+
+    Cambia servicio, profesional, fecha, hora y notas; el paciente no se toca. Todo
+    pasa por `update_appointment()`, que valida con las mismas reglas que el alta
+    y, si la hora se mueve y la cita está confirmada, avisa al paciente por
+    WhatsApp (`booking_changed`). La cita es de la clínica del usuario: de otra
+    clínica es un 404, no un 403.
+
+    No es historia clínica (datos de agenda), así que no lleva `AccessLog`; los
+    cambios sí quedan en el `ChangeLog` porque `Appointment` está registrada.
+    """
+
+    template_name = 'appointments/appointment_edit.html'
+    form_class = AppointmentEditForm
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+        if not request.user.clinic_id:
+            messages.error(request, 'Tu usuario no tiene una clínica asignada.')
+            return redirect('appointments:calendar')
+
+        self.appointment = get_object_or_404(
+            Appointment.objects.select_related('clinic', 'patient', 'service', 'professional__user'),
+            pk=kwargs['appointment_id'],
+            clinic_id=request.user.clinic_id,
+        )
+        if self.appointment.status not in LIVE_STATUSES:
+            messages.error(request, 'Esta cita ya no se puede modificar.')
+            return redirect('core:dashboard-manage-appointment', appointment_id=self.appointment.pk)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['appointment'] = self.appointment
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update({
+            'section': 'appointments',
+            'appointment': self.appointment,
+            # Si el paciente se va a enterar, dicho antes de guardar. Vacío = se le avisará.
+            'notice_blocker': notice_blocker(self.appointment, 'booking_changed'),
+        })
+        return context
+
+    def form_valid(self, form):
+        data = form.cleaned_data
+        try:
+            updated = update_appointment(
+                self.appointment,
+                scheduled_at=data['scheduled_at'],
+                professional=data['professional'],
+                service=data['service'],
+                notes=data['notes'],
+                notify_patient=data['notify_patient'],
+            )
+        except InvalidTransition as error:
+            # Cambió de estado mientras se rellenaba el formulario (la canceló el paciente).
+            messages.error(self.request, error.detail['message'])
+            return redirect('core:dashboard-manage-appointment', appointment_id=self.appointment.pk)
+        except AppointmentDomainError as error:
+            # El hueco no vale (ocupado, fuera de horario, ausencia…): el motivo viene del service.
+            form.add_error(None, error.detail['message'])
+            return self.form_invalid(form)
+
+        moved = 'date' in form.changed_data or 'time' in form.changed_data
+        if not ({'service', 'professional', 'date', 'time', 'notes'} & set(form.changed_data)):
+            messages.info(self.request, 'No había cambios que guardar.')
+        elif not moved:
+            messages.success(self.request, 'Cita actualizada.')
+        elif not data['notify_patient']:
+            messages.success(self.request, 'Cita actualizada. No se ha avisado al paciente.')
+        else:
+            blocker = notice_blocker(updated, 'booking_changed')
+            messages.success(
+                self.request,
+                'Cita actualizada. Se avisará al paciente por WhatsApp del cambio.' if not blocker
+                else f'Cita actualizada. No se ha avisado al paciente: {blocker}',
+            )
+        return redirect('core:dashboard-manage-appointment', appointment_id=updated.pk)
 
 
 class AppointmentActionByTokenAPIView(APIView):
