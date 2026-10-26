@@ -1,13 +1,13 @@
 {% extends 'agent/settings/_layout.html' %}
 {% load static %}
 {% comment %}
-Recordatorio automático de cita: qué dato de la cita va en cada variable de la
-plantilla. La vista previa la pinta `static/js/wa_template_reminder.js`; Django
+Envío automático de una plantilla (recordatorio o aviso de cita): qué dato de la
+cita va en cada variable de la plantilla. La vista previa la pinta `static/js/wa_template_reminder.js`; Django
 valida la elección. El servicio y los datos clínicos no están entre los datos
 disponibles, a propósito (ver `appointments/reminder_fields.py`).
 {% endcomment %}
 
-{% block tab_heading %}Recordatorio de cita{% endblock %}
+{% block tab_heading %}{{ copy.name }}{% endblock %}
 {% block tab_subheading %}Elige qué dato de cada cita irá en cada variable de «{{ template.name }}».{% endblock %}
 
 {% block tab_content %}
@@ -17,10 +17,11 @@ disponibles, a propósito (ver `appointments/reminder_fields.py`).
 
     <form method="post" class="flex flex-col gap-6 rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6 lg:col-span-3">
         {% csrf_token %}
+        <input type="hidden" name="uso" value="{{ purpose }}">
 
         <p class="text-sm text-content-muted">
-            Cada paciente con la cita confirmada recibirá este mensaje 24 horas antes, con los datos de <em>su</em> cita.
-            {% if template.purpose %}<span class="font-medium text-accent-fg">Ya es el recordatorio de la clínica.</span>{% endif %}
+            Cada paciente recibirá este mensaje {{ copy.when }}, con los datos de <em>su</em> cita.
+            {% if template.purpose == purpose %}<span class="font-medium text-accent-fg">Ya es el «{{ copy.name|lower }}» de la clínica.</span>{% endif %}
         </p>
 
         {% if variables %}
@@ -40,7 +41,7 @@ disponibles, a propósito (ver `appointments/reminder_fields.py`).
         </div>
         <p class="rounded-xl bg-muted px-4 py-3 text-xs text-content-subtle ring-1 ring-line">
             El servicio y los datos clínicos no están en la lista a propósito: el mensaje pasa por los servidores de Meta.
-            Si una cita no tiene el dato elegido (por ejemplo, no tiene profesional), ese recordatorio no se envía y queda
+            Si una cita no tiene el dato elegido (por ejemplo, no tiene profesional), ese mensaje no se envía y queda
             marcado como «No enviado» en el chat del paciente.
         </p>
         {% else %}
@@ -50,7 +51,7 @@ disponibles, a propósito (ver `appointments/reminder_fields.py`).
         <div class="flex items-center justify-end gap-3 border-t border-line pt-5">
             <a href="{% url 'agent_settings:templates' %}" class="btn-secondary">Cancelar</a>
             <button type="submit" :disabled="!ready" class="btn-primary disabled:cursor-not-allowed disabled:opacity-40">
-                {% if template.purpose %}Guardar cambios{% else %}Usar como recordatorio{% endif %}
+                {% if template.purpose == purpose %}Guardar cambios{% else %}{{ copy.action }}{% endif %}
             </button>
         </div>
     </form>
@@ -60,7 +61,7 @@ disponibles, a propósito (ver `appointments/reminder_fields.py`).
         <div class="mt-3 rounded-2xl bg-muted p-4">
             <p class="whitespace-pre-line break-words rounded-xl rounded-tl-sm bg-surface px-3.5 py-2.5 text-sm leading-relaxed text-content shadow-sm ring-1 ring-line" x-text="preview"></p>
         </div>
-        <p class="mt-3 text-xs text-content-faint">Con datos de ejemplo. Recuerda que el texto debe pedir que respondan SÍ o NO: el agente gestiona la respuesta.</p>
+        <p class="mt-3 text-xs text-content-faint">Con datos de ejemplo. {{ copy.hint }}</p>
     </aside>
 </div>
 {% endblock %}

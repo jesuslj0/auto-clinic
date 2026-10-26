@@ -463,4 +463,5 @@ class TestMarkingTheTemplate:
 
         html = client.get(reverse('agent_settings:templates')).content.decode()
 
-        assert html.count('/recordatorio/') == 1
+        # El menú «Usar como…» solo cuelga de la aprobada, no del borrador.
+        assert html.count('>Usar como…</summary>') == 1

@@ -21,11 +21,41 @@ se puede escribir con una plantilla aprobada. Cada acción es un POST suelto.
     </div>
     {% endif %}
 
-    <div class="rounded-2xl bg-surface px-5 py-4 text-sm text-content-muted ring-1 ring-line">
-        <p><span class="font-semibold text-content">Recordatorio automático de cita.</span>
-        Marca una plantilla aprobada con «Usar como recordatorio» y el sistema la enviará solo, 24 horas antes, a los pacientes con la cita confirmada que aún no hayan respondido. Tú eliges qué dato de la cita va en cada variable (nombre, fecha, hora, clínica, profesional, dirección). Pide en el texto que respondan SÍ o NO: el agente gestiona la respuesta.
-        Sin ninguna marcada, no se envía ningún recordatorio.</p>
-    </div>
+    <section class="rounded-2xl bg-surface px-5 py-4 ring-1 ring-line" aria-labelledby="automatic-heading">
+        <h3 id="automatic-heading" class="text-sm font-semibold text-content">Mensajes automáticos</h3>
+        <p class="mt-1 text-sm text-content-muted">
+            Marca una plantilla aprobada con «Usar como…» y el sistema la enviará solo. Tú eliges qué dato de la cita va en cada variable (nombre, fecha, hora, clínica, profesional, dirección); el servicio y los datos clínicos no se envían nunca.
+            <span class="font-medium text-content">Sin plantilla marcada, ese mensaje no se envía.</span>
+        </p>
+        <ul class="mt-3 grid gap-2 sm:grid-cols-2">
+            {% for use in automatic_uses %}
+            <li class="flex items-center justify-between gap-3 rounded-xl bg-muted px-3.5 py-2.5 text-sm">
+                <span class="flex min-w-0 items-center gap-3">
+                    {# Un color por tipo de mensaje; atenuado si ese mensaje no se está enviando #}
+                    <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg ring-1 {% if use.state != 'on' %}opacity-50 {% endif %}{% if use.purpose == 'booking_confirmed' %}bg-success-soft text-success ring-success-line{% elif use.purpose == 'booking_changed' %}bg-info-soft text-info ring-info-line{% elif use.purpose == 'booking_cancelled' %}bg-danger-soft text-danger ring-danger-line{% else %}bg-accent-soft text-accent-fg ring-accent-line{% endif %}">
+                        {% include 'agent/settings/_purpose_icon.html' with purpose=use.purpose classes='h-5 w-5' %}
+                    </span>
+                    <span class="min-w-0">
+                        <span class="block font-medium text-content">{{ use.name }}</span>
+                        <span class="block truncate text-xs text-content-subtle">
+                            {% if use.template %}{{ use.template.name }}{% else %}Sin plantilla{% endif %}
+                        </span>
+                    </span>
+                </span>
+                {% if use.state == 'on' %}
+                <span class="flex-shrink-0 rounded-full bg-success-soft px-2.5 py-0.5 text-xs font-semibold text-success ring-1 ring-success-line">Activo</span>
+                {% elif use.state == 'blocked' %}
+                <span class="flex-shrink-0 rounded-full bg-warning-soft px-2.5 py-0.5 text-xs font-semibold text-warning ring-1 ring-warning-line">No se envía</span>
+                {% else %}
+                <span class="flex-shrink-0 rounded-full bg-muted-strong px-2.5 py-0.5 text-xs font-semibold text-content-muted ring-1 ring-line-strong">Desactivado</span>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        <p class="mt-3 text-xs text-content-faint">
+            Los avisos de cita (confirmada, cambiada, cancelada) solo salen cuando es la clínica quien hace el cambio, no cuando lo pide el paciente. Cada uno es un mensaje de utilidad de pago de WhatsApp.
+        </p>
+    </section>
 
     {# ── Filtros por estado + acciones ── #}
     <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -66,7 +96,7 @@ se puede escribir con una plantilla aprobada. Cada acción es un POST suelto.
                     <p class="mt-1 text-xs text-content-subtle">{{ t.get_category_display }} · {{ t.get_language_display }}</p>
                     {% if t.purpose %}
                     <p class="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-semibold text-accent-fg ring-1 ring-accent-line">
-                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
+                        {% include 'agent/settings/_purpose_icon.html' with purpose=t.purpose classes='h-3.5 w-3.5' %}
                         {{ t.get_purpose_display }}
                     </p>
                     {% endif %}
@@ -90,7 +120,7 @@ se puede escribir con una plantilla aprobada. Cada acción es un POST suelto.
             {% endif %}
             {% if t.purpose and not t.is_sendable %}
             <p class="mt-3 rounded-xl bg-warning-soft px-3 py-2 text-xs text-warning ring-1 ring-warning-line">
-                Mientras no esté aprobada, no se enviarán recordatorios de cita por WhatsApp.
+                Mientras no esté aprobada, no se enviará el «{{ t.get_purpose_display|lower }}» por WhatsApp.
             </p>
             {% endif %}
             {% if t.has_unsupported_components %}
@@ -111,13 +141,20 @@ se puede escribir con una plantilla aprobada. Cada acción es un POST suelto.
                     </form>
                     {% endif %}
                     {% if t.purpose %}
-                    <a href="{% url 'agent_settings:template-reminder' t.pk %}" class="rounded-lg px-3 py-1.5 text-xs font-semibold text-content-muted ring-1 ring-line-strong transition hover:bg-muted">Cambiar datos</a>
+                    <a href="{% url 'agent_settings:template-reminder' t.pk %}?uso={{ t.purpose }}" class="rounded-lg px-3 py-1.5 text-xs font-semibold text-content-muted ring-1 ring-line-strong transition hover:bg-muted">Cambiar datos</a>
                     <form method="post" action="{% url 'agent_settings:template-clear-purpose' t.pk %}">
                         {% csrf_token %}
                         <button type="submit" class="rounded-lg px-3 py-1.5 text-xs font-semibold text-content-muted ring-1 ring-line-strong transition hover:bg-muted">Dejar de usar</button>
                     </form>
-                    {% elif t.status == 'approved' and not t.why_not_reminder_24h %}
-                    <a href="{% url 'agent_settings:template-reminder' t.pk %}" class="rounded-lg bg-accent-soft px-3 py-1.5 text-xs font-semibold text-accent-fg ring-1 ring-accent-line transition hover:opacity-80">Usar como recordatorio</a>
+                    {% elif t.status == 'approved' and not t.why_not_automatic %}
+                    <details class="relative">
+                        <summary class="cursor-pointer list-none rounded-lg bg-accent-soft px-3 py-1.5 text-xs font-semibold text-accent-fg ring-1 ring-accent-line transition hover:opacity-80">Usar como…</summary>
+                        <ul class="absolute right-0 z-10 mt-1 w-64 rounded-xl bg-surface-raised p-1 shadow-soft ring-1 ring-line">
+                            {% for option in use_options %}
+                            <li><a href="{% url 'agent_settings:template-reminder' t.pk %}?uso={{ option.value }}" class="block rounded-lg px-3 py-2 text-xs font-medium text-content hover:bg-muted">{{ option.action }}</a></li>
+                            {% endfor %}
+                        </ul>
+                    </details>
                     {% endif %}
                     {% if not t.is_editable %}
                     <form method="post" action="{% url 'agent_settings:template-duplicate' t.pk %}">

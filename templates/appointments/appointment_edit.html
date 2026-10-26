@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+
+{% comment %}
+Modificar o reagendar una cita viva. Página completa y sin JavaScript: servicio y
+profesional son desplegables nativos (la lista de la clínica es corta, a diferencia
+de los pacientes del alta). El paciente se muestra pero no se edita.
+
+Si la hora cambia y la cita está confirmada, el paciente recibe el «aviso de
+cambio de cita» por WhatsApp. Esta pantalla dice de antemano si eso va a ocurrir
+(`notice_blocker`) en vez de dejar al staff suponerlo.
+{% endcomment %}
+
+{% block title %}Modificar cita · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Modificar cita{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-2xl space-y-4">
+    <a href="{% url 'core:dashboard-manage-appointment' appointment.id %}" class="inline-flex items-center gap-2 rounded-xl bg-surface px-4 py-2.5 text-sm font-medium text-content-muted ring-1 ring-line transition hover:bg-muted hover:text-content">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" /></svg>
+        Volver a la cita
+    </a>
+
+    <div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+        <div class="border-b border-line px-4 py-6 sm:px-8">
+            <h2 class="text-lg font-semibold text-content">{{ appointment.patient|default:appointment.patient_name|default:'Cita sin nombre' }}</h2>
+            <p class="mt-1 text-sm text-content-subtle">
+                Ahora: {{ appointment.scheduled_at|date:"l j \d\e F \a \l\a\s H:i" }} · {{ appointment.get_status_display }}.
+                La hora se interpreta en el horario de la clínica. El paciente no se puede cambiar.
+            </p>
+        </div>
+
+        <form method="post" novalidate class="space-y-6 px-4 py-7 sm:px-8">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line" role="alert">
+                {% for error in form.non_field_errors %}<p class="text-sm text-danger">{{ error }}</p>{% endfor %}
+            </div>
+            {% endif %}
+
+            {# Servicio #}
+            <div>
+                <label for="{{ form.service.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.service.label }}</label>
+                <select name="{{ form.service.html_name }}" id="{{ form.service.id_for_label }}"
+                    class="block w-full rounded-xl border {% if form.service.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                    {% for value, label in form.service.field.choices %}
+                    <option value="{{ value }}" {% if form.service.value|stringformat:"s" == value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                {% if form.service.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.service.errors|join:", " }}</p>{% endif %}
+            </div>
+
+            {# Profesional #}
+            <div>
+                <label for="{{ form.professional.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.professional.label }}</label>
+                <select name="{{ form.professional.html_name }}" id="{{ form.professional.id_for_label }}"
+                    class="block w-full rounded-xl border {% if form.professional.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                    {% for value, label in form.professional.field.choices %}
+                    <option value="{{ value }}" {% if form.professional.value|stringformat:"s" == value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                {% if form.professional.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.professional.errors|join:", " }}</p>{% endif %}
+            </div>
+
+            {# Fecha y hora #}
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                    <label for="{{ form.date.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.date.label }}</label>
+                    <input type="date" name="{{ form.date.html_name }}" id="{{ form.date.id_for_label }}" value="{{ form.date.value|date:'Y-m-d'|default:form.date.value|default:'' }}"
+                        class="block w-full rounded-xl border {% if form.date.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                    {% if form.date.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.date.errors|join:", " }}</p>{% endif %}
+                </div>
+                <div>
+                    <label for="{{ form.time.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.time.label }}</label>
+                    <input type="time" name="{{ form.time.html_name }}" id="{{ form.time.id_for_label }}" value="{{ form.time.value|time:'H:i'|default:form.time.value|default:'' }}"
+                        class="block w-full rounded-xl border {% if form.time.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                    {% if form.time.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.time.errors|join:", " }}</p>{% endif %}
+                </div>
+            </div>
+
+            {# Notas #}
+            <div>
+                <label for="{{ form.notes.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.notes.label }}</label>
+                <textarea name="{{ form.notes.html_name }}" id="{{ form.notes.id_for_label }}" rows="3" placeholder="Notas internas de la cita..."
+                    class="block w-full resize-none rounded-xl border {% if form.notes.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">{{ form.notes.value|default:'' }}</textarea>
+                {% if form.notes.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.notes.errors|join:", " }}</p>{% endif %}
+            </div>
+
+            {# Aviso al paciente #}
+            <div class="flex items-start gap-3 rounded-xl border border-line bg-muted px-4 py-3">
+                <input type="checkbox" name="{{ form.notify_patient.html_name }}" id="{{ form.notify_patient.id_for_label }}"
+                    {% if form.notify_patient.value and not notice_blocker %}checked{% endif %}
+                    {% if notice_blocker %}disabled{% endif %}
+                    class="mt-0.5 h-4 w-4 rounded border-line-strong text-brand-fg focus:ring-brand-500 disabled:opacity-50">
+                <div>
+                    <label for="{{ form.notify_patient.id_for_label }}" class="cursor-pointer text-sm font-medium text-content-muted">{{ form.notify_patient.label }}</label>
+                    {% if notice_blocker %}
+                    <p class="text-xs text-warning">No se avisará. {{ notice_blocker }}</p>
+                    {% else %}
+                    <p class="text-xs text-content-subtle">Si cambias la fecha o la hora, el paciente recibe el «aviso de cambio de cita». Cambiar solo el profesional, el servicio o las notas no avisa a nadie.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-2">
+                <a href="{% url 'core:dashboard-manage-appointment' appointment.id %}" class="btn-secondary">Cancelar</a>
+                <button type="submit" class="btn-primary inline-flex items-center gap-2">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+                    Guardar cambios
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

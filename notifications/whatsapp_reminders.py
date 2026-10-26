@@ -61,7 +61,7 @@ def _template_for(clinic, cache):
         template = clinic.whatsapp_templates.filter(
             purpose=WhatsAppTemplate.Purpose.REMINDER_24H
         ).first()
-        problem = template and (template.why_not_reminder_24h() or template.reminder_map_problem())
+        problem = template and (template.why_not_automatic() or template.reminder_map_problem())
         if problem:
             logger.warning(
                 'Recordatorios de %s detenidos: la plantilla «%s» no sirve (%s)',

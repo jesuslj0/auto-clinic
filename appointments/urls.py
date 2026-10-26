@@ -6,6 +6,7 @@ from appointments.views import (
     AppointmentCreateView,
     AppointmentListView,
     AppointmentProcedureCreateView,
+    AppointmentUpdateView,
     AppointmentVisitOpenView,
 )
 
@@ -15,6 +16,9 @@ urlpatterns = [
     path('', AppointmentCalendarView.as_view(), name='calendar'),
     path('crear/', AppointmentCreateView.as_view(), name='create'),
     path('listado/', AppointmentListView.as_view(), name='list'),
+    # Modificar o reagendar una cita viva. Cuelga del id de la cita, como sus otras
+    # acciones; si la hora se mueve y la cita está confirmada, avisa al paciente.
+    path('<uuid:appointment_id>/editar/', AppointmentUpdateView.as_view(), name='update'),
     # Puerta principal del alta de procedimientos: aquí la visita queda
     # enganchada a la cita, que es lo que hace visible en el listado qué
     # citas acabaron en algo. Sesión y CSRF, nunca API (capa clínica).

@@ -45,6 +45,7 @@ __all__ = [
     'confirm_by_clinic',
     'cancel_appointment',
     'reschedule_appointment',
+    'update_appointment',
     'get_professional_availability',
     'get_clinic_available_slots',
 ]
@@ -502,6 +503,14 @@ def create_appointment(
             actor_label=actor_label,
         )
 
+        # Una cita que da de alta la propia clínica nace en firme y el paciente no ha
+        # visto nada todavía: se le avisa. La del agente o la web nace `pending` y la
+        # confirmación llega después, con `confirm_by_clinic`. Se mira `source` y no
+        # `actor`, porque `actor` es solo una etiqueta del historial (el serializer
+        # no lo pasa y vale STAFF por defecto).
+        if source == Appointment.Source.STAFF and status == Appointment.Status.CONFIRMED:
+            _queue_notice(appointment, 'booking_confirmed')
+
     return appointment
 
 
@@ -694,6 +703,16 @@ def _create_dependent_from_appointment(appointment):
 # saltándose una regla que sí aplica el resto del código.
 
 
+def _queue_notice(appointment, kind, **kwargs):
+    """Avisa al paciente por WhatsApp de lo que la clínica ha hecho con su cita.
+
+    Import local: `notifications` depende de `appointments`, no al revés.
+    """
+    from notifications.whatsapp_notices import queue_notice
+
+    queue_notice(appointment, kind, **kwargs)
+
+
 def _record_transition(appointment, from_status, *, actor, actor_label=''):
     AppointmentStatusHistory.objects.create(
         appointment=appointment,
@@ -779,6 +798,9 @@ def confirm_by_clinic(appointment, *, user=None):
         actor=AppointmentStatusHistory.Actor.STAFF,
         actor_label=(user.get_full_name() or user.email) if user else '',
     )
+    # También la que el agente movió y la clínica valida ahora: el paciente la pidió
+    # y todavía no sabe que la clínica la tiene en firme.
+    _queue_notice(appointment, 'booking_confirmed')
     return appointment
 
 
@@ -788,8 +810,16 @@ def cancel_appointment(
     actor=AppointmentStatusHistory.Actor.SYSTEM,
     actor_label='',
     cancelled_by=None,
+    notify=None,
 ):
-    """Cancela la cita y libera el hueco. Idempotente."""
+    """Cancela la cita y libera el hueco. Idempotente.
+
+    Avisa al paciente por WhatsApp solo si la cancela la clínica (`actor=STAFF`):
+    el paciente que cancela ya sabe que lo ha hecho, y una cita que caduca sin que
+    nadie la hubiera confirmado (`SYSTEM`) nunca llegó a ser suya. `notify` fuerza
+    una u otra cosa; el archivado de una ficha lo apaga, porque cancelar sus citas
+    es un efecto de ordenar la agenda y no un mensaje que el staff pretenda mandar.
+    """
     if appointment.status == Appointment.Status.CANCELLED:
         return appointment
 
@@ -799,7 +829,36 @@ def cancel_appointment(
     appointment.save(update_fields=['status', 'cancelled_by', 'updated_at'])
 
     _record_transition(appointment, previo, actor=actor, actor_label=actor_label)
+    if notify is None:
+        notify = actor == AppointmentStatusHistory.Actor.STAFF
+    if notify:
+        _queue_notice(appointment, 'booking_cancelled')
     return appointment
+
+
+#: Campos que dependen de la hora de la cita y dejan de valer cuando se mueve.
+_TIME_BOUND_FIELDS = (
+    'reminder_24h_sent', 'reminder_24h_sent_at', 'reminder_3h_sent', 'reminder_3h_sent_at',
+    'reminder_responded', 'patient_confirmed_at',
+)
+
+
+def _forget_what_was_known_about_the_old_time(appointment):
+    """Todo lo que se sabía de la hora VIEJA deja de valer. Devuelve los campos tocados.
+
+    Sin esto, una cita que ya tenía el recordatorio de 24h enviado y se mueve a la
+    semana que viene se queda con el flag puesto y NUNCA vuelve a avisar al paciente
+    (`pending-reminders` filtra por `reminder_24h_sent=False`). Y el "sí" que dio el
+    paciente lo dio para otro día: mantenerlo sería apuntarle una confirmación que
+    nunca hizo.
+    """
+    appointment.reminder_24h_sent = False
+    appointment.reminder_24h_sent_at = None
+    appointment.reminder_3h_sent = False
+    appointment.reminder_3h_sent_at = None
+    appointment.reminder_responded = False
+    appointment.patient_confirmed_at = None
+    return list(_TIME_BOUND_FIELDS)
 
 
 def reschedule_appointment(
@@ -832,6 +891,8 @@ def reschedule_appointment(
             f'Una cita en estado "{appointment.get_status_display()}" ya no puede reprogramarse.'
         )
 
+    hora_anterior = appointment.scheduled_at
+
     with transaction.atomic():
         lock_agenda(
             clinic=appointment.clinic,
@@ -860,28 +921,112 @@ def reschedule_appointment(
         # para eso el paciente acaba de hablar con la clínica.
         appointment.hold_expires_at = None
 
-        # Todo lo que se sabía de la hora VIEJA deja de valer. Sin esto, una cita
-        # que ya tenía el recordatorio de 24h enviado y se mueve a la semana que
-        # viene se queda con el flag puesto y NUNCA vuelve a avisar al paciente
-        # (`pending-reminders` filtra por `reminder_24h_sent=False`). Y el "sí"
-        # que dio el paciente lo dio para otro día: mantenerlo sería apuntarle una
-        # confirmación que nunca hizo.
-        appointment.reminder_24h_sent = False
-        appointment.reminder_24h_sent_at = None
-        appointment.reminder_3h_sent = False
-        appointment.reminder_3h_sent_at = None
-        appointment.reminder_responded = False
-        appointment.patient_confirmed_at = None
+        olvidados = _forget_what_was_known_about_the_old_time(appointment)
 
         appointment.save(update_fields=[
-            'scheduled_at', 'end_at', 'status', 'hold_expires_at',
-            'reminder_24h_sent', 'reminder_24h_sent_at',
-            'reminder_3h_sent', 'reminder_3h_sent_at',
-            'reminder_responded', 'patient_confirmed_at',
-            'updated_at',
+            'scheduled_at', 'end_at', 'status', 'hold_expires_at', *olvidados, 'updated_at',
         ])
 
         _record_transition(appointment, previo, actor=actor, actor_label=actor_label)
+
+        # Si lo mueve el paciente (por el agente) ya tiene la respuesta en el chat; si
+        # lo mueve la clínica, hay que contárselo, con la hora que tenía.
+        if actor == AppointmentStatusHistory.Actor.STAFF:
+            _queue_notice(appointment, 'booking_changed', previous_scheduled_at=hora_anterior)
+
+    return appointment
+
+
+_UNSET = object()
+
+
+def update_appointment(
+    appointment,
+    *,
+    notify_patient=True,
+    scheduled_at=_UNSET,
+    professional=_UNSET,
+    service=_UNSET,
+    notes=_UNSET,
+):
+    """La clínica modifica una cita viva desde el panel: hora, profesional, servicio y notas.
+
+    Devuelve la cita ya guardada (una instancia releída bajo bloqueo, no la que se
+    pasó). Solo cambia lo que se indica; lo que no cambia de verdad se ignora.
+
+    Qué NO hace, a propósito:
+
+    - **No la marca `rescheduled`.** Esa marca avisa a la clínica de lo que el
+      *agente* hizo a sus espaldas; quien mueve la cita desde el panel ya lo sabe, y
+      una cita en firme no vuelve a estar «por validar» por moverla. El estado se
+      conserva (una `pending` sigue `pending`).
+    - **No cambia de paciente.** Cuelga historia clínica, consentimientos y
+      facturación; es otra operación.
+    - No relaja nada: la misma elegibilidad que el alta (horario, ausencias,
+      solapamiento, servicio que presta), con `require_online_booking=False` y sin
+      antelación mínima, como el resto de lo que hace el staff.
+
+    Si cambia la hora, lo que se sabía de la vieja deja de valer (recordatorios,
+    «sí» del paciente, hold) y, con `notify_patient`, se avisa por WhatsApp
+    (`booking_changed`) **solo si la clínica ya se la había confirmado**: a una cita
+    `pending` el paciente aún no tiene confirmación de la que avisar de cambio.
+    Cambiar solo profesional, servicio o notas no avisa a nadie: el mensaje habla
+    de la fecha y la hora.
+    """
+    with transaction.atomic():
+        # Se relee bajo bloqueo: entre que el staff abrió el formulario y lo envió, el
+        # paciente puede haberla cancelado, y se escribiría encima de eso.
+        appointment = Appointment.objects.select_for_update().get(pk=appointment.pk)
+        if appointment.status not in LIVE_STATUSES:
+            raise InvalidTransition(
+                f'Una cita en estado "{appointment.get_status_display()}" ya no puede modificarse.'
+            )
+
+        cambios = {}
+        for campo, valor in (
+            ('scheduled_at', scheduled_at), ('professional', professional), ('service', service),
+        ):
+            if valor is not _UNSET and valor != getattr(appointment, campo):
+                cambios[campo] = valor
+        mueve_la_hora = 'scheduled_at' in cambios
+        hora_anterior = appointment.scheduled_at
+        notes_cambian = notes is not _UNSET and notes != appointment.notes
+
+        if not cambios and not notes_cambian:
+            return appointment
+
+        if cambios:
+            lock_agenda(
+                clinic=appointment.clinic,
+                service=cambios.get('service', appointment.service),
+                professional=cambios.get('professional', appointment.professional),
+            )
+            # Con `scheduled_at` en los cambios, el validador recalcula `end_at`: también
+            # hace falta si solo cambia el servicio, porque la duración es otra.
+            cambios.setdefault('scheduled_at', appointment.scheduled_at)
+            cambios.update(
+                validate_appointment_update(appointment, cambios, require_online_booking=False)
+            )
+            for campo, valor in cambios.items():
+                setattr(appointment, campo, valor)
+        if notes_cambian:
+            appointment.notes = notes
+
+        campos = [*cambios, 'updated_at']
+        if notes_cambian:
+            campos.append('notes')
+        if mueve_la_hora:
+            # Mismo criterio que `reschedule_appointment`: la clínica acaba de tocar la cita.
+            appointment.hold_expires_at = None
+            campos += ['hold_expires_at', *_forget_what_was_known_about_the_old_time(appointment)]
+        appointment.save(update_fields=list(dict.fromkeys(campos)))
+
+        if (
+            mueve_la_hora
+            and notify_patient
+            and appointment.status in (Appointment.Status.CONFIRMED, Appointment.Status.RESCHEDULED)
+        ):
+            _queue_notice(appointment, 'booking_changed', previous_scheduled_at=hora_anterior)
 
     return appointment
 

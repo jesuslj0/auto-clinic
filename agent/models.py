@@ -554,6 +554,9 @@ class WhatsAppTemplate(models.Model):
 
     class Purpose(models.TextChoices):
         REMINDER_24H = 'reminder_24h', 'Recordatorio de cita (24 h antes)'
+        BOOKING_CONFIRMED = 'booking_confirmed', 'Aviso de cita confirmada'
+        BOOKING_CHANGED = 'booking_changed', 'Aviso de cambio de cita'
+        BOOKING_CANCELLED = 'booking_cancelled', 'Aviso de cita cancelada'
 
     HEADER_MAX_LENGTH = 60
     BODY_MAX_LENGTH = 1024
@@ -595,7 +598,7 @@ class WhatsAppTemplate(models.Model):
         'datos de cada variable',
         default=dict,
         blank=True,
-        help_text='Para el recordatorio automático: qué dato de la cita va en cada {{n}} '
+        help_text='Para el envío automático (recordatorio o aviso de cita): qué dato de la cita va en cada {{n}} '
                   '(claves de appointments.reminder_fields).',
     )
     status = models.CharField('estado', max_length=10, choices=Status.choices, default=Status.DRAFT)
@@ -688,8 +691,8 @@ class WhatsAppTemplate(models.Model):
         parts = [self.header_text, self.fill(values), self.footer]
         return '\n\n'.join(part for part in parts if part)
 
-    def why_not_reminder_24h(self):
-        """Por qué no puede ser el recordatorio de 24 h, o '' si puede."""
+    def why_not_automatic(self):
+        """Por qué no puede usarse en un envío automático (recordatorio o aviso de cita), o '' si puede."""
         if not self.is_sendable:
             return 'Tiene que estar aprobada por Meta.'
         if self.variables != list(range(1, len(self.variables) + 1)):
