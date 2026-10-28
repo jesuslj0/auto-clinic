@@ -204,7 +204,7 @@ prueba que se lanzan desde el panel de la app (botón «Test» de cada campo).
   de la app; solo la **URL de la política de privacidad** (Configuración →
   Básica).
 - Publicar no toca ningún número: solo cambia la app a modo «en vivo».
-- De momento se pone la de Propus (`https://propus.ink/legal/privacidad`) para
+- De momento se pone la de Propus (`https://propus.es/legal/privacidad`) para
   desbloquear. **Hay que sustituirla por la de Gaena antes del primer paciente
   (E3).**
 
@@ -407,7 +407,7 @@ Contárselo para que no le pille por sorpresa si algún paciente le pregunta.
 ### E3 🔴 Obligatorio: la política de privacidad de Gaena en la app de Meta
 
 **No se sale a producción sin esto.** Para publicar la app (M8) se ha puesto
-temporalmente la política de Propus (`https://propus.ink/legal/privacidad`).
+temporalmente la política de Propus (`https://propus.es/legal/privacidad`).
 Pero la responsable de los datos de los pacientes es **la clínica**: la URL que
 enlaza la app tiene que ser **la política de privacidad de Gaena**.
 
