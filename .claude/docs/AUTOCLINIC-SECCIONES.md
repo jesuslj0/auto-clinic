@@ -1,7 +1,7 @@
 # AutoClinic — guía de secciones para la web de Propus
 
 Documento de trabajo para quien construya la página de AutoClinic en
-**propus.ink**. Describe cada pantalla del panel, qué se ve en ella y qué se
+**propus.es**. Describe cada pantalla del panel, qué se ve en ella y qué se
 puede hacer, para que las capturas vayan acompañadas de un texto que sea cierto.
 
 Está escrito a partir del código real, no de un folleto. Si algo no aparece
@@ -18,7 +18,7 @@ venden por separado: **un agente de WhatsApp que atiende a los pacientes 24 h** 
 cosidas entre medias. Está construido para podología, que es el nicho de partida,
 pero la estructura es válida para cualquier consulta con cita previa.
 
-La página actual de propus.ink cuenta bien la primera mitad, la del agente. Lo
+La página actual de propus.es cuenta bien la primera mitad, la del agente. Lo
 que estas capturas añaden es la segunda: que detrás del bot hay un programa de
 gestión de verdad, y que eso es lo que justifica el precio.
 
