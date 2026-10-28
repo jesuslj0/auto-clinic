@@ -99,6 +99,22 @@ class Clinic(models.Model):
     phone = models.CharField(max_length=20, blank=True)
     email = models.EmailField(blank=True)
     website = models.URLField(blank=True)
+    privacy_policy_url = models.URLField(
+        'política de privacidad',
+        blank=True,
+        help_text=(
+            "Enlace público a la política de privacidad de la clínica. El agente de "
+            "WhatsApp lo da en su primer mensaje. Vacío: avisa igualmente, sin enlace."
+        ),
+    )
+    privacy_contact_email = models.EmailField(
+        'correo de protección de datos',
+        blank=True,
+        help_text=(
+            "Dónde ejercer los derechos RGPD (o correo del delegado de protección de "
+            "datos, si lo hay). Vacío: se usa el correo general de la clínica."
+        ),
+    )
 
     # Dirección
     address = models.CharField(max_length=255, blank=True)
@@ -219,6 +235,11 @@ class Clinic(models.Model):
             raise ValidationError(
                 {'test_patient': 'El paciente de prueba debe pertenecer a esta misma clínica.'}
             )
+
+    @property
+    def data_protection_contact(self) -> str:
+        """Dónde se ejercen los derechos RGPD: correo específico, si no el general, si no el teléfono."""
+        return self.privacy_contact_email or self.email or self.phone
 
     def __str__(self):
         return self.name

@@ -71,13 +71,15 @@ class ClinicForm(forms.ModelForm):
     class Meta:
         model = Clinic
         fields = [
-            'name', 'phone', 'email', 'website', 'address', 'city', 'province',
-            'postal_code', 'timezone', 'description', 'logo', 'api_type', 'api_url',
-            'hold_ttl_minutes', 'min_booking_notice_minutes',
+            'name', 'phone', 'email', 'website', 'privacy_policy_url', 'privacy_contact_email', 'address', 'city',
+            'province', 'postal_code', 'timezone', 'description', 'logo', 'api_type',
+            'api_url', 'hold_ttl_minutes', 'min_booking_notice_minutes',
         ]
         widgets = {
             'description': forms.Textarea(attrs={'rows': 3}),
             'website': forms.URLInput(),
+            'privacy_policy_url': forms.URLInput(),
+            'privacy_contact_email': forms.EmailInput(),
             'api_url': forms.URLInput(),
         }
         labels = {
@@ -85,6 +87,8 @@ class ClinicForm(forms.ModelForm):
             'phone': 'Teléfono',
             'email': 'Correo electrónico',
             'website': 'Sitio web',
+            'privacy_policy_url': 'Política de privacidad (enlace)',
+            'privacy_contact_email': 'Correo de protección de datos',
             'address': 'Dirección',
             'city': 'Ciudad',
             'province': 'Provincia',

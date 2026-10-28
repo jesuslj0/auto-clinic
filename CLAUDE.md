@@ -307,6 +307,15 @@ the default tone. The fixed rules come *after* the block and it says it cannot
 override them. Free text is flattened to one quoted line, so it cannot open a
 new prompt section. Audited via `audit.registry`.
 
+**AI and privacy notice (fixed, not configurable).** `build_persona_prompt()` always
+adds an «AVISO OBLIGATORIO DE IA Y PRIVACIDAD»: in the first message of a conversation
+(`ES PRIMER MENSAJE=true`, new or known patient) the agent says it is an AI assistant of
+the clinic, that messages are stored and voice notes transcribed, and gives
+`Clinic.privacy_policy_url` verbatim (edited in «Clínica → Editar»; empty = it still warns, with
+no link, and is told not to invent one). The n8n prompt (`Agente IA Clinica`) carries the matching
+exceptions to its «don't mention the transcription / that you record the conversation» rules
+and asks for the notice in the first-message instructions: keep both in step.
+
 ### WhatsApp templates (`agent.WhatsAppTemplate`)
 
 Outside the 24 h window WhatsApp only allows approved templates. The tab

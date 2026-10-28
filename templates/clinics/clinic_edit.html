@@ -154,6 +154,32 @@
                     >
                     {% if form.website.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.website.errors|join:", " }}</p>{% endif %}
                 </div>
+                <div>
+                    <label for="{{ form.privacy_policy_url.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">{{ form.privacy_policy_url.label }}</label>
+                    <input
+                        type="url"
+                        name="{{ form.privacy_policy_url.html_name }}"
+                        id="{{ form.privacy_policy_url.id_for_label }}"
+                        value="{{ form.privacy_policy_url.value|default:'' }}"
+                        placeholder="https://..."
+                        class="block w-full rounded-xl border {% if form.privacy_policy_url.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                    >
+                    <p class="mt-1.5 text-xs text-content-subtle">El agente de WhatsApp lo da en su primer mensaje a cada paciente.</p>
+                    {% if form.privacy_policy_url.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.privacy_policy_url.errors|join:", " }}</p>{% endif %}
+                </div>
+                <div>
+                    <label for="{{ form.privacy_contact_email.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">{{ form.privacy_contact_email.label }}</label>
+                    <input
+                        type="email"
+                        name="{{ form.privacy_contact_email.html_name }}"
+                        id="{{ form.privacy_contact_email.id_for_label }}"
+                        value="{{ form.privacy_contact_email.value|default:'' }}"
+                        placeholder="privacidad@..."
+                        class="block w-full rounded-xl border {% if form.privacy_contact_email.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+                    >
+                    <p class="mt-1.5 text-xs text-content-subtle">Donde los pacientes ejercen sus derechos (o el delegado de protección de datos). Vacío: se usa el correo general.</p>
+                    {% if form.privacy_contact_email.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.privacy_contact_email.errors|join:", " }}</p>{% endif %}
+                </div>
             </div>
 
             {# ── Dirección ── #}
