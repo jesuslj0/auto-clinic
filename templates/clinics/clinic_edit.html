@@ -154,6 +154,12 @@
                     >
                     {% if form.website.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.website.errors|join:", " }}</p>{% endif %}
                 </div>
+            </div>
+
+            {# ── Protección de datos ── #}
+            <div class="space-y-4">
+                <h3 class="text-xs font-semibold uppercase tracking-widest text-content-faint">Protección de datos</h3>
+
                 <div>
                     <label for="{{ form.privacy_policy_url.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">{{ form.privacy_policy_url.label }}</label>
                     <input
@@ -179,6 +185,21 @@
                     >
                     <p class="mt-1.5 text-xs text-content-subtle">Donde los pacientes ejercen sus derechos (o el delegado de protección de datos). Vacío: se usa el correo general.</p>
                     {% if form.privacy_contact_email.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.privacy_contact_email.errors|join:", " }}</p>{% endif %}
+                </div>
+
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {% include 'clinics/_booking_field.html' with field=form.conversation_retention_months %}
+                </div>
+
+                <div class="flex items-start gap-3 rounded-2xl bg-warning-soft px-4 py-3 ring-1 ring-warning-line" role="note">
+                    <svg class="mt-0.5 h-5 w-5 flex-shrink-0 text-warning" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                    </svg>
+                    <div class="min-w-0 text-xs text-content-muted">
+                        <p class="font-semibold text-warning">El plazo de conservación de los chats debe coincidir con el de tu política de privacidad</p>
+                        <p class="mt-1">Lo que la política diga a los pacientes y lo que configures aquí tienen que ser lo mismo: si no, la clínica incumple lo que ha prometido. Si cambias uno, cambia también el otro.</p>
+                        <p class="mt-1">Al reducir el plazo, el próximo borrado nocturno elimina de forma definitiva los mensajes que lo superen. Ampliarlo no recupera lo ya borrado.</p>
+                    </div>
                 </div>
             </div>
 

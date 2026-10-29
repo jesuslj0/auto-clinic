@@ -68,12 +68,19 @@ class ClinicForm(forms.ModelForm):
         help_text='Con menos antelación que esta, el agente no ofrece ni acepta citas. No afecta a las que creas tú desde el panel. 0 = sin mínimo.',
     )
 
+    # Tope de diez años: por encima es un error de teclado, no una decisión de conservación.
+    conversation_retention_months = forms.IntegerField(
+        label='Conservación de los chats (meses)',
+        min_value=0, max_value=120,
+        help_text='Pasado este plazo sin actividad en una conversación, se borran sus mensajes y notas de voz (las fotos se conservan). 0 = no se borran nunca.',
+    )
+
     class Meta:
         model = Clinic
         fields = [
             'name', 'phone', 'email', 'website', 'privacy_policy_url', 'privacy_contact_email', 'address', 'city',
             'province', 'postal_code', 'timezone', 'description', 'logo', 'api_type',
-            'api_url', 'hold_ttl_minutes', 'min_booking_notice_minutes',
+            'api_url', 'hold_ttl_minutes', 'min_booking_notice_minutes', 'conversation_retention_months',
         ]
         widgets = {
             'description': forms.Textarea(attrs={'rows': 3}),
