@@ -136,4 +136,35 @@ el alta no hay formsets, así que se queda en una columna estrecha.
     </div>
 </form>
 
+{% comment %}
+Verificación en dos pasos de ESTE usuario. Fuera del <form> principal (los
+formularios no se anidan): el reseteo es su propio POST. Solo aparece al editar,
+y a uno mismo no se le ofrece (para eso está «Mi cuenta → Seguridad»).
+{% endcomment %}
+{% if object and can_reset_two_factor %}
+<section class="mx-auto mt-6 max-w-7xl rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+    <div class="flex flex-wrap items-center justify-between gap-4 px-4 py-6 sm:px-8">
+        <div class="min-w-0">
+            <h2 class="text-lg font-semibold text-content">Verificación en dos pasos</h2>
+            <p class="mt-1 text-sm text-content-subtle">
+                {% if two_factor_device and two_factor_device.is_confirmed %}
+                Configurada. Si {{ object.user.get_full_name|default:object.user.email }} ha perdido el móvil y sus códigos de recuperación, restablécela:
+                se cerrarán sus sesiones y tendrá que configurarla de nuevo al entrar.
+                {% else %}
+                Aún no la ha configurado: lo hará la próxima vez que inicie sesión.
+                {% endif %}
+            </p>
+        </div>
+        {% if two_factor_device %}
+        <form method="post" action="{% url 'core:two-factor-reset' object.user_id %}"
+              onsubmit="return confirm('¿Restablecer la verificación en dos pasos de {{ object.user.email|escapejs }}? Se cerrarán sus sesiones.');">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit" class="btn-secondary">Restablecer verificación</button>
+        </form>
+        {% endif %}
+    </div>
+</section>
+{% endif %}
+
 {% endblock %}

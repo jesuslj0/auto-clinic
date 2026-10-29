@@ -15,6 +15,11 @@ gunicorn>=22.0
 uvicorn[standard]>=0.30
 whitenoise>=6.7
 daphne>=4.1
+# Verificación en dos pasos (TOTP): códigos, QR en SVG local y cifrado del secreto
+pyotp>=2.9
+segno>=1.6
+cryptography>=42.0
+
 # Adjuntos clínicos en Cloudflare R2 (S3-compatible), bucket privado
 django-storages>=1.14
 boto3>=1.34

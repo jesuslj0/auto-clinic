@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import contextvars
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 # Orígenes posibles de un evento auditado. Se declaran aquí, y no en `models`,
@@ -80,6 +80,22 @@ def clear_audit_context() -> None:
 
 
 @contextmanager
+def acting_as(user):
+    """Atribuye a `user` lo que se escriba dentro, conservando IP, user agent y ruta.
+
+    Para el login a medias: la petición aún es anónima (no hay sesión hasta que se
+    pasa el segundo factor), pero quien acaba de acertar la contraseña es alguien
+    concreto, y un `ChangeLog` sin actor no sirve.
+    """
+    context = get_audit_context()
+    token = set_audit_context(replace(context, user=user, user_repr=describe_user(user)))
+    try:
+        yield
+    finally:
+        reset_audit_context(token)
+
+
+@contextmanager
 def audit_context(**kwargs):
     """Fija un contexto temporal.
 
@@ -99,19 +115,39 @@ def audit_context(**kwargs):
 # Resolución del actor
 # ---------------------------------------------------------------------------
 
-def _client_ip(request) -> str | None:
+def client_ip(request) -> str | None:
+    """IP del cliente, sin fiarse de lo que el propio cliente escriba.
+
+    `X-Forwarded-For` lo puede mandar cualquiera, y cada proxy solo AÑADE al final
+    la dirección de quien le habló. Con `TRUSTED_PROXY_COUNT` proxies de confianza
+    delante (Traefik → nginx = 2), la dirección del cliente real es la N-ésima
+    contando desde el final; lo de la izquierda lo escribió el cliente. Coger el
+    primero —como se hacía— deja que cualquiera elija la IP que queda en la
+    auditoría y que evite cualquier límite de intentos por IP.
+
+    Sin proxies (`0`, desarrollo) se usa `REMOTE_ADDR`. Si la cadena trae menos
+    saltos de los esperados (alguien llegó sin pasar por todos), se usa el primero
+    que hay: es lo mejor que se puede saber.
+    """
+    from django.conf import settings
+
+    proxies = getattr(settings, 'TRUSTED_PROXY_COUNT', 0)
     forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '')
-    if forwarded:
-        # El primero de la lista es el cliente original; el resto son proxies.
-        return forwarded.split(',')[0].strip() or None
+    if proxies > 0 and forwarded:
+        hops = [hop.strip() for hop in forwarded.split(',') if hop.strip()]
+        if hops:
+            return hops[-proxies] if len(hops) >= proxies else hops[0]
     return request.META.get('REMOTE_ADDR') or None
+
+
+_client_ip = client_ip  # alias histórico
 
 
 def build_context(request) -> AuditContext:
     """Construye el contexto a partir del `HttpRequest`."""
     return AuditContext(
         request=request,
-        ip=_client_ip(request),
+        ip=client_ip(request),
         user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
         path=request.path[:500],
         method=request.method or '',

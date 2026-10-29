@@ -4,7 +4,6 @@ from django.contrib import admin
 from django.http import HttpResponse
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
-from rest_framework.authtoken.views import obtain_auth_token
 from rest_framework.routers import DefaultRouter
 
 from agent.views import (
@@ -17,7 +16,14 @@ from agent.views import (
 )
 from appointments.views import AppointmentActionByTokenAPIView, AppointmentViewSet, ProfessionalScheduleViewSet, ProfessionalViewSet
 from billing.views import SubscriptionViewSet
-from core.views import AgentConfigByPhoneView, AgentConfigView, ClinicViewSet, UserViewSet
+from core.views import (
+    AdminLoginRedirectView,
+    AgentConfigByPhoneView,
+    AgentConfigView,
+    ClinicViewSet,
+    ThrottledObtainAuthToken,
+    UserViewSet,
+)
 from knowledge.views import ClinicInfoCacheViewSet, ClinicInfoQueryViewSet, ClinicKnowledgeBaseViewSet
 from notifications.views import ReminderViewSet
 from patients.views import PatientViewSet
@@ -57,7 +63,8 @@ urlpatterns = [
     # consultara Postgres, un parpadeo de la base tumbaría el contenedor.
     path('healthz/', lambda request: HttpResponse('ok', content_type='text/plain'), name='healthz'),
 
-    # Django admin
+    # Django admin. Su login se redirige al nuestro (límite de intentos + 2FA).
+    path('admin/login/', AdminLoginRedirectView.as_view(), name='admin-login-redirect'),
     path('admin/', admin.site.urls),
 
     # Template views
@@ -98,7 +105,7 @@ urlpatterns = [
     path('api/', include(router.urls)),
 
     # Token auth for n8n (POST with username + password → returns token)
-    path('api/auth/token/', obtain_auth_token, name='api-token-auth'),
+    path('api/auth/token/', ThrottledObtainAuthToken.as_view(), name='api-token-auth'),
 
     # Public appointment actions (no auth required)
     path(

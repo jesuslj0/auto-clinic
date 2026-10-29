@@ -43,3 +43,11 @@ REST_FRAMEWORK = {
 
 # Los avisos de cita se encolan con Celery: en tests se ejecutan en el acto, sin broker.
 CELERY_TASK_ALWAYS_EAGER = True
+
+# Caché en memoria y sin Redis. Cada test la vacía (`tests/conftest.py`), para que
+# los contadores de intentos no se arrastren de un test a otro.
+CACHES = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}}
+
+# Los tests entran con `client.force_login()`, sin pasar por el segundo factor. El
+# que lo prueba (`tests/core/test_two_factor.py`) lo vuelve a encender.
+TWO_FACTOR_REQUIRED_FOR_ROLES = False

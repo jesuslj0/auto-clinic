@@ -1,0 +1,45 @@
+{% extends 'registration/two_factor_base.html' %}
+{% block title %}Verificación en dos pasos{% endblock %}
+
+{% block card %}
+{% if locked %}
+<div class="text-center">
+    <h1 class="text-2xl font-semibold tracking-tight text-white">Acceso bloqueado</h1>
+    <p class="mt-3 text-sm text-white/80">Demasiados intentos con un código incorrecto. Espera unos minutos y vuelve a iniciar sesión.</p>
+    <a href="{% url 'core:login' %}" class="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white/80 px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-[0_10px_24px_-10px_rgb(46_16_101/0.5)] backdrop-blur-sm transition duration-200 hover:-translate-y-0.5 hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-brand-700 active:translate-y-0">Volver al inicio de sesión</a>
+</div>
+{% else %}
+<div class="mb-7 text-center">
+    <h1 class="text-2xl font-semibold tracking-tight text-white">Verificación en dos pasos</h1>
+    <p class="mt-1 text-sm text-white/75">Introduce el código de 6 dígitos que muestra tu app de autenticación{% if email %} para <span class="font-medium text-white">{{ email }}</span>{% endif %}.</p>
+</div>
+
+{% if error %}
+<div class="mb-5 flex items-start gap-2 rounded-2xl bg-rose-600/30 px-4 py-3 ring-1 ring-inset ring-rose-100/40" role="alert">
+    <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+    </svg>
+    <p class="text-sm font-medium text-white">{{ error }}</p>
+</div>
+{% endif %}
+
+<form method="post" novalidate class="space-y-5">
+    {% csrf_token %}
+    <div>
+        <label for="code" class="mb-1.5 block text-sm font-medium text-white/90">Código</label>
+        <input type="text" name="code" id="code" required autofocus
+       autocomplete="one-time-code" inputmode="text" maxlength="32"
+       autocapitalize="off" spellcheck="false"
+       placeholder="{{ placeholder|default:'123 456' }}"
+       aria-describedby="code-help"
+       class="block w-full rounded-xl border border-white/40 bg-transparent px-4 py-3 text-center text-xl font-semibold tracking-[0.3em] text-white placeholder-white/40 transition hover:border-white/60 focus:border-white focus:outline-none focus:ring-2 focus:ring-white/30">
+        <p id="code-help" class="mt-2 text-xs text-white/65">¿Sin acceso a tu móvil? Escribe aquí uno de tus códigos de recuperación (formato <span class="font-mono">ABCDE-FGHJK</span>). Cada uno vale una sola vez.</p>
+    </div>
+    <button type="submit" class="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white/80 px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-[0_10px_24px_-10px_rgb(46_16_101/0.5)] backdrop-blur-sm transition duration-200 hover:-translate-y-0.5 hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-brand-700 active:translate-y-0">Verificar y entrar</button>
+</form>
+
+<p class="mt-6 text-center text-xs text-white/65">
+    <a href="{% url 'core:login' %}" class="underline decoration-white/40 underline-offset-2 transition hover:text-white">Volver al inicio de sesión</a>
+</p>
+{% endif %}
+{% endblock %}

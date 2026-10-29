@@ -1,11 +1,24 @@
+from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 
 from core.realtime import clinic_group_name
+from core.two_factor import VERIFIED_KEY, requires_two_factor
 
 # Códigos de cierre propios (rango 4000-4999, reservado a la aplicación). El
 # cliente los usa para distinguir "no reintentes" de un corte de red.
 CLOSE_UNAUTHENTICATED = 4401
 CLOSE_NO_CLINIC = 4403
+
+
+@database_sync_to_async
+def _missing_second_factor(user, session) -> bool:
+    """¿Debería esta sesión haber pasado por el segundo factor y no lo hizo?
+
+    El middleware HTTP cierra esas sesiones, pero un socket abierto con una cookie
+    anterior a activar la verificación no pasa por él.
+    """
+    verified = bool(session and session.get(VERIFIED_KEY))
+    return not verified and requires_two_factor(user)
 
 
 class ClinicScopedConsumer(AsyncWebsocketConsumer):
@@ -29,6 +42,10 @@ class ClinicScopedConsumer(AsyncWebsocketConsumer):
         # rechazo durante el handshake se ve como 1006, indistinguible de un
         # corte de red, y el cliente reintentaría para siempre.
         if user is None or not user.is_authenticated or not user.is_active:
+            await self.accept()
+            await self.close(code=CLOSE_UNAUTHENTICATED)
+            return
+        if await _missing_second_factor(user, self.scope.get('session')):
             await self.accept()
             await self.close(code=CLOSE_UNAUTHENTICATED)
             return

@@ -37,6 +37,23 @@ class EmailAuthenticationForm(AuthenticationForm):
     )
 
 
+class TwoFactorCodeForm(forms.Form):
+    """El código de seis dígitos de la app, o uno de recuperación.
+
+    Sin estilo de campo: las páginas que lo usan (`registration/two_factor_*.html`)
+    pintan el input a mano, con la piel de cristal de la pantalla de login.
+    """
+
+    code = forms.CharField(max_length=32, strip=True)
+
+
+class SecurityReauthForm(forms.Form):
+    """Contraseña actual + código, para tocar el segundo factor estando dentro."""
+
+    password = forms.CharField(max_length=256, strip=False)
+    code = forms.CharField(max_length=32, strip=True)
+
+
 TIMEZONE_CHOICES = [
     ('Europe/Madrid', 'Europe/Madrid'),
     ('Europe/London', 'Europe/London'),

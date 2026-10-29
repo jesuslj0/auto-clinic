@@ -1,0 +1,15 @@
+{% comment %}
+Contraseña + código: lo que se pide para tocar el segundo factor estando dentro.
+Un código de recuperación también vale en el campo del código.
+{% endcomment %}
+{% csrf_token %}
+<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div>
+        <label for="{{ prefix }}-password" class="mb-1.5 block text-sm font-medium text-content-muted">Contraseña actual</label>
+        <input type="password" name="password" id="{{ prefix }}-password" required autocomplete="current-password" class="block w-full rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content shadow-sm placeholder-content-faint transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div>
+        <label for="{{ prefix }}-code" class="mb-1.5 block text-sm font-medium text-content-muted">Código de la app (o de recuperación)</label>
+        <input type="text" name="code" id="{{ prefix }}-code" required autocomplete="one-time-code" maxlength="32" autocapitalize="off" spellcheck="false" class="block w-full rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm text-content shadow-sm placeholder-content-faint transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+</div>

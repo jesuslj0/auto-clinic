@@ -53,7 +53,7 @@ from audit.mixins import AccessLogMixin, log_access
 from audit.models import AccessLog
 from core.authentication import ClinicAgent
 from core.mixins import BulkCreateMixin, BulkUpdateMixin, ClinicAdminRequiredMixin, ExportMixin, is_clinic_admin
-from core.models import Clinic
+from core.models import Clinic, TOTPDevice
 from core.permissions import IsAgentClinicKey, IsStaffOrAdmin
 from notifications.whatsapp_notices import notice_blocker
 from patients.models import Patient
@@ -1198,6 +1198,11 @@ class ProfessionalUpdateView(ClinicAdminRequiredMixin, UpdateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['section'] = 'professionals'
+        # Verificación en dos pasos de ese usuario: el reseteo es cosa del admin
+        # (`core:two-factor-reset`), y a uno mismo no se le ofrece.
+        target = self.object.user
+        context['two_factor_device'] = TOTPDevice.objects.filter(user=target).first()
+        context['can_reset_two_factor'] = target.pk != self.request.user.pk
         # Al repintar tras un POST inválido, no re-vincular los formsets: ya vienen
         # en kwargs con sus errores. Solo se construyen frescos en el GET.
         if 'schedule_formset' not in context:

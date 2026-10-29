@@ -1,0 +1,100 @@
+{% comment %}
+Pestaña «Seguridad»: la verificación en dos pasos de uno mismo (TOTP, vale
+cualquier app de autenticación). Cada acción es su propio `<form method="post">`
+y vuelve a pedir contraseña y código (`core/_two_factor_reauth.html`): una sesión
+abierta en un móvil prestado no basta para quitarle el factor a su dueño.
+
+Se despliegan con `<details>`, sin JavaScript, y por lo mismo no hay fragmento
+htmx propio: son formularios normales que recargan la página.
+{% endcomment %}
+<div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+    <div class="flex flex-wrap items-start justify-between gap-4 border-b border-line px-4 py-6 sm:px-8">
+        <div class="flex min-w-0 items-start gap-3">
+            <span class="mt-1 inline-flex flex-shrink-0 text-brand-fg">{% include 'core/_account_icon.html' with icon='seguridad' %}</span>
+            <div>
+                <h2 class="text-lg font-semibold text-content">Verificación en dos pasos</h2>
+                <p class="mt-1 text-sm text-content-subtle">
+                    Además de tu contraseña, se pide un código de tu app de autenticación. Aunque alguien conozca la contraseña, no puede entrar sin tu móvil.
+                </p>
+            </div>
+        </div>
+        {% if two_factor_active %}
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-xs font-medium text-success ring-1 ring-success-line">
+            <span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true"></span>
+            Activa
+        </span>
+        {% else %}
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-muted-strong px-2.5 py-1 text-xs font-medium text-content-muted ring-1 ring-line">
+            <span class="h-1.5 w-1.5 rounded-full bg-content-faint" aria-hidden="true"></span>
+            No activa
+        </span>
+        {% endif %}
+    </div>
+
+    <div class="space-y-5 px-4 py-7 sm:px-8">
+        {% if two_factor_required %}
+        <p class="rounded-xl bg-info-soft px-4 py-3 text-sm text-info ring-1 ring-info-line">Tu rol exige la verificación en dos pasos: no se puede desactivar.</p>
+        {% endif %}
+
+        {% if two_factor_active %}
+        <dl>
+            <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Códigos de recuperación</dt>
+            <dd class="mt-1 text-sm {% if recovery_codes_left <= 3 %}font-semibold text-warning{% else %}text-content{% endif %}">
+                {{ recovery_codes_left }} de {{ recovery_codes_total }} sin usar
+            </dd>
+            {% if recovery_codes_left <= 3 %}
+            <p class="mt-1 text-xs text-content-faint">Quedan pocos: genera unos nuevos para no quedarte fuera si pierdes el móvil.</p>
+            {% endif %}
+        </dl>
+
+        <details class="group rounded-2xl ring-1 ring-line">
+            <summary class="flex cursor-pointer select-none items-center justify-between gap-3 px-4 py-3.5 text-sm font-semibold text-content focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 [&::-webkit-details-marker]:hidden">
+                Generar códigos de recuperación nuevos
+                <svg class="h-4 w-4 text-content-faint transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+            </summary>
+            <form method="post" action="{% url 'core:two-factor-recovery-codes' %}" class="space-y-4 border-t border-line px-4 py-5">
+                <p class="text-sm text-content-subtle">Los códigos actuales dejarán de valer.</p>
+                {% include 'core/_two_factor_reauth.html' with prefix='codes' %}
+                <div class="flex justify-end"><button type="submit" class="btn-primary">Generar códigos</button></div>
+            </form>
+        </details>
+
+        <details class="group rounded-2xl ring-1 ring-line">
+            <summary class="flex cursor-pointer select-none items-center justify-between gap-3 px-4 py-3.5 text-sm font-semibold text-content focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 [&::-webkit-details-marker]:hidden">
+                Cambiar de móvil
+                <svg class="h-4 w-4 text-content-faint transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+            </summary>
+            <form method="post" action="{% url 'core:two-factor-change-device' %}" class="space-y-4 border-t border-line px-4 py-5">
+                <p class="text-sm text-content-subtle">Se genera un QR nuevo y el factor actual deja de valer en cuanto confirmes el nuevo.</p>
+                {% include 'core/_two_factor_reauth.html' with prefix='device' %}
+                <div class="flex justify-end"><button type="submit" class="btn-primary">Configurar un móvil nuevo</button></div>
+            </form>
+        </details>
+
+        {% if not two_factor_required %}
+        <details class="group rounded-2xl ring-1 ring-line">
+            <summary class="flex cursor-pointer select-none items-center justify-between gap-3 px-4 py-3.5 text-sm font-semibold text-danger focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 [&::-webkit-details-marker]:hidden">
+                Desactivar la verificación en dos pasos
+                <svg class="h-4 w-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+            </summary>
+            <form method="post" action="{% url 'core:two-factor-disable' %}" class="space-y-4 border-t border-line px-4 py-5">
+                <p class="text-sm text-content-subtle">Tu cuenta volverá a protegerse solo con la contraseña.</p>
+                {% include 'core/_two_factor_reauth.html' with prefix='disable' %}
+                <div class="flex justify-end"><button type="submit" class="btn-secondary">Desactivar</button></div>
+            </form>
+        </details>
+        {% endif %}
+
+        {% else %}
+        <p class="text-sm text-content-subtle">
+            Configúrala en un minuto con cualquier app de autenticación: escaneas un QR y confirmas con un código.
+        </p>
+        <div>
+            <a href="{% url 'core:two-factor-account-setup' %}" class="btn-primary">
+                {% include 'core/_account_icon.html' with icon='seguridad' icon_class='h-4 w-4' %}
+                Activar verificación en dos pasos
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>

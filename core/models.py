@@ -295,3 +295,55 @@ class User(AbstractUser, TimeStampedModel):
 
     def __str__(self):
         return self.email
+
+
+class TOTPDevice(TimeStampedModel):
+    """El segundo factor de un usuario: un secreto TOTP (RFC 6238).
+
+    Una fila por usuario. Nace SIN confirmar (`confirmed_at` nulo) cuando se le
+    enseña el QR, y solo cuenta como segundo factor cuando el usuario demuestra con
+    un primer código que su app lo ha leído bien: un secreto sin confirmar no
+    protege nada y no bloquea a nadie.
+
+    El secreto se guarda **cifrado** (`core/two_factor.py`), no con hash: hay que
+    poder leerlo para calcular el código esperado. No es una credencial de este
+    sistema que haya que verificar contra una copia, es un secreto compartido.
+    """
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='totp_device')
+    secret = models.TextField(help_text='Secreto TOTP cifrado (Fernet). Nunca en claro.')
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    #: Último intervalo de 30 s aceptado. Un código solo vale una vez: sin esto,
+    #: quien lo viera por encima del hombro podría reutilizarlo en su ventana.
+    last_used_step = models.BigIntegerField(default=0)
+
+    class Meta:
+        verbose_name = 'dispositivo de verificación en dos pasos'
+        verbose_name_plural = 'dispositivos de verificación en dos pasos'
+
+    @property
+    def is_confirmed(self) -> bool:
+        return self.confirmed_at is not None
+
+    def __str__(self):
+        return f'2FA de {self.user.email}'
+
+
+class RecoveryCode(TimeStampedModel):
+    """Código de un solo uso para entrar si se pierde el móvil.
+
+    Solo se guarda su HMAC (`core/two_factor.py`): el texto se enseña una vez, al
+    generarlo. Se marca usado, nunca se borra al usarse: «qué códigos se
+    consumieron y cuándo» es parte del rastro.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='recovery_codes')
+    code_hash = models.CharField(max_length=64, db_index=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'código de recuperación'
+        verbose_name_plural = 'códigos de recuperación'
+
+    def __str__(self):
+        return f'Código de recuperación de {self.user.email}'

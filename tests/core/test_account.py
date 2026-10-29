@@ -77,26 +77,26 @@ def test_requires_login(client, url):
 
 
 @pytest.mark.django_db
-def test_the_three_tabs_render_for_a_professional(client, staff_user):
+def test_the_four_tabs_render_for_a_professional(client, staff_user):
     client.force_login(staff_user)
-    for url in (ACCOUNT_URL, PROFILE_URL, SCHEDULE_URL):
+    for url in (ACCOUNT_URL, PROFILE_URL, SCHEDULE_URL, '/cuenta/seguridad/'):
         response = client.get(url)
         assert response.status_code == 200, url
         assert [tab['key'] for tab in response.context['account_tabs']] == [
-            'cuenta', 'perfil', 'horario',
+            'cuenta', 'perfil', 'horario', 'seguridad',
         ], url
 
 
 @pytest.mark.django_db
-def test_a_user_without_a_professional_only_sees_the_first_tab(client, superuser):
-    """Un superusuario de plataforma no tiene ficha, pero sí contraseña."""
+def test_a_user_without_a_professional_only_sees_the_account_tabs(client, superuser):
+    """Un superusuario de plataforma no tiene ficha, pero sí contraseña y seguridad."""
     assert getattr(superuser, 'professional_profile', None) is None
 
     client.force_login(superuser)
     response = client.get(ACCOUNT_URL)
 
     assert response.status_code == 200
-    assert [tab['key'] for tab in response.context['account_tabs']] == ['cuenta']
+    assert [tab['key'] for tab in response.context['account_tabs']] == ['cuenta', 'seguridad']
     assert 'id="password-card"' in response.content.decode()
 
 
@@ -259,7 +259,7 @@ def test_every_tab_declares_an_icon(client, staff_user):
     client.force_login(staff_user)
     tabs = client.get(ACCOUNT_URL).context['account_tabs']
 
-    assert [tab['icon'] for tab in tabs] == ['cuenta', 'perfil', 'horario']
+    assert [tab['icon'] for tab in tabs] == ['cuenta', 'perfil', 'horario', 'seguridad']
 
 
 @pytest.mark.django_db

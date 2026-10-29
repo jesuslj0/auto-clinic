@@ -8,7 +8,7 @@ Referencia completa de todos los endpoints REST, vistas de plantilla y WebSocket
 
 | Método | URL | Descripción | Acceso |
 |--------|-----|-------------|--------|
-| POST | `/api/auth/token/` | Obtener token DRF (username + password) | Público |
+| POST | `/api/auth/token/` | Obtener token DRF (username + password). Con el mismo límite de intentos que el login (429 al bloquearse) | Público |
 
 ---
 
