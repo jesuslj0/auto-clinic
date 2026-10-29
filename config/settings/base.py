@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from celery.schedules import crontab
 from decouple import Csv, config
@@ -51,6 +52,9 @@ MIDDLEWARE = [
     # Después de AuthenticationMiddleware: necesita `request.user`.
     'audit.middleware.AuditContextMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    # Después de Authentication y Messages: cierra la sesión de quien debería
+    # haber pasado por la verificación en dos pasos y no la tiene (`core/two_factor.py`).
+    'core.middleware.TwoFactorEnforcementMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
@@ -215,6 +219,57 @@ CHANNEL_LAYERS = {
         'CONFIG': {'hosts': [REDIS_URL]},
     }
 }
+
+
+
+def _redis_url_with_db(url: str, db: int) -> str:
+    """La misma instancia de Redis, en otra base de datos."""
+    parts = urlsplit(url)
+    return urlunsplit(parts._replace(path=f'/{db}'))
+
+
+# Caché compartida entre procesos y reinicios. Sin esto Django usa `LocMemCache`,
+# que es POR PROCESO: los contadores de intentos (login, 2FA, enlaces públicos)
+# se repartirían entre los workers y un reinicio los pondría a cero. Redis DB 3:
+# 0 = channels, 1 = broker de Celery, 2 = resultados de Celery.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': config('CACHE_REDIS_URL', default=_redis_url_with_db(REDIS_URL, 3)),
+        'KEY_PREFIX': 'autoclinic',
+    }
+}
+
+# Cuántos proxies de confianza hay delante de Django (Traefik → nginx = 2 en
+# producción; 0 = sin proxy, se usa `REMOTE_ADDR`). Cada uno añade a
+# `X-Forwarded-For` la dirección de quien le habló, así que la del cliente real
+# es la N-ésima empezando por el final: lo que haya a la izquierda lo escribió el
+# propio cliente y no es de fiar. Ver `audit/context.py`.
+TRUSTED_PROXY_COUNT = config('TRUSTED_PROXY_COUNT', default=0, cast=int)
+
+# --- Seguridad del acceso -----------------------------------------------------
+# Límite de intentos de login (`core/login_guard.py`). Al llegar al máximo en la
+# ventana, se bloquea ese correo / esa IP durante `LOCKOUT`.
+LOGIN_MAX_FAILURES_PER_EMAIL = 5
+LOGIN_MAX_FAILURES_PER_IP = 20
+LOGIN_FAILURE_WINDOW_SECONDS = 15 * 60
+LOGIN_LOCKOUT_SECONDS = 15 * 60
+
+# Verificación en dos pasos (`core/two_factor.py`). TOTP estándar (RFC 6238):
+# vale cualquier app de autenticación.
+#   - Obligatoria para admins y profesionales cuando `TWO_FACTOR_REQUIRED_FOR_ROLES`.
+#     Quien ya la tiene configurada la usa siempre, lo exija o no el rol.
+#   - El secreto se guarda cifrado con `TWO_FACTOR_ENCRYPTION_KEY` (una o varias
+#     claves Fernet separadas por comas; la primera cifra, todas descifran, para
+#     poder rotarla). Sin ella se deriva de `SECRET_KEY`: sirve, pero rotar la
+#     `SECRET_KEY` dejaría los secretos ilegibles. En producción, definirla.
+TWO_FACTOR_REQUIRED_FOR_ROLES = True
+TWO_FACTOR_ENCRYPTION_KEY = config('TWO_FACTOR_ENCRYPTION_KEY', default='')
+TWO_FACTOR_ISSUER = config('TWO_FACTOR_ISSUER', default='Auto Clinic')
+# Tiempo que se tiene para meter el código tras acertar la contraseña.
+TWO_FACTOR_PENDING_SECONDS = 10 * 60
+TWO_FACTOR_MAX_FAILURES = 5
+TWO_FACTOR_LOCKOUT_SECONDS = 15 * 60
 
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/1')
 CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://localhost:6379/2')

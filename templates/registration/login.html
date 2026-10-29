@@ -125,13 +125,23 @@ superficie: no hay superficie del tema, todo va sobre la marca.
                     <p class="mt-1 text-sm text-white/75">Introduce tus credenciales para acceder.</p>
                 </div>
 
+                {# Avisos (p. ej. tras cerrarse una sesión anterior a la verificación en dos pasos). #}
+                {% if messages %}
+                <div class="mb-5 space-y-2" role="status">
+                    {% for message in messages %}
+                    <p class="rounded-2xl bg-white/15 px-4 py-3 text-sm font-medium text-white ring-1 ring-inset ring-white/30">{{ message }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
                 <!-- Errores generales -->
-                {% if form.non_field_errors %}
+                {% if form.non_field_errors or locked_message %}
                 <div class="mb-5 flex items-start gap-2 rounded-2xl bg-rose-600/30 px-4 py-3 ring-1 ring-inset ring-rose-100/40" role="alert">
                     <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
                     </svg>
                     <div>
+                        {% if locked_message %}<p class="text-sm font-medium text-white">{{ locked_message }}</p>{% endif %}
                         {% for error in form.non_field_errors %}
                         <p class="text-sm font-medium text-white">{{ error }}</p>
                         {% endfor %}

@@ -1,0 +1,39 @@
+{% extends 'registration/two_factor_base.html' %}
+{% block title %}Códigos de recuperación{% endblock %}
+{% block card_width %}max-w-lg{% endblock %}
+
+{% block card %}
+<div x-data="{ saved: false, copied: false,
+               copy() { navigator.clipboard.writeText($refs.list.innerText.trim()).then(() => { this.copied = true; setTimeout(() => this.copied = false, 2000); }); } }">
+    <div class="mb-6 text-center">
+        <h1 class="text-2xl font-semibold tracking-tight text-white">
+            {% if first_time %}Verificación en dos pasos activada{% else %}Códigos de recuperación nuevos{% endif %}
+        </h1>
+        <p class="mt-2 text-sm text-white/80">
+            Guarda estos códigos en un lugar seguro. Si pierdes el móvil, cada uno te deja entrar <strong>una sola vez</strong>.
+            <strong>No volverán a mostrarse.</strong>{% if not first_time %} Los anteriores ya no sirven.{% endif %}
+        </p>
+    </div>
+
+    <ul x-ref="list" class="grid grid-cols-2 gap-2 rounded-2xl bg-black/20 p-4 font-mono text-base tracking-wider text-white select-all">
+        {% for code in codes %}<li class="text-center">{{ code }}</li>{% endfor %}
+    </ul>
+
+    <div class="no-print mt-4 flex justify-center gap-3">
+        <button type="button" @click="copy()" class="rounded-xl bg-white/15 px-4 py-2 text-sm font-semibold text-white ring-1 ring-inset ring-white/30 transition hover:bg-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-white">
+            <span x-text="copied ? 'Copiado' : 'Copiar'">Copiar</span>
+        </button>
+        <button type="button" onclick="window.print()" class="rounded-xl bg-white/15 px-4 py-2 text-sm font-semibold text-white ring-1 ring-inset ring-white/30 transition hover:bg-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-white">Imprimir</button>
+    </div>
+
+    <div class="no-print mt-6 space-y-4">
+        <label class="flex items-start gap-3 text-sm text-white/90">
+            <input type="checkbox" x-model="saved" class="mt-0.5 h-4 w-4 rounded border-white/50 bg-transparent text-brand-600 focus:ring-white/50">
+            He guardado mis códigos de recuperación.
+        </label>
+        <a href="{{ continue_url }}" :aria-disabled="(!saved).toString()" :class="saved ? '' : 'pointer-events-none opacity-50'" @click="if (!saved) $event.preventDefault()"
+           aria-disabled="true"
+           class="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white/80 px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-[0_10px_24px_-10px_rgb(46_16_101/0.5)] backdrop-blur-sm transition duration-200 hover:-translate-y-0.5 hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-brand-700 active:translate-y-0">Continuar</a>
+    </div>
+</div>
+{% endblock %}

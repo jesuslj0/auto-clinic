@@ -7,6 +7,7 @@ from django.db.models import Q
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, LogoutView
+from django.utils.http import urlencode
 from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
@@ -15,6 +16,8 @@ from django.views import View
 from django.views.generic import TemplateView, UpdateView
 from django.views.generic.base import ContextMixin, TemplateResponseMixin
 from rest_framework import status, viewsets
+from rest_framework.authtoken.views import ObtainAuthToken
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -30,6 +33,7 @@ from appointments.services import (
 from audit.mixins import log_access
 from audit.models import AccessLog
 from billing.metrics import dashboard_revenue
+from core import login_guard, two_factor
 from core.dashboard import (
     appointments_by_status,
     booking_sources,
@@ -57,9 +61,92 @@ from core.serializers import AgentConfigSerializer, ClinicSerializer, UserSerial
 
 
 class ClinicLoginView(LoginView):
+    """Login con límite de intentos y segundo factor.
+
+    - El límite se consulta ANTES de mirar la contraseña (`core/login_guard.py`): un
+      bloqueo que aun así la comprobara le diría al atacante si acertó.
+    - Quien necesita el segundo factor (`requires_two_factor`) NO recibe sesión al
+      acertar la contraseña: queda «pendiente» y pasa a `core/two_factor_views.py`.
+      Solo se llama a `login()` cuando el código también es bueno.
+    """
+
     form_class = EmailAuthenticationForm
     template_name = 'registration/login.html'
     redirect_authenticated_user = True
+
+    def post(self, request, *args, **kwargs):
+        self.email = login_guard.normalize_email(request.POST.get('username'))
+        if login_guard.login_locked(request, self.email):
+            # Ni se valida el formulario: `is_valid()` comprobaría la contraseña.
+            form = self.form_class(request, initial={'username': request.POST.get('username', '')})
+            return self.render_to_response(
+                self.get_context_data(form=form, locked_message=login_guard.LOCKED_MESSAGE),
+                status=429,
+            )
+        return super().post(request, *args, **kwargs)
+
+    def form_invalid(self, form):
+        # Solo cuentan las credenciales equivocadas: un campo vacío o un correo mal
+        # escrito es un descuido, no un intento.
+        if not form.errors.get('username') and not form.errors.get('password'):
+            login_guard.record_login_failure(self.request, self.email)
+        return super().form_invalid(form)
+
+    def form_valid(self, form):
+        user = form.get_user()
+        login_guard.record_login_success(self.email)
+        if two_factor.requires_two_factor(user):
+            two_factor.start_pending(self.request, user, self.get_redirect_url())
+            if two_factor.has_confirmed_device(user):
+                return redirect('core:two-factor-verify')
+            return redirect('core:two-factor-setup')
+        response = super().form_valid(form)
+        log_access(
+            action=AccessLog.Action.LOGIN,
+            description='Inicio de sesión',
+            request=self.request,
+        )
+        return response
+
+
+class ThrottledObtainAuthToken(ObtainAuthToken):
+    """`POST /api/auth/token/` con el mismo límite de intentos que el login.
+
+    Es otra puerta a la misma contraseña, y sin límite sería la más cómoda para
+    probarlas. Comparte contadores con el login: cuenta por correo y por IP.
+    """
+
+    def post(self, request, *args, **kwargs):
+        email = login_guard.normalize_email(request.data.get('username'))
+        if login_guard.login_locked(request, email):
+            return Response({'detail': login_guard.LOCKED_MESSAGE}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        try:
+            response = super().post(request, *args, **kwargs)
+        except ValidationError:
+            # Credenciales equivocadas (o campos vacíos): el serializador lanza, DRF
+            # lo convierte en 400 más arriba. Un correo vacío no cuenta como intento.
+            if email:
+                login_guard.record_login_failure(request, email)
+            raise
+        login_guard.record_login_success(email)
+        return response
+
+
+class AdminLoginRedirectView(View):
+    """El login del admin de Django, redirigido al nuestro.
+
+    El de Django es otra puerta de entrada con su propio formulario: sin límite de
+    intentos y sin segundo factor. Aquí se cierra; quien entra por nuestro login y
+    es staff accede al admin igual.
+    """
+
+    def get(self, request):
+        if request.user.is_authenticated:
+            # Dentro pero sin permiso para el admin: redirigir al login lo
+            # mandaría de vuelta aquí en bucle.
+            raise PermissionDenied('Tu usuario no tiene acceso al panel de administración.')
+        query = urlencode({'next': request.GET.get('next', '/admin/')})
+        return redirect(f'{reverse_lazy("core:login")}?{query}')
 
 
 class ClinicLogoutView(LogoutView):
@@ -185,6 +272,7 @@ ACCOUNT_TABS = [
     {'key': 'cuenta', 'label': 'Cuenta', 'url_name': 'core:account', 'icon': 'cuenta', 'needs_professional': False},
     {'key': 'perfil', 'label': 'Datos profesionales', 'url_name': 'core:account-profile', 'icon': 'perfil', 'needs_professional': True},
     {'key': 'horario', 'label': 'Horario y ausencias', 'url_name': 'core:account-schedule', 'icon': 'horario', 'needs_professional': True},
+    {'key': 'seguridad', 'label': 'Seguridad', 'url_name': 'core:account-security', 'icon': 'seguridad', 'needs_professional': False},
 ]
 
 
@@ -315,6 +403,28 @@ class AccountScheduleView(AccountTabMixin, View):
             fs.save()
         messages.success(request, 'Horario actualizado correctamente.')
         return redirect('core:account-schedule')
+
+
+class AccountSecurityView(AccountTabMixin, TemplateView):
+    """Pestaña «Seguridad»: la verificación en dos pasos de uno mismo.
+
+    Solo muestra el estado y los formularios; cada acción tiene su vista en
+    `core/two_factor_views.py` y vuelve a pedir contraseña y código.
+    """
+
+    active_tab = 'seguridad'
+    panel_template = 'core/tabs/_seguridad.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        context.update(
+            two_factor_active=two_factor.has_confirmed_device(user),
+            two_factor_required=two_factor.required_by_role(user),
+            recovery_codes_left=two_factor.remaining_recovery_codes(user),
+            recovery_codes_total=two_factor.RECOVERY_CODE_COUNT,
+        )
+        return context
 
 
 class PasswordChangeSectionView(LoginRequiredMixin, View):

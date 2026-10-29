@@ -40,7 +40,7 @@ python manage.py runserver    # Uses config.settings.dev by default
 
 | App | Purpose |
 |-----|---------|
-| `core` | Custom `User` model (email-based auth), `Clinic` model, `TimeStampedModel` base |
+| `core` | Custom `User` model (email-based auth), `Clinic` model, `TimeStampedModel` base. Login security: attempt limiting (`login_guard.py`, `throttling.py`) and 2FA (`TOTPDevice`, `RecoveryCode`, `two_factor.py`) |
 | `patients` | Patient records, scoped per clinic |
 | `services` | Service catalog per clinic |
 | `appointments` | Appointment lifecycle, WebSocket signals, token-based public actions |
@@ -257,6 +257,69 @@ touches `AgentMemory` or n8n. Delivery receipts arrive through the usual `status
 `LesionAttachment.Source.PATIENT_WHATSAPP` already exists: promoting a chat photo
 to a lesion is a planned follow-up (same bucket, keep the checksum).
 
+### Login security (`core`)
+
+Three layers, all in `core/` — see the module docstrings for the detail:
+
+- **Attempt limiting** (`login_guard.py` over `throttling.py`, state in the Redis cache).
+  Counted **by email and by IP** (IPv6 by /64): 5 failures per email / 20 per IP in
+  15 min lock that email/IP for 15 min (`LOGIN_*` settings). The lock is checked
+  **before** the password is looked at, and the locked response never validates the
+  form (`is_valid()` would check the password). It counts the typed email whether or
+  not it exists. Same counters guard `POST /api/auth/token/` (429) — it is another door
+  to the same passwords. Failures and locks go to `AccessLog` (`LOGIN_FAILED`,
+  `LOGIN_LOCKED`; a lock is logged once, bounced attempts write nothing).
+- **The client IP is not the client's to choose.** `audit.context.client_ip()` takes
+  `X-Forwarded-For` counted **from the right**, `TRUSTED_PROXY_COUNT` proxies deep
+  (prod default 2: Traefik → nginx; dev 0 = `REMOTE_ADDR`). Taking the first entry — as
+  it used to — let anyone pick their IP and dodge every per-IP limit. If the proxy chain
+  changes, change that number. Counters need a shared cache: `CACHES` is Redis DB 3
+  (tests use `LocMemCache`, cleared per test in `tests/conftest.py`).
+- **2FA (TOTP, RFC 6238), own code on `pyotp` + `segno`.** Any authenticator app works
+  (Google Authenticator included): standard SHA-1 / 6 digits / 30 s — **do not change
+  them**, Google Authenticator ignores other parameters. The QR is an inline SVG made
+  server-side, so the secret never reaches a third party.
+  - **Mandatory** for clinic admins (`is_clinic_admin`) and anyone with
+    `professional_profile` (`TWO_FACTOR_REQUIRED_FOR_ROLES`); anyone with a confirmed
+    device uses it regardless of role; others can opt in from «Mi cuenta → Seguridad».
+  - **There is never a half-open session.** After the password, `login()` is *not*
+    called: the user is only «pending» in the session (`start_pending`, 10 min) and
+    `login()` runs after the code is good (`complete_login`, which also sets
+    `session['two_factor_verified']`). The **first-time setup also happens before
+    entering** (`/login/verificacion/configurar/`). Existing users without a factor are
+    forced through it at their next login.
+  - **`TwoFactorEnforcementMiddleware`** logs out any session of a user who needs 2FA
+    and lacks the verified mark (sessions older than the rollout, `force_login`,
+    a role just promoted); `/api/` gets a 403 JSON. `ClinicScopedConsumer` applies the
+    same rule to WebSockets. `/admin/login/` redirects to our login (it was a door with
+    neither limit nor 2FA). Tests turn the requirement off
+    (`TWO_FACTOR_REQUIRED_FOR_ROLES = False` in `test.py`); `tests/core/test_two_factor.py`
+    turns it back on.
+  - **The secret is encrypted** (Fernet, `TWO_FACTOR_ENCRYPTION_KEY`: comma-separated keys,
+    first encrypts, all decrypt, so it can be rotated; empty = derived from `SECRET_KEY`,
+    fine but rotating `SECRET_KEY` would then break it — **set it in Coolify**). A code
+    works once (`last_used_step`, row-locked). `TOTPDevice` is born unconfirmed (QR
+    shown) and only counts once a first code is verified.
+  - **Recovery codes**: 10, stored as HMAC, shown once, marked used (never deleted).
+  - Changing the factor from inside (regenerate codes, change phone, disable) asks for
+    **password + code** again and shares the attempt lock. Roles that require it cannot
+    disable it. An admin can reset a colleague (`core:two-factor-reset`, button on the
+    professional's edit page): it deletes the factor **and closes that user's sessions**
+    (useful too if someone enrolled their own device on an account whose owner had not
+    yet). An admin cannot reset themselves.
+  - Every change goes to `AccessLog` (`TWO_FACTOR_CHANGE`) and both models are in the
+    audit registry (`secret` and the hashes `sensitive`, `last_used_step` excluded: it
+    changes on every login). Delete device/codes one by one, never `queryset.delete()`.
+  - The pages (`registration/two_factor_*.html`) share the glass shell of the login, load
+    nothing from the panel and send `Referrer-Policy: same-origin` — **never
+    `no-referrer`**: the browser then sends `Origin: null` on the form POST and CSRF
+    rejects it (found by testing in a real browser).
+  - Known limit: the very first enrolment is protected by the password alone — whoever
+    knows the password of an account that has not enrolled yet could enrol *their*
+    phone. The admin reset closes that hole after the fact; there is no out-of-band step.
+  - Known limit: DRF `Token` tokens (`/api/auth/token/`, already issued ones included)
+    are a separate credential and do **not** go through 2FA.
+
 ### Multi-tenancy
 
 All domain models reference `clinic_id`. Staff queries are automatically filtered by `user.clinic`. Superusers see all clinics. This isolation is enforced in DRF viewset `get_queryset()` methods.
@@ -281,7 +344,7 @@ Panel map (namespace in brackets):
 
 | Prefix | Routes |
 |---|---|
-| `/` (`core`) | `buscar/`, `login/`, `logout/`, `cuenta/` (`perfil/`, `horario/`, `contrasena/`), `clinica/` (`editar/`, `integraciones/` → redirect to `/agente/`), `panel/citas/<uuid>/` (`gestionar/`, `accion/`, `resumen/`) |
+| `/` (`core`) | `buscar/`, `login/` (+ `login/verificacion/`, `login/verificacion/configurar/`: 2FA, no session yet), `logout/`, `cuenta/` (`perfil/`, `horario/`, `contrasena/`, `seguridad/` + `activar/`, `codigos/`, `cambiar-dispositivo/`, `desactivar/`, `restablecer/<user_id>/`), `clinica/` (`editar/`, `integraciones/` → redirect to `/agente/`), `panel/citas/<uuid>/` (`gestionar/`, `accion/`, `resumen/`) |
 | `/citas/` (`appointments`) | `crear/`, `listado/`, `<uuid>/editar/`, `<uuid>/procedimiento/`, `<uuid>/visita/`, `mi-perfil/` (redirect) |
 | `/profesionales/` (`professionals`) | `crear/`, `<pk>/editar/` — top-level, views live in `appointments` (`appointments/professional_urls.py`) |
 | `/pacientes/` (`patients`) | `crear/`, `<id>/` + tabs `historia/` (+ `episodios/…`, `visitas/…`, `notas/…`), `documentos/` (anamnesis + consentimientos in one tab; the old `anamnesis/` and `consentimientos/` routes return the same tab), `alertas/` (+ `nueva/`, `<id>/editar|desactivar|reactivar/`), `lesiones/`, `consentimientos/firmar/`, `enviar-ficha/`, `enlaces-ficha/<id>/anular/`, `procedimientos/`, `editar/`, `foto/` |
@@ -627,6 +690,14 @@ POSTGRES_PORT=5432
 REDIS_URL=redis://redis:6379/0
 CELERY_BROKER_URL=redis://redis:6379/1
 CELERY_RESULT_BACKEND=redis://redis:6379/2
+```
+
+Login security (all optional; defaults in `base.py`/`prod.py`):
+```
+TRUSTED_PROXY_COUNT=2          # proxies in front of Django (prod default 2: Traefik → nginx)
+TWO_FACTOR_ENCRYPTION_KEY=     # Fernet key(s), comma-separated; set it in prod (see above)
+TWO_FACTOR_ISSUER=Auto Clinic  # name shown in the authenticator app
+CACHE_REDIS_URL=               # default: REDIS_URL on DB 3
 ```
 
 Clinical photo storage (Cloudflare R2, private bucket — the `clinical_media`

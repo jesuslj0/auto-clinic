@@ -7,6 +7,10 @@ sidebar móvil) sin duplicar lógica ni desincronizarse.
 Los iconos y las etiquetas se alternan con las variantes `dark:`, no con JS:
 así ya salen bien en el primer pintado.
 
+`text_size` (opcional, por defecto `text-sm`) iguala la letra con el resto del pie
+del sidebar: el de escritorio usa `text-xs` en «Mi cuenta» y «Cerrar sesión», el
+móvil `text-sm`.
+
 `sidebar-action` y `sidebar-label` son los ganchos del sidebar colapsado (ver
 `partials/_head_sidebar.html`): con el panel estrecho queda solo el icono,
 centrado, y el texto sigue ahí para los lectores de pantalla.
@@ -16,7 +20,7 @@ centrado, y el texto sigue ahí para los lectores de pantalla.
     data-theme-toggle
     aria-pressed="false"
     title="Cambiar el tema"
-    class="sidebar-action flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-content-subtle transition hover:bg-muted-strong hover:text-content-muted"
+    class="sidebar-action flex w-full items-center gap-2 rounded-lg px-3 py-2 {{ text_size|default:'text-sm' }} font-medium text-content-subtle transition hover:bg-muted-strong hover:text-content-muted"
 >
     <!-- Luna: se ofrece pasar a oscuro -->
     <svg class="h-4 w-4 flex-shrink-0 dark:hidden" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">

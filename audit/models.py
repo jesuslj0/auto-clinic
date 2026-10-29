@@ -181,6 +181,16 @@ class AccessLog(BaseLog):
         # ya hay precedente de eventos sin objeto (`clinical/admin.py`).
         # Se registra el hecho, nunca la contraseña.
         PASSWORD_CHANGE = 'password_change', 'Cambio de contraseña'
+        # Rastro de la puerta de entrada. Tampoco son lecturas, y por lo mismo que
+        # `PASSWORD_CHANGE` viven aquí: un intento fallido o un bloqueo no cambia
+        # ningún modelo registrado, así que no dejaría `ChangeLog`. Sin paciente ni
+        # objeto; el correo tecleado va en `object_repr`, nunca la contraseña.
+        LOGIN = 'login', 'Inicio de sesión'
+        LOGIN_FAILED = 'login_failed', 'Intento de acceso fallido'
+        LOGIN_LOCKED = 'login_locked', 'Bloqueo por intentos fallidos'
+        # Alta, baja, reseteo y regeneración de códigos de la verificación en dos
+        # pasos, y uso de un código de recuperación. El detalle va en `object_repr`.
+        TWO_FACTOR_CHANGE = 'two_factor_change', 'Cambio en la verificación en dos pasos'
 
     # Nulos en los listados: una búsqueda no apunta a un objeto concreto.
     # DO_NOTHING + db_constraint=False: ver la nota en `ChangeLog.content_type`.

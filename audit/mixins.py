@@ -29,12 +29,17 @@ def log_access(
     request=None,
     path=None,
     method=None,
+    actor=None,
+    description='',
 ):
     """Registra un acceso. Invocable desde cualquier sitio.
 
     Todo lo que no se pase explícitamente se toma del contexto de la petición.
     Fuera de una petición (comando, tarea de Celery) el registro se crea igual,
     con usuario nulo y origen `command`.
+
+    `actor` fija el usuario cuando la petición aún es anónima (login a medias) y
+    `description` rellena `object_repr` para los eventos que no apuntan a un objeto.
     """
     from django.contrib.contenttypes.models import ContentType
 
@@ -48,6 +53,12 @@ def log_access(
         context = build_context(request)
 
     user, user_repr, origin = resolve_actor(context)
+    if actor is not None:
+        # Quien actúa aún no tiene sesión (está en medio del login): la petición
+        # es anónima, pero el evento es suyo.
+        from audit.context import describe_user
+
+        user, user_repr = actor, describe_user(actor)
 
     if patient is None and obj is not None:
         try:
@@ -62,6 +73,9 @@ def log_access(
         content_type = ContentType.objects.get_for_model(obj, for_concrete_model=False)
         object_id = str(obj.pk or '')
         object_repr = str(obj)[:255]
+    if description:
+        # Eventos sin objeto (login, 2FA): qué pasó, en una línea.
+        object_repr = description[:255]
 
     return write_log(
         AccessLog,

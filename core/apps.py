@@ -9,7 +9,7 @@ class CoreConfig(AppConfig):
     def ready(self):
         from audit import registry
 
-        from core.models import Clinic, User
+        from core.models import Clinic, RecoveryCode, TOTPDevice, User
 
         # Altas, bajas y cambios de rol de usuarios. `password` y `last_login`
         # los excluye ya el registry por defecto.
@@ -27,3 +27,9 @@ class CoreConfig(AppConfig):
                 'calendly_token',
             ],
         )
+
+        # La verificación en dos pasos: altas, confirmaciones y bajas de
+        # dispositivos y códigos. El secreto y los hashes jamás en el log; el
+        # último intervalo usado cambia en cada login y solo sería ruido.
+        registry.register(TOTPDevice, sensitive=['secret'], exclude=['last_used_step'])
+        registry.register(RecoveryCode, sensitive=['code_hash'])

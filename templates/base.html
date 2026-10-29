@@ -227,7 +227,7 @@ emite en toda página del panel, aunque no contenga ningún formulario.
                     </a>
                 </div>
                 <div class="mt-1 -mx-3">
-                    {% include "partials/_theme_toggle.html" %}
+                    {% include "partials/_theme_toggle.html" with text_size="text-xs" %}
                 </div>
                 {% comment %}Solo abre la confirmación: el POST lo hace el
                 formulario que acompaña al modal, uno para los dos paneles.{% endcomment %}

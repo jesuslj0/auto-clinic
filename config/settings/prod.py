@@ -1,3 +1,5 @@
+from decouple import config
+
 from .base import *
 
 DEBUG = False
@@ -9,3 +11,6 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_HSTS_SECONDS = 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
+
+# Traefik → nginx → Daphne. Si cambia la cadena de proxies, cambia este número.
+TRUSTED_PROXY_COUNT = config('TRUSTED_PROXY_COUNT', default=2, cast=int)

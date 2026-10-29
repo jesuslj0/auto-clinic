@@ -65,6 +65,12 @@ services:
       R2_ENDPOINT_URL: ${R2_ENDPOINT_URL}
       CLINICAL_MEDIA_URL_EXPIRE: ${CLINICAL_MEDIA_URL_EXPIRE:-600}
       CHAT_MEDIA_URL_EXPIRE: ${CHAT_MEDIA_URL_EXPIRE:-300}
+      # Cadena de proxies delante de Django (Traefik → nginx = 2). De ella sale la IP
+      # del cliente para el límite de intentos y la auditoría.
+      TRUSTED_PROXY_COUNT: ${TRUSTED_PROXY_COUNT:-2}
+      # Clave Fernet que cifra el secreto de la verificación en dos pasos. Generar con
+      # `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
+      TWO_FACTOR_ENCRYPTION_KEY: ${TWO_FACTOR_ENCRYPTION_KEY:-}
     volumes:
       - media_files:/app/media
     depends_on:

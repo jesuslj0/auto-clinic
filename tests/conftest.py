@@ -363,3 +363,13 @@ def reminder_a(db, clinic_a, appointment_a):
         reminder_type=Reminder.ReminderType.H24,
         scheduled_for=appointment_a.scheduled_at - timedelta(hours=24),
     )
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache():
+    """Los contadores de intentos viven en la caché: que no pasen de un test a otro."""
+    from django.core.cache import cache
+
+    cache.clear()
+    yield
+    cache.clear()
