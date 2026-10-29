@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from celery.schedules import crontab
 from decouple import Csv, config
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -242,6 +243,13 @@ CELERY_BEAT_SCHEDULE = {
     'send-whatsapp-reminders-24h': {
         'task': 'notifications.tasks.send_whatsapp_reminders_24h',
         'schedule': 900.0,
+    },
+    # Retención de chats: borra los mensajes (no las fotos) de los hilos inactivos
+    # más allá de `Clinic.conversation_retention_months`. De madrugada, fuera del
+    # horario de atención. Ver `agent/retention.py`.
+    'purge-old-conversations': {
+        'task': 'agent.tasks.purge_old_conversations',
+        'schedule': crontab(hour=3, minute=30),
     },
 }
 

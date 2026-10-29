@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 #: si el aviso cambia, hay que subirla, y así se sabe qué texto vio cada paciente.
 #: Es el texto de primera capa del art. 13 RGPD; su redacción definitiva es de la
 #: clínica y hay que revisarla con quien lleve lo legal.
-PRIVACY_NOTICE_VERSION = '2026-10-23.1'
+PRIVACY_NOTICE_VERSION = '2026-10-28.1'
 
 #: Motivo del episodio que se abre cuando nadie lo eligió y el paciente envía.
 DEFAULT_EPISODE_REASON = 'Ficha del paciente (enlace)'

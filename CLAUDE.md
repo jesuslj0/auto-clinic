@@ -230,7 +230,8 @@ clinical-photo rules, plus a few of its own — see `agent/files.py` and
 - **Irreplaceable.** One attachment per message (`OneToOne`), `save()` of an
   existing row and `delete()` raise, and a PostgreSQL trigger blocks any
   `UPDATE` (`agent/migrations/0009`). `DELETE` only happens through the cascade
-  of a deleted conversation; the bucket object is kept.
+  of a deleted conversation or the retention purge (below, voice notes only); the
+  bucket object is kept on a cascade and deleted on a purge.
 - **Intake:** `POST /api/agent/messages/<id>/media/` (multipart `file`), agent
   `Api-Key` only, inbound image/audio messages only, 201/400/409. n8n downloads
   the binary from Meta in the `WA-Media-Ingest` sub-workflow, which **saves no
@@ -306,6 +307,15 @@ WhatsApp and the panel-test path — in the `Cargar Perfil Agente` node, and pas
 the default tone. The fixed rules come *after* the block and it says it cannot
 override them. Free text is flattened to one quoted line, so it cannot open a
 new prompt section. Audited via `audit.registry`.
+
+**AI and privacy notice (fixed, not configurable).** `build_persona_prompt()` always
+adds an «AVISO OBLIGATORIO DE IA Y PRIVACIDAD»: in the first message of a conversation
+(`ES PRIMER MENSAJE=true`, new or known patient) the agent says it is an AI assistant of
+the clinic, that messages are stored and voice notes transcribed, and gives
+`Clinic.privacy_policy_url` verbatim (edited in «Clínica → Editar»; empty = it still warns, with
+no link, and is told not to invent one). The n8n prompt (`Agente IA Clinica`) carries the matching
+exceptions to its «don't mention the transcription / that you record the conversation» rules
+and asks for the notice in the first-message instructions: keep both in step.
 
 ### WhatsApp templates (`agent.WhatsAppTemplate`)
 
@@ -423,8 +433,30 @@ message as **read** in WhatsApp — Meta offers no typing without read.
 Configured in `config/celery.py`. Beat schedule runs:
 - `expire_appointment_holds` — every 10 minutes
 - `send_whatsapp_reminders_24h` — every 15 minutes (see below)
+- `purge_old_conversations` — every night at 03:30 (chat retention, see below)
 
 Broker: Redis DB 1. Result backend: Redis DB 2. Channel layer: Redis DB 0.
+
+**Chat retention (`agent/retention.py`, command `purge_conversations [--dry-run]`).**
+`Clinic.conversation_retention_months` (24, 0 = no limit; threads without a clinic use 24)
+is enforced nightly. Rules:
+
+- **Criterion = inactivity of the thread** (`last_message_at` older than the deadline), not the
+  age of each message: a thread the patient keeps writing in is never trimmed from the top.
+- **Messages go, the conversation stays.** `ConversationSession` keeps phone/patient/guardian but
+  loses `last_message_preview`, `unread_count`, `session_data` and `appointment_context` (they hold
+  thread text; clearing `last_response` also makes the agent give the AI/privacy notice again).
+  The phone's `AgentMemory` (LLM context) is deleted too.
+- **Photos are out of the purge** (decided 2026-10-29): a message carrying an image `ChatAttachment`
+  stays with its photo. Revisit when chat photos can be promoted to `Lesion`. **Voice notes go**,
+  and their bucket object is deleted `on_commit` (the cascade of a deleted conversation still keeps
+  the object; a purge must not leave the audio in R2).
+- **Audited:** each message is deleted with `instance.delete()` (a `ChangeLog` per message, `body`/`raw`
+  masked) — never `queryset.delete()` — plus one summary `ChangeLog` per clinic (counts, date range,
+  `photos_kept`; no text). Each thread is purged in its own transaction under `select_for_update`
+  and re-checked, so a patient who writes meanwhile is skipped.
+- The field is not in the clinic form yet (Django admin only); the clinic's privacy policy should
+  state the same period.
 
 **24 h reminder by WhatsApp (`notifications/whatsapp_reminders.py`).** Django sends it, not
 n8n (`WA-Reminder-24h-Scheduler` must stay off: it was an unfinished skeleton that never

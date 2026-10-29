@@ -14,6 +14,7 @@ def _payload(clinic, **overrides):
         'api_type': '', 'api_url': '',
         'hold_ttl_minutes': clinic.hold_ttl_minutes,
         'min_booking_notice_minutes': clinic.min_booking_notice_minutes,
+        'conversation_retention_months': clinic.conversation_retention_months,
     }
     data.update(overrides)
     return data

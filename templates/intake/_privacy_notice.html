@@ -24,9 +24,13 @@ queda incompleto y hay que rellenarlos en «Mi clínica».
         <dt>Tus derechos</dt>
         <dd>
             Acceso, rectificación, oposición, limitación y portabilidad, y supresión con el límite de la obligación legal de conservar la historia clínica.
-            {% if clinic.email or clinic.phone %}Puedes ejercerlos escribiendo a {{ clinic.email|default:clinic.phone }}.{% else %}Puedes ejercerlos dirigiéndote a la clínica.{% endif %}
+            {% if clinic.data_protection_contact %}Puedes ejercerlos escribiendo a {{ clinic.data_protection_contact }}.{% else %}Puedes ejercerlos dirigiéndote a la clínica.{% endif %}
             Si crees que no se han respetado, puedes reclamar ante la Agencia Española de Protección de Datos (www.aepd.es).
         </dd>
+        {% if clinic.privacy_policy_url %}
+        <dt>Más información</dt>
+        <dd><a href="{{ clinic.privacy_policy_url }}" target="_blank" rel="noopener noreferrer">Política de privacidad completa de {{ clinic.name }}</a></dd>
+        {% endif %}
         <dt>Este enlace</dt>
         <dd>No usa cookies de seguimiento ni servicios de terceros. Solo guarda una cookie técnica imprescindible para enviar el formulario con seguridad.</dd>
     </dl>

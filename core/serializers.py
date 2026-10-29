@@ -56,7 +56,7 @@ class ClinicSerializer(serializers.ModelSerializer):
         model = Clinic
         fields = (
             'clinic_id', 'name', 'nif', 'is_active',
-            'phone', 'email', 'website',
+            'phone', 'email', 'website', 'privacy_policy_url', 'privacy_contact_email',
             'address', 'city', 'province', 'postal_code', 'country',
             'timezone', 'description', 'logo_url', 'logo',
             'whatsapp_phone_number_id',

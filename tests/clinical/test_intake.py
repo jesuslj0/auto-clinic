@@ -221,6 +221,40 @@ class TestPage:
         assert not re.search(r'<script(?![^>]*\bsrc=)', html)
         assert ' style="' not in html
 
+    def test_links_the_clinic_privacy_policy_when_it_has_one(self, client, issued, clinic_a):
+        clinic_a.privacy_policy_url = 'https://clinica.example/privacidad'
+        clinic_a.save()
+        _, token = issued
+        html = client.get(fill_url(token)).content.decode()
+
+        link = re.search(r'<a [^>]*href="https://clinica\.example/privacidad"[^>]*>', html)
+        assert link and 'rel="noopener noreferrer"' in link.group(0)
+        # Es un enlace que el paciente decide pulsar: la página sigue sin cargar nada externo.
+        assert not re.search(r'(?:src|action)="https?://', html)
+        assert not re.search(r'<link [^>]*href="https?://', html)
+
+    def test_has_no_policy_link_without_one(self, client, issued):
+        _, token = issued
+        assert 'Política de privacidad completa' not in client.get(fill_url(token)).content.decode()
+
+    def test_rights_contact_prefers_the_data_protection_email(self, client, issued, clinic_a):
+        clinic_a.email = 'recepcion@clinica.example'
+        clinic_a.privacy_contact_email = 'dpd@clinica.example'
+        clinic_a.save()
+        _, token = issued
+        html = client.get(fill_url(token)).content.decode()
+
+        assert 'escribiendo a dpd@clinica.example' in html
+        assert 'recepcion@clinica.example' not in html
+
+    def test_rights_contact_falls_back_to_the_general_email(self, client, issued, clinic_a):
+        clinic_a.email = 'recepcion@clinica.example'
+        clinic_a.privacy_contact_email = ''
+        clinic_a.save()
+        _, token = issued
+
+        assert 'escribiendo a recepcion@clinica.example' in client.get(fill_url(token)).content.decode()
+
     def test_the_form_post_passes_csrf_with_a_browser_style_origin(self, issued, published_version_a):
         """Con `Referrer-Policy: no-referrer` Chrome manda `Origin: null` y se rechazaría."""
         from django.test import Client
