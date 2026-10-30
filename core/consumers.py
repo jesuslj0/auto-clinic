@@ -2,7 +2,6 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 
 from core.realtime import clinic_group_name
-from core.two_factor import VERIFIED_KEY, requires_two_factor
 
 # Códigos de cierre propios (rango 4000-4999, reservado a la aplicación). El
 # cliente los usa para distinguir "no reintentes" de un corte de red.
@@ -17,6 +16,12 @@ def _missing_second_factor(user, session) -> bool:
     El middleware HTTP cierra esas sesiones, pero un socket abierto con una cookie
     anterior a activar la verificación no pasa por él.
     """
+    # Import perezoso a propósito: `config/asgi.py` importa los routings (y con ellos
+    # este módulo) ANTES de `get_asgi_application()`, es decir, antes de que las apps
+    # estén cargadas, y `core.two_factor` arrastra los modelos. A nivel de módulo,
+    # `daphne` muere al arrancar con `AppRegistryNotReady`.
+    from core.two_factor import VERIFIED_KEY, requires_two_factor
+
     verified = bool(session and session.get(VERIFIED_KEY))
     return not verified and requires_two_factor(user)
 
