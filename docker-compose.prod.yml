@@ -153,6 +153,31 @@ services:
       redis:
         condition: service_healthy
 
+  # Copia diaria cifrada de PostgreSQL a Backblaze B2. Ver backup/README.md.
+  # Sin BACKUP_AGE_RECIPIENT ni claves de B2 el contenedor no tiene nada que hacer
+  # y cada copia falla avisando (no tumba al resto de servicios).
+  backup:
+    image: ghcr.io/jesuslj0/auto-clinic-backup:prod
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Madrid
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      B2_KEY_ID: ${B2_KEY_ID}
+      B2_APPLICATION_KEY: ${B2_APPLICATION_KEY}
+      B2_BUCKET: ${B2_BUCKET}
+      # Clave PÚBLICA de age (age1…). La privada no vive en el servidor.
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT}
+      BACKUP_TIME: ${BACKUP_TIME:-02:30}
+      BACKUP_ON_START: ${BACKUP_ON_START:-false}
+      BACKUP_PING_URL: ${BACKUP_PING_URL:-}
+    depends_on:
+      db:
+        condition: service_healthy
+
 networks:
   coolify:
     external: true

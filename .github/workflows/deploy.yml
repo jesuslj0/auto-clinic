@@ -13,6 +13,7 @@ concurrency:
 env:
   IMAGE_WEB: ghcr.io/jesuslj0/auto-clinic
   IMAGE_NGINX: ghcr.io/jesuslj0/auto-clinic-nginx
+  IMAGE_BACKUP: ghcr.io/jesuslj0/auto-clinic-backup
 
 jobs:
   build-and-deploy:
@@ -52,6 +53,17 @@ jobs:
             ${{ env.IMAGE_NGINX }}:${{ github.sha }}
           cache-from: type=gha,scope=nginx
           cache-to: type=gha,scope=nginx,mode=max
+
+      - name: Build y push de backup
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backup
+          push: true
+          tags: |
+            ${{ env.IMAGE_BACKUP }}:prod
+            ${{ env.IMAGE_BACKUP }}:${{ github.sha }}
+          cache-from: type=gha,scope=backup
+          cache-to: type=gha,scope=backup,mode=max
 
       - name: Disparar deploy en Coolify
         run: |
