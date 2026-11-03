@@ -106,9 +106,15 @@ y el fichero en *Browse Files* del bucket. Después **quita `BACKUP_ON_START`**.
 
 ## Restaurar
 
-Hazlo en tu máquina (o en una de pruebas), nunca descifrando en el servidor. Necesitas
-`rclone`, `age` y `pg_restore` (cliente 16), la clave privada y una clave de B2 **de lectura**
-(crea otra con `listBuckets,listFiles,readFiles`; no reutilices la del servidor).
+Todo se hace en tu máquina, nunca descifrando en el servidor. Hacen falta `rclone`, `age`,
+`pg_restore` (cliente 16), la clave privada `autoclinic-backup.key` y una clave de B2
+**de lectura**, distinta de la del servidor y guardada fuera de Coolify:
+
+```bash
+b2 key create --bucket <BUCKET> autoclinic-restore listBuckets,listFiles,readFiles
+```
+
+(En la web vale «Read Only» limitada al bucket.) Descargar y descifrar:
 
 ```bash
 export RCLONE_CONFIG_B2_TYPE=b2
@@ -116,24 +122,69 @@ export RCLONE_CONFIG_B2_ACCOUNT=<keyID de lectura>
 export RCLONE_CONFIG_B2_KEY=<applicationKey de lectura>
 export RCLONE_B2_NO_CHECK_BUCKET=true
 
-rclone lsf -R b2:<BUCKET>/db | sort | tail          # elegir copia
+rclone lsf -R b2:<BUCKET>/db | sort | tail -5         # elegir copia
 rclone copyto b2:<BUCKET>/db/2026/11/clinic-20261103T013000Z.dump.age copia.dump.age
-
-age -d -i autoclinic-backup.key copia.dump.age > copia.dump
+age -d -i ~/secretos/autoclinic-backup.key copia.dump.age > copia.dump
 pg_restore -l copia.dump | head                       # ver que es legible
-
-createdb clinic_restaurada
-pg_restore -d clinic_restaurada --no-owner copia.dump
 ```
 
-Para volcarla sobre producción (desastre real) hay que parar `web`, `celery` y
-`celery-beat`, vaciar o recrear la base y restaurar con `pg_restore --clean --if-exists`;
-el trigger que blinda las notas firmadas (`clinical/migrations/0002`) se restaura con el
-volcado. Después, `python manage.py migrate` por si la copia es de una versión anterior.
+### Caso 1 · Prueba de restauración (tras la puesta en marcha y cada trimestre)
 
-**Una copia que nunca se ha restaurado no es una copia.** Repite este procedimiento sobre
-una base de pruebas tras la puesta en marcha y luego cada trimestre, y comprueba que
-`select count(*)` de pacientes y notas coincide con lo esperado.
+Cargar la copia en un Postgres desechable; no toca producción.
+
+```bash
+docker run -d --name pg-prueba -e POSTGRES_PASSWORD=x -e POSTGRES_DB=clinic_restaurada postgres:16-alpine
+sleep 5
+docker cp copia.dump pg-prueba:/tmp/copia.dump
+docker exec pg-prueba pg_restore -U postgres -d clinic_restaurada --no-owner /tmp/copia.dump
+docker exec pg-prueba psql -U postgres -d clinic_restaurada \
+  -c "select count(*) from patients_patient; select count(*) from clinical_clinicalnote;"
+docker rm -f pg-prueba
+```
+
+Los recuentos deben coincidir con lo esperado. **Una copia que nunca se ha restaurado no es
+una copia.**
+
+### Caso 2 · Pérdida parcial (se borró un paciente, una nota, una cita…)
+
+**No restaurar sobre producción.** Primero mirar si el dato sigue ahí con `deleted_at`
+relleno (casi todo es borrado lógico). Si no, hacer el Caso 1 con una copia anterior al
+problema, localizar las filas en esa base temporal y recuperarlas a mano en producción.
+Así no se pierde lo hecho desde la copia.
+
+### Caso 3 · Desastre (base corrupta o borrada, servidor perdido)
+
+Es el único que pisa producción y pierde lo escrito desde la última copia (hasta 24 h).
+
+1. En Coolify, **parar** `web`, `celery`, `celery-beat` y `backup`. Dejar `db` en marcha.
+   Si el servidor se perdió, levantar el compose en uno nuevo con las mismas variables.
+2. **Guardar el estado actual**, aunque esté dañado (en el servidor, como root):
+   `docker exec <contenedor_db> pg_dump -U <POSTGRES_USER> -Fc <POSTGRES_DB> > /root/antes_de_restaurar.dump`
+3. Subir `copia.dump` al servidor (`scp`).
+4. Vaciar y restaurar:
+   ```bash
+   docker cp /root/copia.dump <contenedor_db>:/tmp/copia.dump
+   docker exec <contenedor_db> psql -U <POSTGRES_USER> -d <POSTGRES_DB> \
+     -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+   docker exec <contenedor_db> pg_restore -U <POSTGRES_USER> -d <POSTGRES_DB> --no-owner /tmp/copia.dump
+   docker exec <contenedor_db> rm /tmp/copia.dump
+   ```
+   Borrar también `/root/copia.dump` del servidor: está sin cifrar.
+5. Arrancar `web` (su comando ya ejecuta `migrate`). Comprobar pacientes y notas; el trigger
+   que blinda las notas firmadas (`clinical/migrations/0002`) viaja en el volcado.
+6. Arrancar `celery`. **`celery-beat` el último**, tras revisar las citas de las próximas
+   24 h: al volver atrás también retroceden las marcas de «recordatorio enviado»
+   (`reminder_24h_sent`) y los `event_id` de los avisos de cita, y los WhatsApp podrían
+   reenviarse a pacientes que ya los recibieron.
+7. Arrancar `backup` y forzar una copia nueva (`BACKUP_ON_START=true` una vez).
+
+### Lo que la copia no trae
+
+- `SECRET_KEY` y `TWO_FACTOR_ENCRYPTION_KEY` viven en Coolify, no en la base. Sin la
+  segunda, los secretos de 2FA guardados son ilegibles y habría que resetear a todos.
+  Guardar copia de esas variables en el gestor de contraseñas.
+- Lo escrito entre la última copia y el incidente. Para reducir ese margen, acortar el
+  intervalo en `run.sh` (p. ej. cada 6 h); para minutos haría falta archivado WAL.
 
 ## Lo que NO cubre
 
