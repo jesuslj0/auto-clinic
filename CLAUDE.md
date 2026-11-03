@@ -723,10 +723,11 @@ reinicia. Flujo:
 
 1. Push a la rama `prod` (se llega con `git merge main` en `prod`; `main` no
    despliega nada).
-2. `.github/workflows/deploy.yml` construye dos imágenes con caché de capas y las
+2. `.github/workflows/deploy.yml` construye tres imágenes con caché de capas y las
    sube a GHCR con los tags `:prod` y `:<sha>`: `ghcr.io/jesuslj0/auto-clinic`
-   (Django; la usan `web`, `celery` y `celery-beat`) y
-   `ghcr.io/jesuslj0/auto-clinic-nginx`.
+   (Django; la usan `web`, `celery` y `celery-beat`),
+   `ghcr.io/jesuslj0/auto-clinic-nginx` y `ghcr.io/jesuslj0/auto-clinic-backup`
+   (copias de la base de datos, ver abajo).
 3. El último paso llama a la API de Coolify
    (`/api/v1/deploy?uuid=…`). Coolify relee `docker-compose.prod.yml` de `prod`,
    hace `pull` (`pull_policy: always`) y recrea los contenedores.
@@ -753,10 +754,30 @@ Reglas:
   Actions seguirá en verde pero el `pull` fallará con `unauthorized`. Renovar y
   repetir el `docker login`.
 - **Rollback**: cada imagen lleva su `sha`. Cambiar `:prod` por `:<sha>` en los
-  cuatro servicios de `docker-compose.prod.yml`, push a `prod` y redesplegar.
+  cinco servicios de `docker-compose.prod.yml`, push a `prod` y redesplegar.
 - Los tags `:<sha>` se acumulan en GHCR; limpiarlos de vez en cuando
   (*Packages → Package settings*). En el servidor, *Force Docker Cleanup*
   de Coolify retira las capas antiguas.
+
+### Copias de seguridad de la base de datos (`backup/`)
+
+Servicio `backup` de `docker-compose.prod.yml`, imagen propia sobre `postgres:16-alpine`
+(el `pg_dump` ha de ser de la misma versión que `db`; la imagen de Django no lo trae).
+Cada noche (`BACKUP_TIME`, 02:30 Madrid): `pg_dump -Fc` → `pg_restore -l` → **cifrado con
+age** → subida a Backblaze B2 (`db/AAAA/MM/`, y `monthly/` el día 1). Pasos de puesta en
+marcha, restauración y límites en `backup/README.md`. Reglas:
+
+- **Se cifra antes de salir del servidor, con clave pública.** En producción solo está
+  `BACKUP_AGE_RECIPIENT` (`age1…`); la clave privada vive fuera, y sin ella las copias no
+  se abren. Nunca subir un volcado sin cifrar: son datos de salud.
+- **La retención la hace B2** (reglas de ciclo de vida por prefijo), no el servidor. La clave
+  de B2 del servidor es solo `listBuckets,listFiles,writeFiles` (sin borrar ni leer); para
+  restaurar se usa otra de lectura, en la máquina de quien restaura.
+- **Cubre solo PostgreSQL.** Las fotos clínicas, firmas y adjuntos de WhatsApp (bucket
+  privado de R2) no tienen copia todavía.
+- Variables en Coolify: `B2_KEY_ID`, `B2_APPLICATION_KEY`, `B2_BUCKET`,
+  `BACKUP_AGE_RECIPIENT`; opcionales `BACKUP_TIME`, `BACKUP_ON_START` (solo para la primera
+  prueba) y `BACKUP_PING_URL` (healthchecks.io: avisa si la copia deja de llegar).
 
 Fallos típicos del último paso del workflow: `401` = token, `404` = UUID, error de
 conexión = `COOLIFY_URL`. `manifest unknown` en Coolify = intentó bajar la imagen
