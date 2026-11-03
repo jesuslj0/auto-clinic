@@ -138,8 +138,8 @@ sleep 5
 docker cp copia.dump pg-prueba:/tmp/copia.dump
 docker exec pg-prueba pg_restore -U postgres -d clinic_restaurada --no-owner /tmp/copia.dump
 docker exec pg-prueba psql -U postgres -d clinic_restaurada \
-  -c "select count(*) from patients_patient; select count(*) from clinical_clinicalnote;"
-docker rm -f pg-prueba
+  -c "select count(*) from patients_patient; select count(*) from clinical_note;"
+docker rm -fv pg-prueba    # -v borra también el volumen con los datos
 ```
 
 Los recuentos deben coincidir con lo esperado. **Una copia que nunca se ha restaurado no es
