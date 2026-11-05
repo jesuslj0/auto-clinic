@@ -44,7 +44,7 @@ from billing.forms import (
 from billing.models import PatientInvoice, Payment, Subscription
 from billing.serializers import SubscriptionSerializer
 from core.managers import ProtectedRecordError
-from core.mixins import ExportMixin
+from core.mixins import ClinicAdminRequiredMixin, ExportMixin, is_clinic_admin
 from core.permissions import IsClinicAdminOrReadOnly
 from patients.models import Patient
 
@@ -268,6 +268,9 @@ class PatientInvoiceCreateView(
         kwargs = super().get_form_kwargs()
         kwargs['user'] = self.request.user
         kwargs['patient'] = self.get_patient()
+        # Emitir es cosa de administradores: al resto el formulario ni le ofrece
+        # la casilla (y aunque la fuerce en el POST, el campo no existe).
+        kwargs['can_issue'] = is_clinic_admin(self.request.user)
         return kwargs
 
     def get_context_data(self, **kwargs):
@@ -277,6 +280,7 @@ class PatientInvoiceCreateView(
             'section': 'billing',
             'locked_patient': form.locked_patient,
             'selected_patient': form.selected_patient,
+            'can_manage_billing': is_clinic_admin(self.request.user),
             # La lista que se pinta con casillas. Se pasa aparte del campo para
             # poder enseñar de cada procedimiento lo que ayuda a decidir —fecha,
             # zona, importe congelado— en vez de una etiqueta suelta.
@@ -308,7 +312,7 @@ class PatientInvoiceCreateView(
         try:
             for procedure in form.cleaned_data['procedures']:
                 invoice.add_procedure(procedure)
-            if form.cleaned_data['issue_now']:
+            if form.cleaned_data.get('issue_now'):
                 invoice.issue()
         except (DjangoValidationError, EmptyInvoice, InvoiceNotDraft) as exc:
             # La transacción se deshace sola al propagar; aquí solo se traduce el
@@ -404,6 +408,10 @@ class PatientInvoiceDetailView(
         context = super().get_context_data(**kwargs)
         invoice = self.object
         context['section'] = 'billing'
+        # Emitir y anular son de administradores (cobrar lo puede cualquiera). Se
+        # pregunta aquí lo mismo que comprueban después las vistas: un botón que
+        # lleva a un 403 es una trampa.
+        context['can_manage_billing'] = is_clinic_admin(self.request.user)
         context['void_form'] = InvoiceVoidForm()
         context['payment_form'] = PaymentForm()
         context['payment_methods'] = Payment.Method.choices
@@ -523,8 +531,11 @@ class InvoiceActionMixin(InvoiceScopedMixin, LoginRequiredMixin, SingleObjectMix
         raise NotImplementedError
 
 
-class InvoiceIssueView(InvoiceActionMixin):
-    """Emite el borrador: toma número, congela importe y líneas, y lo cierra."""
+class InvoiceIssueView(ClinicAdminRequiredMixin, InvoiceActionMixin):
+    """Emite el borrador: toma número, congela importe y líneas, y lo cierra.
+
+    Solo administradores: gasta un número de la serie correlativa y no se deshace.
+    """
 
     def perform(self, request):
         invoice = self.object.issue()
@@ -532,8 +543,8 @@ class InvoiceIssueView(InvoiceActionMixin):
         return redirect('billing:invoice-detail', pk=invoice.pk)
 
 
-class InvoiceVoidView(InvoiceActionMixin):
-    """Anula una factura emitida, con su motivo.
+class InvoiceVoidView(ClinicAdminRequiredMixin, InvoiceActionMixin):
+    """Anula una factura emitida, con su motivo. Solo administradores.
 
     No corrige nada: el número se queda gastado, el documento sigue legible y sus
     procedimientos vuelven a estar pendientes de facturar.
@@ -587,6 +598,13 @@ class InvoiceProcedureView(InvoiceActionMixin):
 
 class InvoicePaymentCreateView(InvoiceActionMixin):
     """Registra un cobro contra una factura emitida.
+
+    Lo puede hacer cualquier usuario de la clínica, no solo los administradores:
+    quien está en recepción es quien recibe el dinero. Es seguro dejarlo abierto
+    porque un cobro no cierra ni deshace nada —no se puede cobrar más de lo que
+    se debe, solo contra facturas emitidas— y queda a nombre de quien lo registra
+    (`created_by` y su nombre congelado). Emitir y anular, que sí son irreversibles
+    sobre la serie, siguen siendo de administradores.
 
     La vista no valida nada del dominio: construye el `Payment` y deja hablar al
     `save()` del modelo. Ahí está el `select_for_update()` sobre la factura, que

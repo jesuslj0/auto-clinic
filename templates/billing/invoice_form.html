@@ -88,6 +88,7 @@ camino sería otra factura.
             </div>
 
             {# --- Emitir o dejar en borrador --- #}
+            {% if can_manage_billing %}
             <div class="rounded-2xl bg-muted px-4 py-4 ring-1 ring-line">
                 <label class="flex cursor-pointer items-start gap-3">
                     <input type="checkbox" name="issue_now" value="on" {% if form.issue_now.value %}checked{% endif %}
@@ -100,6 +101,13 @@ camino sería otra factura.
                     </span>
                 </label>
             </div>
+            {% else %}
+            {# Emitir gasta un número de la serie: solo administradores. #}
+            <div class="rounded-2xl bg-muted px-4 py-4 ring-1 ring-line">
+                <p class="text-sm font-medium text-content">Se guardará como borrador</p>
+                <p class="mt-1 text-xs text-content-subtle">Emitir la factura la numera y la cierra, y solo pueden hacerlo los administradores de la clínica. Podrás seguir añadiendo procedimientos mientras tanto.</p>
+            </div>
+            {% endif %}
 
             <div class="flex items-center justify-between gap-3 pt-2">
                 <a href="{% if locked_patient %}{% url 'patients:tab-procedures' locked_patient.id %}{% else %}{% url 'billing:invoice-list' %}{% endif %}" class="btn-secondary">Cancelar</a>

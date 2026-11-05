@@ -323,6 +323,9 @@ Los cobros son documentos aparte, con su propio número de recibo. Una factura
 puede cobrarse en varias veces, y el listado distingue impagada, parcial y
 pagada. Los métodos son tarjeta, transferencia, Bizum y efectivo.
 
+Emitir y anular son acciones de administrador: el personal administrativo prepara
+borradores, consulta y registra cobros, pero no cierra ni anula documentos.
+
 Hay dos protecciones que conviene mencionar porque son las que fallan en los
 programas caseros: **no se puede cobrar más de lo que se debe**, ni siquiera con
 dos cobros simultáneos, y **no se puede anular una factura que ya tiene cobros**.

@@ -43,6 +43,7 @@ from billing.exceptions import (
 from billing.managers import (
     PatientInvoiceManager,
     PaymentManager,
+    clinic_zone,
     next_invoice_number,
     next_receipt_number,
 )
@@ -353,8 +354,11 @@ class PatientInvoice(SoftDeleteModel, TimeStampedModel):
         ).quantize(Decimal('0.01'))
         self.frozen_patient_name = str(self.patient)
         self._freeze_author_name()
-        self.number = next_invoice_number(self.clinic)
-        self.issued_at = timezone.now()
+        # Un solo instante para el número y la fecha: así el año de la serie y el
+        # de `issued_at` no pueden quedar a ambos lados de un cambio de año.
+        now = timezone.now()
+        self.number = next_invoice_number(self.clinic, now)
+        self.issued_at = now
         self.status = self.Status.ISSUED
         self.save()
         return self
@@ -674,6 +678,29 @@ class Payment(SoftDeleteModel, TimeStampedModel):
 
     # -- Alta --------------------------------------------------------------
 
+    def _validate_paid_at(self, invoice):
+        """El dinero no puede haber entrado en el futuro ni antes de que hubiera factura.
+
+        Lo segundo se mide por DÍA en el calendario de la clínica, no por instante:
+        cobrar a las 10:00 en consulta y emitir la factura a las 10:30 es lo normal,
+        y rechazarlo obligaría a falsear la hora. Lo que no tiene sentido es un
+        recibo fechado en un día en que la factura aún no existía.
+        """
+        if self.paid_at is None:
+            raise ValidationError({'paid_at': 'Un cobro necesita su fecha.'})
+        if self.paid_at > timezone.now():
+            raise ValidationError({
+                'paid_at': 'La fecha del cobro no puede estar en el futuro.'
+            })
+        if invoice.issued_at is not None:
+            zone = clinic_zone(invoice.clinic)
+            issued_day = invoice.issued_at.astimezone(zone).date()
+            if self.paid_at.astimezone(zone).date() < issued_day:
+                raise ValidationError({
+                    'paid_at': f'La factura se emitió el {issued_day:%d/%m/%Y}: '
+                               f'el cobro no puede ser anterior.'
+                })
+
     def _prepare_receipt(self):
         """Valida el cobro contra la factura y congela la copia. Solo en el alta.
 
@@ -716,6 +743,8 @@ class Payment(SoftDeleteModel, TimeStampedModel):
 
         if self.amount is None:
             raise ValidationError({'amount': 'Un cobro necesita su importe.'})
+
+        self._validate_paid_at(invoice)
 
         collected = invoice.amount_collected
         if collected + self.amount > invoice.total:

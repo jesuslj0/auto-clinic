@@ -79,8 +79,13 @@ class PatientInvoiceForm(forms.Form):
                   'editarse. Si lo dejas sin marcar, se guarda como borrador.',
     )
 
-    def __init__(self, *args, user, patient=None, **kwargs):
+    def __init__(self, *args, user, patient=None, can_issue=True, **kwargs):
         """`user` acota la clínica; `patient`, si viene, fija el destinatario.
+
+        `can_issue` es si quien rellena el formulario puede emitir (los
+        administradores). Sin permiso la casilla «emitir» **no existe** en el
+        formulario, en vez de existir y ignorarse: lo que no se ofrece tampoco se
+        puede forzar a mano en el POST, y la vista solo lee `issue_now` si está.
 
         `patient` llega cuando se factura desde la ficha de alguien concreto: en
         ese caso el campo se deja deshabilitado y su valor se impone en
@@ -89,6 +94,8 @@ class PatientInvoiceForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.user = user
         self.locked_patient = patient
+        if not can_issue:
+            del self.fields['issue_now']
 
         patients = Patient.objects.all()
         if user.clinic_id:

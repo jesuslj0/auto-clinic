@@ -15,6 +15,7 @@
   consulta con la que se construye una factura, así que vive aquí.
 """
 from decimal import Decimal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.db import models, transaction
 from django.db.models import (
@@ -28,6 +29,7 @@ from django.db.models import (
     When,
 )
 from django.db.models.functions import Coalesce
+from django.utils import timezone
 
 from core.managers import SoftDeleteQuerySet
 
@@ -164,7 +166,29 @@ def unbilled_procedures(patient):
     ).order_by('performed_at', 'id')
 
 
-def next_invoice_number(clinic) -> str:
+def clinic_zone(clinic):
+    """Zona horaria de la clínica; la del proyecto si la suya no es válida.
+
+    El calendario de una clínica es el suyo, no el UTC en que se guardan los
+    instantes. Una zona mal escrita no puede impedir facturar, así que cae a la
+    del proyecto en vez de reventar.
+    """
+    try:
+        return ZoneInfo(clinic.timezone)
+    except (ZoneInfoNotFoundError, ValueError, KeyError):
+        return timezone.get_current_timezone()
+
+
+def series_year(clinic, now=None) -> int:
+    """Año de la serie en la que cae `now`, contado en el calendario de la clínica.
+
+    Con `timezone.now().year` (UTC) una factura emitida el 1 de enero a las 00:30
+    en Madrid tomaba número del año anterior, a pesar de llevar fecha de enero.
+    """
+    return (now or timezone.now()).astimezone(clinic_zone(clinic)).year
+
+
+def next_invoice_number(clinic, now=None) -> str:
     """Siguiente número de factura para `clinic`: ``F-{año}-{correlativo}``.
 
     El correlativo se reinicia por año y es único dentro de la clínica —cada
@@ -173,12 +197,14 @@ def next_invoice_number(clinic) -> str:
     (`select_for_update`) para que dos emisiones concurrentes no obtengan el
     mismo número; el `unique_together=(clinic, number)` de la factura es la red
     de seguridad.
-    """
-    from django.utils import timezone
 
+    El año es el del calendario de la clínica (`series_year`). `now` permite a
+    quien emite fijar el instante una sola vez: así número y `issued_at` no
+    pueden caer a ambos lados de un cambio de año.
+    """
     from billing.models import InvoiceSequence
 
-    year = timezone.now().year
+    year = series_year(clinic, now)
     with transaction.atomic():
         sequence, _ = (
             InvoiceSequence.objects.select_for_update()
@@ -190,7 +216,7 @@ def next_invoice_number(clinic) -> str:
     return f'F-{year}-{sequence.last_value:05d}'
 
 
-def next_receipt_number(clinic) -> str:
+def next_receipt_number(clinic, now=None) -> str:
     """Siguiente número de recibo para `clinic`: ``R-{año}-{correlativo}``.
 
     Serie propia, separada de la de facturas: un recibo prueba que entró el
@@ -198,13 +224,12 @@ def next_receipt_number(clinic) -> str:
     los dos. Por lo demás, mismo mecanismo que `next_invoice_number` —contador
     con bloqueo de fila y `unique_together=(clinic, receipt_number)` como red de
     seguridad—, y por el mismo motivo: dos cobros simultáneos no pueden llevarse
-    el mismo número.
+    el mismo número. El año es el de CUANDO SE REGISTRA el recibo, no el de
+    `paid_at`: la serie es correlativa en el orden en que se emiten.
     """
-    from django.utils import timezone
-
     from billing.models import ReceiptSequence
 
-    year = timezone.now().year
+    year = series_year(clinic, now)
     with transaction.atomic():
         sequence, _ = (
             ReceiptSequence.objects.select_for_update()

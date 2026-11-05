@@ -85,13 +85,17 @@ def test_la_fecha_vacia_toma_el_momento_del_cobro(panel, issued_invoice_a):
 
 @pytest.mark.django_db
 def test_una_fecha_tecleada_se_respeta(panel, issued_invoice_a):
-    """El dinero pudo entrar ayer y registrarse hoy."""
+    """El dinero pudo entrar por la mañana y registrarse más tarde."""
+    from django.utils import timezone
+
+    # El primer minuto de hoy: ya pasó, y no es anterior al día de la emisión.
+    typed = timezone.localtime().replace(hour=0, minute=1, second=0, microsecond=0)
     panel.post(pay_url(issued_invoice_a), {
-        'amount': '20.00', 'method': 'transfer', 'paid_at': '2026-01-15T10:30',
+        'amount': '20.00', 'method': 'transfer', 'paid_at': typed.strftime('%Y-%m-%dT%H:%M'),
     })
 
     payment = Payment.objects.get()
-    assert (payment.paid_at.year, payment.paid_at.month, payment.paid_at.day) == (2026, 1, 15)
+    assert timezone.localtime(payment.paid_at) == typed
     assert payment.paid_at.tzinfo is not None
 
 
