@@ -1,39 +1,53 @@
 {% comment %}
-Pestaña «Seguridad»: la verificación en dos pasos de uno mismo (TOTP, vale
-cualquier app de autenticación). Cada acción es su propio `<form method="post">`
+Pestaña «Seguridad»: primero la contraseña y debajo la verificación en dos pasos
+de uno mismo (TOTP, vale cualquier app de autenticación). Cada acción de la
+verificación es su propio `<form method="post">`
 y vuelve a pedir contraseña y código (`core/_two_factor_reauth.html`): una sesión
 abierta en un móvil prestado no basta para quitarle el factor a su dueño.
 
 Se despliegan con `<details>`, sin JavaScript, y por lo mismo no hay fragmento
 htmx propio: son formularios normales que recargan la página.
+
+La tarjeta de contraseña es un fragmento de htmx con su propia URL
+(`core:password-change`), por eso se incluye tal cual y no lleva nada alrededor.
 {% endcomment %}
+{% include 'core/_password_form.html' %}
+
 <div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
-    <div class="flex flex-wrap items-start justify-between gap-4 border-b border-line px-4 py-6 sm:px-8">
-        <div class="flex min-w-0 items-start gap-3">
-            <span class="mt-1 inline-flex flex-shrink-0 text-brand-fg">{% include 'core/_account_icon.html' with icon='seguridad' %}</span>
-            <div>
+    {% comment %}
+    Título y estado en la misma línea, con la explicación debajo. El texto cuelga
+    con `pl-8`, que es lo que ocupa el icono (h-5) más su separación (gap-3): así
+    queda alineado con el título y no con el icono.
+    {% endcomment %}
+    <div class="border-b border-line px-4 py-6 sm:px-8">
+        <div class="flex items-center justify-between gap-3">
+            <div class="flex min-w-0 items-center gap-3">
+                <span class="inline-flex flex-shrink-0 text-brand-fg">{% include 'core/_account_icon.html' with icon='seguridad' %}</span>
                 <h2 class="text-lg font-semibold text-content">Verificación en dos pasos</h2>
-                <p class="mt-1 text-sm text-content-subtle">
-                    Además de tu contraseña, se pide un código de tu app de autenticación. Aunque alguien conozca la contraseña, no puede entrar sin tu móvil.
-                </p>
             </div>
+            {% if two_factor_active %}
+            <span class="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-xs font-medium text-success ring-1 ring-success-line">
+                <span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true"></span>
+                Activa
+            </span>
+            {% else %}
+            <span class="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-muted-strong px-2.5 py-1 text-xs font-medium text-content-muted ring-1 ring-line">
+                <span class="h-1.5 w-1.5 rounded-full bg-content-faint" aria-hidden="true"></span>
+                No activa
+            </span>
+            {% endif %}
         </div>
-        {% if two_factor_active %}
-        <span class="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-xs font-medium text-success ring-1 ring-success-line">
-            <span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true"></span>
-            Activa
-        </span>
-        {% else %}
-        <span class="inline-flex items-center gap-1.5 rounded-full bg-muted-strong px-2.5 py-1 text-xs font-medium text-content-muted ring-1 ring-line">
-            <span class="h-1.5 w-1.5 rounded-full bg-content-faint" aria-hidden="true"></span>
-            No activa
-        </span>
-        {% endif %}
+        <p class="mt-2 pl-8 text-sm text-content-subtle">
+            Además de tu contraseña, se pide un código de tu app de autenticación. Aunque alguien conozca la contraseña, no puede entrar sin tu móvil.
+        </p>
     </div>
 
     <div class="space-y-5 px-4 py-7 sm:px-8">
         {% if two_factor_required %}
-        <p class="rounded-xl bg-info-soft px-4 py-3 text-sm text-info ring-1 ring-info-line">Tu rol exige la verificación en dos pasos: no se puede desactivar.</p>
+        <p class="flex items-start gap-2.5 rounded-xl bg-info-soft px-4 py-3 text-sm text-info ring-1 ring-info-line">
+            {% include 'core/_account_icon.html' with icon='seguridad' icon_class='mt-0.5 h-5 w-5 flex-shrink-0' %}
+            <span>Tu rol exige la verificación en dos pasos: no se puede desactivar.</span>
+        </p>
         {% endif %}
 
         {% if two_factor_active %}

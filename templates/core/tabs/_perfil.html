@@ -1,23 +1,108 @@
 {% comment %}
 Pestaña «Datos profesionales»: la ficha del propio usuario.
 
-El `action` es explícito y no vacío: cuando htmx trae este panel, la URL del
-navegador la ha empujado él, y un `action` implícito ataría el envío a lo que
-hubiera en la barra de direcciones. La ficha de OTRO profesional se edita en
-`professionals:edit`, reservada a administradores.
-{% endcomment %}
-<div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+Se ve fija —en modo lectura— y un botón «Editar datos» la pasa a edición. Hay dos
+bloques en el DOM y `editing` decide cuál se ve: el resumen y el formulario de
+siempre. Si el envío vuelve con errores (`form.is_bound`) la pestaña arranca ya en
+edición, para que el error se lea donde está el campo; el `x-cloak` evita el
+parpadeo del bloque equivocado antes de que arranque Alpine.
 
-    <div class="flex items-start gap-3 border-b border-line px-4 py-6 sm:px-8">
-        <span class="mt-1 inline-flex flex-shrink-0 text-brand-fg">{% include 'core/_account_icon.html' with icon='perfil' %}</span>
-        <div>
-            <h2 class="text-lg font-semibold text-content">Datos profesionales</h2>
-            <p class="mt-1 text-sm text-content-subtle">Actualiza tu foto, tu información y los servicios que ofreces.</p>
+El `action` del formulario es explícito y no vacío: cuando htmx trae este panel,
+la URL del navegador la ha empujado él, y un `action` implícito ataría el envío a
+lo que hubiera en la barra de direcciones. La ficha de OTRO profesional se edita
+en `professionals:edit`, reservada a administradores.
+{% endcomment %}
+<div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line"
+     x-data="{ editing: {{ form.is_bound|yesno:'true,false' }} }">
+
+    <div class="flex flex-wrap items-start justify-between gap-4 border-b border-line px-4 py-6 sm:px-8">
+        <div class="flex min-w-0 items-start gap-3">
+            <span class="mt-1 inline-flex flex-shrink-0 text-brand-fg">{% include 'core/_account_icon.html' with icon='perfil' %}</span>
+            <div>
+                <h2 class="text-lg font-semibold text-content">Datos profesionales</h2>
+                <p class="mt-1 text-sm text-content-subtle">
+                    <span x-show="!editing"{% if form.is_bound %} x-cloak{% endif %}>Tu foto, tu información y los servicios que ofreces.</span>
+                    <span x-show="editing"{% if not form.is_bound %} x-cloak{% endif %}>Actualiza tu foto, tu información y los servicios que ofreces.</span>
+                </p>
+            </div>
         </div>
+        <button type="button" @click="editing = true"
+                x-show="!editing"{% if form.is_bound %} x-cloak{% endif %}
+                class="btn-secondary flex-shrink-0">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+            </svg>
+            Editar datos
+        </button>
     </div>
 
+    {# --- Modo lectura --- #}
+    <div x-show="!editing"{% if form.is_bound %} x-cloak{% endif %} class="flex flex-col gap-6 px-4 py-7 sm:flex-row sm:items-start sm:px-8">
+        {% if professional.photo %}
+        <img src="{{ professional.photo.url }}" alt="Foto de perfil" class="h-24 w-24 flex-shrink-0 self-center rounded-2xl object-cover ring-2 ring-brand-line sm:self-start">
+        {% else %}
+        <span aria-hidden="true" class="flex h-24 w-24 flex-shrink-0 items-center justify-center self-center rounded-2xl bg-brand-gradient text-3xl font-semibold text-white shadow-glow sm:self-start">
+            {{ request.user.get_full_name|default:request.user.email|make_list|first|upper }}
+        </span>
+        {% endif %}
+        <dl class="grid min-w-0 flex-1 grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
+            <div>
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Nombre</dt>
+                <dd class="mt-1 text-sm font-medium text-content">{{ request.user.get_full_name|default:"—" }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Tipo de profesional</dt>
+                <dd class="mt-1 text-sm text-content">{{ professional.professional_type_label }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Tratamiento</dt>
+                <dd class="mt-1 text-sm text-content">{{ professional.get_title_display|default:"Sin tratamiento" }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Reservas online</dt>
+                <dd class="mt-1">
+                    {% if professional.accepts_online_booking %}
+                    <span class="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-xs font-medium text-success ring-1 ring-success-line">
+                        <span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true"></span>
+                        Aceptas reservas online
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center gap-1.5 rounded-full bg-muted-strong px-2.5 py-1 text-xs font-medium text-content-muted ring-1 ring-line">
+                        <span class="h-1.5 w-1.5 rounded-full bg-content-faint" aria-hidden="true"></span>
+                        Sin reservas online
+                    </span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="sm:col-span-2">
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Presentación</dt>
+                <dd class="mt-1 whitespace-pre-line break-words text-sm text-content">{{ professional.bio|default:"—" }}</dd>
+            </div>
+            <div class="sm:col-span-2">
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Colegiación</dt>
+                <dd class="mt-1 text-sm text-content">
+                    {% if professional.license_number or professional.license_body %}
+                    {{ professional.license_number }}{% if professional.license_number and professional.license_body %} · {% endif %}{{ professional.license_body }}
+                    {% else %}—{% endif %}
+                </dd>
+            </div>
+            <div class="sm:col-span-2">
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Servicios que ofreces</dt>
+                <dd class="mt-1.5 flex flex-wrap gap-2">
+                    {% for service in professional.services.all %}
+                    <span class="inline-flex items-center rounded-full bg-brand-soft px-2.5 py-1 text-xs font-medium text-brand-fg ring-1 ring-brand-line">{{ service.name }}</span>
+                    {% empty %}
+                    <span class="text-sm text-content-subtle">Ninguno todavía.</span>
+                    {% endfor %}
+                </dd>
+            </div>
+        </dl>
+    </div>
+
+    {# --- Modo edición --- #}
     <form method="post" action="{% url 'core:account-profile' %}" enctype="multipart/form-data" novalidate
           class="space-y-6 px-4 py-7 sm:px-8"
+          x-show="editing"{% if not form.is_bound %} x-cloak{% endif %}
           x-data="dirtyForm({{ form.is_bound|yesno:'true,false' }})" @input="check()" @change="check()" @click="check()">
         {% csrf_token %}
 
@@ -31,7 +116,8 @@ hubiera en la barra de direcciones. La ficha de OTRO profesional se edita en
 
         {# Foto de perfil #}
         <div class="flex flex-col items-center gap-4 sm:flex-row sm:items-center"
-             x-data="{ preview: '{% if professional.photo %}{{ professional.photo.url }}{% endif %}' }">
+             x-data="{ preview: '{% if professional.photo %}{{ professional.photo.url }}{% endif %}', original: '{% if professional.photo %}{{ professional.photo.url }}{% endif %}' }"
+             @reset.window="preview = original">
             <template x-if="preview">
                 <img :src="preview" alt="Foto de perfil" class="h-20 w-20 flex-shrink-0 rounded-2xl object-cover ring-2 ring-brand-line">
             </template>
@@ -116,7 +202,21 @@ hubiera en la barra de direcciones. La ficha de OTRO profesional se edita en
             {% if form.accepts_online_booking.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.accepts_online_booking.errors|join:", " }}</p>{% endif %}
         </div>
 
-        <div class="flex items-center justify-end border-t border-line pt-6">
+        <div class="flex items-center justify-end gap-3 border-t border-line pt-6">
+            {% comment %}
+            Con el formulario recién cargado, «Cancelar» lo devuelve a lo guardado
+            (`reset`) y vuelve al resumen. Si viene de un envío con errores, el
+            `reset` dejaría los valores inválidos como «guardados», así que ahí
+            es un enlace que recarga la pestaña limpia.
+            {% endcomment %}
+            {% if form.is_bound %}
+            <a href="{% url 'core:account-profile' %}"
+               hx-get="{% url 'core:account-profile' %}" hx-target="#account-tab-region" hx-swap="innerHTML" hx-push-url="true"
+               class="btn-secondary">Cancelar</a>
+            {% else %}
+            <button type="button" class="btn-secondary"
+                    @click="$root.reset(); $root.dispatchEvent(new Event('change')); editing = false">Cancelar</button>
+            {% endif %}
             <button type="submit" class="btn-primary" :disabled="!dirty" :title="dirty ? null : 'No hay cambios que guardar'" {% if not form.is_bound %}disabled{% endif %}>
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />

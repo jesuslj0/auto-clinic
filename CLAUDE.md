@@ -41,7 +41,7 @@ python manage.py runserver    # Uses config.settings.dev by default
 | App | Purpose |
 |-----|---------|
 | `core` | Custom `User` model (email-based auth), `Clinic` model, `TimeStampedModel` base. Login security: attempt limiting (`login_guard.py`, `throttling.py`) and 2FA (`TOTPDevice`, `RecoveryCode`, `two_factor.py`) |
-| `patients` | Patient records, scoped per clinic |
+| `patients` | Patient records, scoped per clinic. `tax_id` (NIF/NIE/pasaporte, `patients/tax_id.py`) y la dirección (`address`, `postal_code`, `city`) son datos de facturación: opcionales, en `sensitive` de la auditoría, solo en los formularios de alta/edición — **ni en la ficha ni en la API del agente** (excluidos del serializer) |
 | `services` | Service catalog per clinic |
 | `appointments` | Appointment lifecycle, WebSocket signals, token-based public actions |
 | `notifications` | Celery beat tasks for reminder dispatch |

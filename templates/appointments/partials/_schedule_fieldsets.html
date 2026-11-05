@@ -10,7 +10,7 @@ incluye. Los formsets los construye `build_schedule_formsets()`
 mismos prefijos y la misma timezone.
 {% endcomment %}
 {% if schedule_formset %}
-{% include 'appointments/partials/_formset_section.html' with formset=schedule_formset title='Horario semanal' subtitle='Tramos en los que se atiende. Hora local de la clínica.' add_label='Añadir tramo' row_partial='appointments/partials/_schedule_row.html' empty_label='Sin horario configurado. No se ofrecerán huecos hasta que añadas alguno.' %}
+{% include 'appointments/partials/_schedule_week.html' with formset=schedule_formset %}
 {% endif %}
 
 {% if timeoff_formset %}
@@ -28,6 +28,44 @@ mismos prefijos y la misma timezone.
     // Añadir/quitar filas de los inline formsets sin recargar. No decrementamos
     // TOTAL_FORMS al eliminar: marcamos el checkbox DELETE (Django ignora las
     // filas nuevas marcadas y borra las existentes) y ocultamos la fila.
+    //
+    // El horario semanal agrupa sus tramos en bloques por día (`[data-day]`): un
+    // tramo nuevo entra en el bloque donde se pulsó «Añadir tramo» y toma su día.
+    // Las ausencias no tienen bloques y se añaden al final de su lista.
+
+    // Una fila quitada pero recuperable (`data-removed`) sigue en pantalla,
+    // atenuada, y no cuenta: lo que se va a guardar es lo que no está quitado.
+    var LIVE_ROW = '.formset-row:not(.hidden):not([data-removed])';
+
+    // «Sin atención este día» solo cuando el día no tiene ningún tramo en pie.
+    function refreshDay(day) {
+        var closed = day.querySelector('[data-day-closed]');
+        if (closed) { closed.classList.toggle('hidden', day.querySelectorAll(LIVE_ROW).length > 0); }
+    }
+
+    // El aviso «Sin …» de la lista entera, igual: visible solo si no queda nada en pie.
+    function refreshSection(section) {
+        var hint = section.querySelector('[data-formset-empty-hint]');
+        if (hint) { hint.classList.toggle('hidden', section.querySelectorAll(LIVE_ROW).length > 0); }
+    }
+
+    // Qué se pierde al quitar una fila guardada, para el aviso «Se eliminará al
+    // guardar». Sirve para un tramo («09:00 – 14:00») y para una ausencia
+    // («01/07/2026 09:00 – 15/07/2026 20:00 · Vacaciones»); el servidor escribe lo
+    // mismo cuando el formulario vuelve con errores (`removal_summary`).
+    function summarize(row) {
+        function show(value) {
+            var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})/.exec(value);
+            return m ? m[3] + '/' + m[2] + '/' + m[1] + ' ' + m[4] : value;
+        }
+        var from = row.querySelector('input[name$="-start_time"], input[name$="-starts_at"]');
+        var to = row.querySelector('input[name$="-end_time"], input[name$="-ends_at"]');
+        var text = (from ? show(from.value) : '') + ' – ' + (to ? show(to.value) : '');
+        var reason = row.querySelector('select[name$="-reason"]');
+        if (reason && reason.selectedIndex >= 0) { text += ' · ' + reason.options[reason.selectedIndex].text; }
+        return text;
+    }
+
     document.addEventListener('click', function (event) {
         var addBtn = event.target.closest('[data-formset-add]');
         if (addBtn) {
@@ -40,24 +78,62 @@ mismos prefijos y la misma timezone.
 
             var wrapper = document.createElement('div');
             wrapper.innerHTML = html.trim();
-            section.querySelector('[data-formset-rows]').appendChild(wrapper.firstChild);
+            var row = wrapper.firstChild;
+
+            var day = addBtn.closest('[data-day]');
+            if (day) {
+                var dayInput = row.querySelector('input[name$="-day_of_week"]');
+                if (dayInput) { dayInput.value = day.dataset.day; }
+                day.querySelector('[data-day-slots]').appendChild(row);
+                refreshDay(day);
+            } else {
+                section.querySelector('[data-formset-rows]').appendChild(row);
+            }
 
             total.value = index + 1;
-            var hint = section.querySelector('[data-formset-empty-hint]');
-            if (hint) { hint.classList.add('hidden'); }
+            refreshSection(section);
             return;
         }
 
         var removeBtn = event.target.closest('[data-formset-remove]');
         if (removeBtn) {
-            var row = removeBtn.closest('.formset-row');
-            var del = row.querySelector('input[name$="-DELETE"]');
-            if (del) {
-                del.checked = true;
-                row.classList.add('hidden');
+            var existing = removeBtn.closest('.formset-row');
+            var del = existing.querySelector('input[name$="-DELETE"]');
+            var owner = existing.closest('[data-day]');
+            var holder = existing.closest('[data-formset]');
+            var note = existing.querySelector('[data-removed-note]');
+            var savedId = existing.querySelector('input[name$="-id"]');
+            if (del) { del.checked = true; }
+            if (del && note && savedId && savedId.value) {
+                // Una fila ya guardada no desaparece: queda atenuada y se puede
+                // recuperar hasta que se guarde. Borrarla es irreversible.
+                var label = note.querySelector('[data-removed-label]');
+                if (label) { label.textContent = summarize(existing); }
+                existing.querySelector('[data-row-body]').classList.add('hidden');
+                note.classList.remove('hidden');
+                existing.setAttribute('data-removed', '');
+            } else if (del) {
+                existing.classList.add('hidden');
             } else {
-                row.remove();
+                existing.remove();
             }
+            if (owner) { refreshDay(owner); }
+            if (holder) { refreshSection(holder); }
+            return;
+        }
+
+        var undoBtn = event.target.closest('[data-formset-undo]');
+        if (undoBtn) {
+            var restored = undoBtn.closest('.formset-row');
+            var delBox = restored.querySelector('input[name$="-DELETE"]');
+            var home = restored.closest('[data-day]');
+            var holder2 = restored.closest('[data-formset]');
+            if (delBox) { delBox.checked = false; }
+            restored.removeAttribute('data-removed');
+            restored.querySelector('[data-row-body]').classList.remove('hidden');
+            restored.querySelector('[data-removed-note]').classList.add('hidden');
+            if (home) { refreshDay(home); }
+            if (holder2) { refreshSection(holder2); }
         }
     });
 })();

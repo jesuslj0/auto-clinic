@@ -1,0 +1,68 @@
+{% comment %}
+Horario semanal agrupado por días: un bloque por día, de lunes a domingo, con sus
+tramos uno al lado del otro (lo habitual es mañana y tarde, así que dos columnas).
+Cada día tiene su propio «Añadir tramo»; un día sin tramos se lee «Sin atención».
+
+Es el mismo formset plano de siempre (`schedules-<n>-…`): el agrupado es solo de
+pantalla (`BaseScheduleFormSet.week`). Cada tramo lleva su día en un campo oculto,
+y el JavaScript de `_schedule_fieldsets.html` lo rellena al añadir uno nuevo en un
+día. Mismo contrato de atributos `data-formset*` que `_formset_section.html`, para
+compartir ese JavaScript con las ausencias.
+{% endcomment %}
+<section class="border-t border-line pt-7" data-formset="{{ formset.prefix }}">
+    <div class="mb-4">
+        <h3 class="text-base font-semibold text-content">Horario semanal</h3>
+        <p class="mt-0.5 text-sm text-content-subtle">Tramos en los que se atiende, por día. Hora local de la clínica.</p>
+    </div>
+
+    {{ formset.management_form }}
+
+    {% for error in formset.non_form_errors %}
+    <div class="mb-3 rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line">
+        <p class="text-sm text-danger">{{ error }}</p>
+    </div>
+    {% endfor %}
+
+    <p data-formset-empty-hint class="mb-3 text-sm text-content-faint {% if formset.forms %}hidden{% endif %}">
+        Sin horario configurado. No se ofrecerán huecos hasta que añadas algún tramo.
+    </p>
+
+    <div class="space-y-3" data-formset-rows>
+        {% for day in formset.week %}
+        <div data-day="{{ day.value }}" class="rounded-2xl bg-muted p-4 ring-1 ring-line">
+            <div class="mb-3 flex items-center justify-between gap-3">
+                <h4 class="text-sm font-semibold text-content">{{ day.label }}</h4>
+                <button type="button" data-formset-add
+                    class="inline-flex flex-shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-brand-fg transition hover:bg-brand-soft">
+                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2.25" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    Añadir tramo
+                </button>
+            </div>
+            <div data-day-slots class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {% for form in day.forms %}
+                    {% include 'appointments/partials/_schedule_tramo.html' with day_value=day.value %}
+                {% endfor %}
+            </div>
+            <p data-day-closed class="text-sm text-content-faint{% if day.live %} hidden{% endif %}">Sin atención este día.</p>
+        </div>
+        {% endfor %}
+
+        {% if formset.stray_forms %}
+        <div class="rounded-2xl bg-muted p-4 ring-1 ring-line">
+            <h4 class="mb-3 text-sm font-semibold text-content">Sin día asignado</h4>
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {% for form in formset.stray_forms %}
+                    {% include 'appointments/partials/_schedule_tramo.html' with show_day=True %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    {# Plantilla para clonar un tramo nuevo. `__prefix__` se sustituye por el índice. #}
+    <template data-formset-empty>
+        {% include 'appointments/partials/_schedule_tramo.html' with form=formset.empty_form day_value='' %}
+    </template>
+</section>

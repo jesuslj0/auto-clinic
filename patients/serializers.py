@@ -17,7 +17,9 @@ class PatientSerializer(ClinicScopedSerializerMixin, serializers.ModelSerializer
         model = Patient
         # `photo` fuera: la API es la puerta del agente (n8n) y la foto solo se
         # sirve por sesión, firmada y con `AccessLog` (`patients:photo`).
-        exclude = ("photo",)
+        # `tax_id` y la dirección (`address`, `postal_code`, `city`) también: son datos de facturación que el agente no
+        # necesita, y lo que no necesita no lo puede filtrar ni escribir.
+        exclude = ("photo", "tax_id", "address", "postal_code", "city")
         read_only_fields = ("created_at", "updated_at")
 
     def create(self, validated_data):

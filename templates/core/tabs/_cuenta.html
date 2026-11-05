@@ -1,9 +1,13 @@
 {% comment %}
-Pestaña «Cuenta»: con qué te identifica la aplicación, y la contraseña.
+Pestaña «Cuenta»: con qué te identifica la aplicación, foto incluida.
 
-Los datos van en solo lectura a propósito. El nombre se edita en la pestaña de
-datos profesionales (donde vive el resto de la ficha) y el correo no se edita en
-ningún sitio: es el identificador de acceso.
+Los datos van en solo lectura a propósito. El nombre y la foto se editan en la
+pestaña de datos profesionales (donde vive el resto de la ficha) y el correo no
+se edita en ningún sitio: es el identificador de acceso. La contraseña vive en
+«Seguridad», junto a la verificación en dos pasos.
+
+La foto es la del profesional; sin ella (o sin ficha) salen las iniciales, igual
+que en la pestaña de datos profesionales.
 {% endcomment %}
 <div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
     <div class="flex items-start gap-3 border-b border-line px-4 py-6 sm:px-8">
@@ -14,8 +18,22 @@ ningún sitio: es el identificador de acceso.
         </div>
     </div>
 
-    <div class="px-4 py-7 sm:px-8">
-        <dl class="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
+    <div class="flex flex-col gap-6 px-4 py-7 sm:flex-row sm:items-start sm:px-8">
+        <div class="flex flex-shrink-0 flex-col items-center gap-2">
+            {% if professional.photo %}
+            <img src="{{ professional.photo.url }}" alt="Foto de perfil" class="h-24 w-24 rounded-2xl object-cover ring-2 ring-brand-line">
+            {% else %}
+            <span aria-hidden="true" class="flex h-24 w-24 items-center justify-center rounded-2xl bg-brand-gradient text-3xl font-semibold text-white shadow-glow">
+                {{ request.user.get_full_name|default:request.user.email|make_list|first|upper }}
+            </span>
+            {% endif %}
+            {% if professional %}
+            <a href="{% url 'core:account-profile' %}"
+               hx-get="{% url 'core:account-profile' %}" hx-target="#account-tab-region" hx-swap="innerHTML" hx-push-url="true"
+               class="text-xs font-semibold text-brand-fg hover:underline">Cambiar foto</a>
+            {% endif %}
+        </div>
+        <dl class="grid min-w-0 flex-1 grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
             <div class="sm:col-span-2">
                 <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Correo electrónico</dt>
                 <dd class="mt-1 text-sm font-medium text-content">{{ request.user.email }}</dd>
@@ -61,5 +79,3 @@ ningún sitio: es el identificador de acceso.
         </dl>
     </div>
 </div>
-
-{% include 'core/_password_form.html' %}

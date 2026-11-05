@@ -30,7 +30,18 @@ gestiona a cualquiera, aquí cada uno lo suyo, y el marcado no se duplica. El
             {% include 'appointments/partials/_schedule_fieldsets.html' %}
         </div>
 
-        <div class="flex items-center justify-end border-t border-line pt-6">
+        <div class="flex items-center justify-end gap-3 border-t border-line pt-6">
+            {% comment %}
+            «Cancelar» descarta todo lo tocado —tramos añadidos, cambiados o
+            quitados— recargando la pestaña tal como está guardada. Solo aparece
+            cuando hay algo que descartar (`dirty`); sin cambios no tiene sentido.
+            Es un enlace y no un `reset()` del formulario porque las filas se añaden
+            y se quitan con JavaScript, y un `reset` no las deshace.
+            {% endcomment %}
+            <a href="{% url 'core:account-schedule' %}"
+               hx-get="{% url 'core:account-schedule' %}" hx-target="#account-tab-region" hx-swap="innerHTML" hx-push-url="true"
+               x-show="dirty" {% if not schedule_formset.is_bound %}x-cloak{% endif %}
+               class="btn-secondary">Cancelar</a>
             <button type="submit" class="btn-primary" :disabled="!dirty" :title="dirty ? null : 'No hay cambios que guardar'" {% if not schedule_formset.is_bound %}disabled{% endif %}>
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />

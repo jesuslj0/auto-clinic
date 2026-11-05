@@ -401,8 +401,9 @@ cuenta en los mensajes sin leer.
 
 **Titular:** Cada uno gestiona lo suyo.
 
-Tres pestañas: los datos de la cuenta y el cambio de contraseña, la ficha
-profesional propia con foto y servicios, y el horario y las ausencias propias.
+Cuatro pestañas: los datos de la cuenta con la foto, la ficha profesional propia
+(se ve fija y un botón la pasa a edición), el horario y las ausencias propias, y la
+seguridad: la contraseña y, debajo, la verificación en dos pasos.
 
 El cambio de contraseña tiene límite de intentos con bloqueo temporal, y el
 cambio queda registrado en el rastro de auditoría, que es el único sitio donde

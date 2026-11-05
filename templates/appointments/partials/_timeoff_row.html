@@ -1,37 +1,64 @@
-{# Una fila del formset de ausencias. Recibe `form` (un subform o el empty_form). #}
-<div class="formset-row rounded-2xl bg-muted p-4 ring-1 ring-line">
+{% comment %}
+Una fila del formset de ausencias. Recibe `form` (un subform o el empty_form).
+
+Quitarla (la X) sigue el mismo patrón que un tramo del horario semanal
+(`_schedule_tramo.html`): si ya estaba guardada queda atenuada con «Se eliminará al
+guardar» y un «Deshacer», porque borrarla es irreversible; una que solo existía en
+pantalla se oculta sin más. El estado se reproduce si el formulario vuelve con
+errores (`removed_existing` / `removed_new`), y el JavaScript de
+`_schedule_fieldsets.html` lo gestiona en el navegador.
+{% endcomment %}
+<div class="formset-row rounded-2xl bg-muted p-4 ring-1 ring-line{% if form.removed_new %} hidden{% endif %}"{% if form.removed_existing %} data-removed{% endif %}>
     {{ form.id }}
     <div class="hidden">{{ form.DELETE }}</div>
 
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div>
-            <label class="mb-1 block text-xs font-medium text-content-subtle">Desde</label>
-            {{ form.starts_at }}
-        </div>
-        <div>
-            <label class="mb-1 block text-xs font-medium text-content-subtle">Hasta</label>
-            {{ form.ends_at }}
-        </div>
-        <div>
-            <label class="mb-1 block text-xs font-medium text-content-subtle">Motivo</label>
-            {{ form.reason }}
-        </div>
-        <div class="flex items-end gap-3">
-            <div class="flex-1">
-                <label class="mb-1 block text-xs font-medium text-content-subtle">Nota</label>
-                {{ form.note }}
+    {# Lo que se ve de una ausencia en pie. Oculto mientras está quitada, pero sus campos siguen en el formulario. #}
+    <div data-row-body{% if form.removed_existing %} class="hidden"{% endif %}>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+                <label class="mb-1 block text-xs font-medium text-content-subtle">Desde</label>
+                {{ form.starts_at }}
             </div>
-            <button type="button" data-formset-remove
-                class="mb-1 text-content-faint transition hover:text-danger" title="Eliminar ausencia">
-                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-            </button>
+            <div>
+                <label class="mb-1 block text-xs font-medium text-content-subtle">Hasta</label>
+                {{ form.ends_at }}
+            </div>
+            <div>
+                <label class="mb-1 block text-xs font-medium text-content-subtle">Motivo</label>
+                {{ form.reason }}
+            </div>
+            <div class="flex items-end gap-3">
+                <div class="flex-1">
+                    <label class="mb-1 block text-xs font-medium text-content-subtle">Nota</label>
+                    {{ form.note }}
+                </div>
+                <button type="button" data-formset-remove
+                    class="mb-1 text-content-faint transition hover:text-danger" title="Eliminar ausencia" aria-label="Eliminar ausencia">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
         </div>
+
+        {% for error in form.non_field_errors %}<p class="mt-2 text-xs text-danger">{{ error }}</p>{% endfor %}
+        {% for field in form.visible_fields %}
+            {% for error in field.errors %}<p class="mt-1 text-xs text-danger">{{ field.label }}: {{ error }}</p>{% endfor %}
+        {% endfor %}
     </div>
 
-    {% for error in form.non_field_errors %}<p class="mt-2 text-xs text-danger">{{ error }}</p>{% endfor %}
-    {% for field in form.visible_fields %}
-        {% for error in field.errors %}<p class="mt-1 text-xs text-danger">{{ field.label }}: {{ error }}</p>{% endfor %}
-    {% endfor %}
+    {# La misma ausencia, ya quitada: qué se pierde y cómo recuperarla. #}
+    <div data-removed-note class="{% if not form.removed_existing %}hidden {% endif %}flex items-center justify-between gap-3 py-1">
+        <p class="min-w-0 text-sm text-content-subtle">
+            <span class="line-through" data-removed-label>{% if form.removed_existing %}{{ form.removal_summary }}{% endif %}</span>
+            <span class="block text-xs text-danger">Se eliminará al guardar.</span>
+        </p>
+        <button type="button" data-formset-undo
+            class="inline-flex flex-shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-brand-fg transition hover:bg-brand-soft">
+            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+            </svg>
+            Deshacer
+        </button>
+    </div>
 </div>
