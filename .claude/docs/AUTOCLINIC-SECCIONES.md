@@ -323,6 +323,9 @@ Los cobros son documentos aparte, con su propio número de recibo. Una factura
 puede cobrarse en varias veces, y el listado distingue impagada, parcial y
 pagada. Los métodos son tarjeta, transferencia, Bizum y efectivo.
 
+Emitir y anular son acciones de administrador: el personal administrativo prepara
+borradores, consulta y registra cobros, pero no cierra ni anula documentos.
+
 Hay dos protecciones que conviene mencionar porque son las que fallan en los
 programas caseros: **no se puede cobrar más de lo que se debe**, ni siquiera con
 dos cobros simultáneos, y **no se puede anular una factura que ya tiene cobros**.
@@ -398,8 +401,9 @@ cuenta en los mensajes sin leer.
 
 **Titular:** Cada uno gestiona lo suyo.
 
-Tres pestañas: los datos de la cuenta y el cambio de contraseña, la ficha
-profesional propia con foto y servicios, y el horario y las ausencias propias.
+Cuatro pestañas: los datos de la cuenta con la foto, la ficha profesional propia
+(se ve fija y un botón la pasa a edición), el horario y las ausencias propias, y la
+seguridad: la contraseña y, debajo, la verificación en dos pasos.
 
 El cambio de contraseña tiene límite de intentos con bloqueo temporal, y el
 cambio queda registrado en el rastro de auditoría, que es el único sitio donde

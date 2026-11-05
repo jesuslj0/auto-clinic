@@ -1,0 +1,79 @@
+{% comment %}
+Un tramo del horario semanal, dentro del bloque de su día. Recibe `form` (un
+subform o el `empty_form`) y, opcionalmente:
+
+- `day_value`: el día al que pertenece. Viaja en un `<input type="hidden">`, así
+  que el tramo no pregunta «Día»: lo decide el bloque donde está. En un tramo
+  nuevo va vacío y el JavaScript lo rellena con el día del bloque donde se pulsó
+  «Añadir tramo».
+- `show_day`: pinta el desplegable de día en vez del oculto. Solo lo usan los
+  tramos sin un día válido (`stray_forms`), que no tienen bloque.
+
+Quitar un tramo (la X) no lo hace desaparecer de golpe: si ya estaba guardado
+queda atenuado con «Se eliminará al guardar» y un «Deshacer», porque borrarlo es
+irreversible y un clic accidental no debería costar el tramo. El borrado real
+ocurre al guardar (`DELETE` marcado). Uno que aún no se había guardado sí se
+oculta sin más. El mismo estado se reproduce si el formulario vuelve con errores
+(`removed_existing` / `removed_new`), y el JavaScript de `_schedule_fieldsets.html`
+lo gestiona en el navegador.
+{% endcomment %}
+<div class="formset-row rounded-xl bg-surface p-3 ring-1 ring-line{% if form.removed_new %} hidden{% endif %}"{% if form.removed_existing %} data-removed{% endif %}>
+    {{ form.id }}
+    {# Checkbox DELETE oculto: lo marca el botón de eliminar por JS. #}
+    <div class="hidden">{{ form.DELETE }}</div>
+
+    {% if show_day %}
+    <div class="mb-3">
+        <label class="mb-1 block text-xs font-medium text-content-subtle">Día</label>
+        {{ form.day_of_week }}
+    </div>
+    {% else %}
+    <input type="hidden" name="{{ form.day_of_week.html_name }}" id="{{ form.day_of_week.id_for_label }}" value="{{ day_value }}">
+    {% endif %}
+
+    {# Lo que se ve de un tramo en pie. Oculto mientras está quitado, pero sus campos siguen en el formulario. #}
+    <div data-row-body{% if form.removed_existing %} class="hidden"{% endif %}>
+        <div class="mb-2.5 flex items-center justify-between gap-2">
+            <label class="flex items-center gap-2 text-xs font-medium text-content-muted">
+                {{ form.is_active }} Activo
+            </label>
+            <button type="button" data-formset-remove
+                class="text-content-faint transition hover:text-danger" title="Eliminar tramo" aria-label="Eliminar tramo">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label class="mb-1 block text-xs font-medium text-content-subtle">Desde</label>
+                {{ form.start_time }}
+            </div>
+            <div>
+                <label class="mb-1 block text-xs font-medium text-content-subtle">Hasta</label>
+                {{ form.end_time }}
+            </div>
+        </div>
+
+        {% for error in form.non_field_errors %}<p class="mt-2 text-xs text-danger">{{ error }}</p>{% endfor %}
+        {% for field in form.visible_fields %}
+            {% for error in field.errors %}<p class="mt-1 text-xs text-danger">{{ field.label }}: {{ error }}</p>{% endfor %}
+        {% endfor %}
+    </div>
+
+    {# El mismo hueco, ya quitado: qué se pierde y cómo recuperarlo. #}
+    <div data-removed-note class="{% if not form.removed_existing %}hidden {% endif %}flex items-center justify-between gap-3 py-1.5">
+        <p class="min-w-0 text-sm text-content-subtle">
+            <span class="line-through" data-removed-label>{% if form.removed_existing %}{{ form.removal_summary }}{% endif %}</span>
+            <span class="block text-xs text-danger">Se eliminará al guardar.</span>
+        </p>
+        <button type="button" data-formset-undo
+            class="inline-flex flex-shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-brand-fg transition hover:bg-brand-soft">
+            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+            </svg>
+            Deshacer
+        </button>
+    </div>
+</div>

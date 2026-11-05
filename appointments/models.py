@@ -169,10 +169,20 @@ class ProfessionalTimeOff(models.Model):
     una reunión".
     """
 
+    # Solo es una etiqueta para quien lee el calendario: todos los motivos bloquean
+    # la agenda igual. `other` va el último a propósito, que es donde se espera.
+    # Las claves caben en `max_length=20`.
     class Reason(models.TextChoices):
         VACATION = 'vacation', 'Vacaciones'
         SICK_LEAVE = 'sick_leave', 'Baja'
         TRAINING = 'training', 'Formación'
+        CONGRESS = 'congress', 'Congreso'
+        MEETING = 'meeting', 'Reunión'
+        HOME_VISITS = 'home_visits', 'Visitas a domicilio'
+        PERSONAL = 'personal', 'Asuntos propios'
+        MEDICAL_APPOINTMENT = 'medical_appt', 'Cita médica'
+        PARENTAL_LEAVE = 'parental_leave', 'Maternidad o paternidad'
+        HOLIDAY = 'holiday', 'Festivo'
         OTHER = 'other', 'Otro'
 
     professional = models.ForeignKey(

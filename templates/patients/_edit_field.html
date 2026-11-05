@@ -1,0 +1,33 @@
+{% comment %}
+Un campo de texto del formulario de edición del paciente: etiqueta, input y error.
+
+Parámetros: `field` (obligatorio), `type`, `placeholder`, `maxlength`, `inputmode`,
+`autocomplete`, `optional` (añade «(opcional)» a la etiqueta), `span` (clases de
+rejilla del contenedor, p. ej. «sm:col-span-2») y `hint` (ayuda que se oculta si
+hay error).
+
+El valor de una fecha se pinta en ISO (`Y-m-d`), que es lo que entiende un
+`<input type="date">`; el resto de valores salen tal cual. Un valor ausente es
+una cadena vacía, nunca «None».
+{% endcomment %}
+<div{% if span %} class="{{ span }}"{% endif %}>
+    <label for="{{ field.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">
+        {{ field.label }}{% if optional %} <span class="font-normal text-content-faint">(opcional)</span>{% endif %}
+    </label>
+    <input
+        type="{{ type|default:'text' }}"
+        name="{{ field.html_name }}"
+        id="{{ field.id_for_label }}"
+        value="{% if field.value.year %}{{ field.value|date:'Y-m-d' }}{% else %}{{ field.value|default:'' }}{% endif %}"
+        {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+        {% if maxlength %}maxlength="{{ maxlength }}"{% endif %}
+        {% if inputmode %}inputmode="{{ inputmode }}"{% endif %}
+        {% if autocomplete %}autocomplete="{{ autocomplete }}"{% endif %}
+        class="block w-full rounded-xl border {% if field.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
+    >
+    {% if field.errors %}
+    <p class="mt-1.5 text-xs text-danger">{{ field.errors|join:", " }}</p>
+    {% elif hint %}
+    <p class="mt-1.5 text-xs text-content-faint">{{ hint }}</p>
+    {% endif %}
+</div>

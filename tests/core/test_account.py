@@ -97,7 +97,10 @@ def test_a_user_without_a_professional_only_sees_the_account_tabs(client, superu
 
     assert response.status_code == 200
     assert [tab['key'] for tab in response.context['account_tabs']] == ['cuenta', 'seguridad']
-    assert 'id="password-card"' in response.content.decode()
+    # La contraseña vive en «Seguridad»; sin ficha de profesional sigue ahí.
+    security = client.get('/cuenta/seguridad/')
+    assert security.status_code == 200
+    assert 'id="password-card"' in security.content.decode()
 
 
 @pytest.mark.django_db

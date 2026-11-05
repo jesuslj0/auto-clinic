@@ -41,11 +41,11 @@ python manage.py runserver    # Uses config.settings.dev by default
 | App | Purpose |
 |-----|---------|
 | `core` | Custom `User` model (email-based auth), `Clinic` model, `TimeStampedModel` base. Login security: attempt limiting (`login_guard.py`, `throttling.py`) and 2FA (`TOTPDevice`, `RecoveryCode`, `two_factor.py`) |
-| `patients` | Patient records, scoped per clinic |
+| `patients` | Patient records, scoped per clinic. `tax_id` (NIF/NIE/pasaporte, `patients/tax_id.py`) y la dirección (`address`, `postal_code`, `city`) son datos de facturación: opcionales, en `sensitive` de la auditoría, solo en los formularios de alta/edición — **ni en la ficha ni en la API del agente** (excluidos del serializer) |
 | `services` | Service catalog per clinic |
 | `appointments` | Appointment lifecycle, WebSocket signals, token-based public actions |
 | `notifications` | Celery beat tasks for reminder dispatch |
-| `billing` | `Subscription` (planes de la clínica) y `PatientInvoice`: factura de paciente que agrupa `PerformedProcedure`. Borrador editable; al emitir copia sus líneas (`lines`), congela `total`, toma número de la serie de su clínica (`InvoiceSequence`) y no vuelve a mirar los procedimientos. No se corrige: se anula (`void()`) y se emite otra |
+| `billing` | `Subscription` (planes de la clínica) y `PatientInvoice`: factura de paciente que agrupa `PerformedProcedure`. Borrador editable; al emitir copia sus líneas (`lines`), congela `total`, toma número de la serie de su clínica (`InvoiceSequence`) y no vuelve a mirar los procedimientos. No se corrige: se anula (`void()`) y se emite otra. **Emitir y anular son solo de administradores** (`ClinicAdminRequiredMixin`: gastan número de la serie y no se deshacen); el staff prepara borradores, los lee y **cobra** (el cobro no cierra nada y queda a nombre de quien lo registra). Las series cuentan el año en la zona de la clínica (`billing.managers.series_year`), y un cobro no puede fecharse en el futuro ni en un día anterior a la emisión |
 | `agent` | WhatsApp bot state: `AgentMemory` (contexto del LLM), `ConversationSession` (hilo), `ChatMessage` (historial append-only, auditado), `ChatAttachment` (foto/nota de voz del paciente, irremplazable), `WorkflowError`, `AgentProfile` (personalidad del agente por clínica) |
 | `knowledge` | Clinic knowledge base: `ClinicKnowledgeBase`, `ClinicInfoQuery`, `ClinicInfoCache` |
 | `audit` | Append-only audit trail: `ChangeLog` (writes, via signals) and `AccessLog` (reads, instrumented per view) |

@@ -4,215 +4,165 @@
 {% block page_heading %}Editar paciente{% endblock %}
 
 {% block content %}
-<div class="mx-auto max-w-xl">
-    <div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+{% comment %}
+Dos columnas en pantallas grandes: a la izquierda la foto, a la derecha los datos
+agrupados en secciones con los campos en rejilla. En móvil y tabletas pequeñas
+todo se apila y la foto queda arriba, como siempre.
 
-        {# Cabecera #}
-        <div class="border-b border-line px-4 py-6 sm:px-8">
-            <h2 class="text-lg font-semibold text-content">Datos del paciente</h2>
-            <p class="mt-1 text-sm text-content-subtle">Actualiza la información y la foto de perfil del paciente.</p>
+«Guardar datos» solo se activa cuando algo cambia respecto a lo que se pintó al
+cargar: se compara una foto (serializada) del formulario con la actual. Si la
+página vuelve con errores de validación se deja activo, para poder reenviar. Sin
+JavaScript el botón queda activo como siempre. El `<form>` envuelve a las dos
+columnas, así que la foto y los datos viajan en un único envío.
+{% endcomment %}
+<div class="mx-auto max-w-5xl">
+    <form method="post" enctype="multipart/form-data" novalidate
+          class="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)] lg:items-start"
+          x-data="{
+              initial: '',
+              dirty: {{ form.errors|yesno:'true,false' }},
+              keepDirty: {{ form.errors|yesno:'true,false' }},
+              snapshot() {
+                  const parts = [];
+                  for (const [key, value] of new FormData(this.$el)) {
+                      if (key === 'csrfmiddlewaretoken') continue;
+                      parts.push(key + '=' + (value instanceof File ? (value.size ? value.name + ':' + value.size + ':' + value.lastModified : '') : value));
+                  }
+                  return parts.join('&');
+              },
+              check() {
+                  this.$nextTick(() => { this.dirty = this.keepDirty || this.snapshot() !== this.initial; });
+              },
+          }"
+          x-init="$nextTick(() => { initial = snapshot(); })"
+          @input="check()" @change="check()" @click="check()">
+        {% csrf_token %}
+
+        {# Errores generales: ocupan las dos columnas #}
+        {% if form.non_field_errors %}
+        <div class="rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line lg:col-span-2">
+            {% for error in form.non_field_errors %}
+            <p class="text-sm text-danger">{{ error }}</p>
+            {% endfor %}
         </div>
+        {% endif %}
 
-        {# Formulario #}
+        {# ================= Columna izquierda: la foto ================= #}
         {% comment %}
-        «Guardar datos» solo se activa cuando algo cambia respecto a lo que se
-        pintó al cargar: se compara una foto (serializada) del formulario con la
-        actual. Si la página vuelve con errores de validación se deja activo, para
-        poder reenviar. Sin JavaScript el botón queda activo como siempre.
+        Foto de perfil. La actual llega por `patients:photo`, que redirige a una
+        URL firmada del bucket privado. La vista previa de una foto nueva es un
+        `blob:` local: no sale del navegador hasta que se guarda. En escritorio
+        se queda fija al desplazarse, para tenerla a la vista mientras se edita.
         {% endcomment %}
-        <form method="post" enctype="multipart/form-data" novalidate class="px-4 py-7 sm:px-8 space-y-6"
-              x-data="{
-                  initial: '',
-                  dirty: {{ form.errors|yesno:'true,false' }},
-                  keepDirty: {{ form.errors|yesno:'true,false' }},
-                  snapshot() {
-                      const parts = [];
-                      for (const [key, value] of new FormData(this.$el)) {
-                          if (key === 'csrfmiddlewaretoken') continue;
-                          parts.push(key + '=' + (value instanceof File ? (value.size ? value.name + ':' + value.size + ':' + value.lastModified : '') : value));
-                      }
-                      return parts.join('&');
-                  },
-                  check() {
-                      this.$nextTick(() => { this.dirty = this.keepDirty || this.snapshot() !== this.initial; });
-                  },
-              }"
-              x-init="$nextTick(() => { initial = snapshot(); })"
-              @input="check()" @change="check()" @click="check()">
-            {% csrf_token %}
-
-            {# Errores generales #}
-            {% if form.non_field_errors %}
-            <div class="rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line">
-                {% for error in form.non_field_errors %}
-                <p class="text-sm text-danger">{{ error }}</p>
-                {% endfor %}
-            </div>
-            {% endif %}
-
-            {% comment %}
-            Foto de perfil. La actual llega por `patients:photo`, que redirige a una
-            URL firmada del bucket privado. La vista previa de una foto nueva es un
-            `blob:` local: no sale del navegador hasta que se guarda.
-            {% endcomment %}
-            <div class="flex flex-col items-center gap-4 sm:flex-row sm:items-center"
-                 x-data="{
-                     preview: '{% if patient.photo %}{% url 'patients:photo' patient.id %}?v={{ patient.updated_at|date:'U' }}{% endif %}',
-                     remove: false,
-                     pick(event) {
-                         const file = event.target.files[0];
-                         if (!file) return;
-                         if (this.preview.startsWith('blob:')) URL.revokeObjectURL(this.preview);
-                         this.preview = URL.createObjectURL(file);
-                         this.remove = false;
-                     },
-                     clear() {
-                         if (this.preview.startsWith('blob:')) URL.revokeObjectURL(this.preview);
-                         this.$refs.file.value = '';
-                         this.preview = '';
-                         this.remove = {{ patient.photo|yesno:'true,false' }};
-                     },
-                 }">
+        <aside class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line lg:sticky lg:top-24"
+               x-data="{
+                   preview: '{% if patient.photo %}{% url 'patients:photo' patient.id %}?v={{ patient.updated_at|date:'U' }}{% endif %}',
+                   remove: false,
+                   pick(event) {
+                       const file = event.target.files[0];
+                       if (!file) return;
+                       if (this.preview.startsWith('blob:')) URL.revokeObjectURL(this.preview);
+                       this.preview = URL.createObjectURL(file);
+                       this.remove = false;
+                   },
+                   clear() {
+                       if (this.preview.startsWith('blob:')) URL.revokeObjectURL(this.preview);
+                       this.$refs.file.value = '';
+                       this.preview = '';
+                       this.remove = {{ patient.photo|yesno:'true,false' }};
+                   },
+               }">
+            <div class="flex flex-col items-center gap-4 text-center">
                 <template x-if="preview">
-                    <img :src="preview" alt="Foto de perfil de {{ patient }}" class="h-24 w-24 flex-shrink-0 rounded-full object-cover ring-2 ring-brand-line">
+                    <img :src="preview" alt="Foto de perfil de {{ patient }}" class="h-32 w-32 flex-shrink-0 rounded-full object-cover ring-2 ring-brand-line">
                 </template>
                 <template x-if="!preview">
-                    <span aria-hidden="true" class="flex h-24 w-24 flex-shrink-0 items-center justify-center rounded-full bg-brand-gradient text-2xl font-semibold text-white shadow-glow">
+                    <span aria-hidden="true" class="flex h-32 w-32 flex-shrink-0 items-center justify-center rounded-full bg-brand-gradient text-3xl font-semibold text-white shadow-glow">
                         {{ patient.first_name|make_list|first|upper }}{{ patient.last_name|make_list|first|upper }}
                     </span>
                 </template>
-                <div class="w-full flex-1">
-                    <label for="{{ form.photo.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.photo.label }}</label>
-                    <input
-                        type="file"
-                        name="{{ form.photo.html_name }}"
-                        id="{{ form.photo.id_for_label }}"
-                        accept="image/jpeg,image/png,image/webp"
-                        x-ref="file"
-                        @change="pick($event)"
-                        class="block w-full text-sm text-content-muted file:mr-4 file:rounded-xl file:border-0 file:bg-brand-soft file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand-fg hover:file:bg-brand-soft-strong"
-                    >
-                    <input type="checkbox" name="{{ form.remove_photo.html_name }}" class="hidden" :checked="remove" tabindex="-1" aria-hidden="true">
-                    {% if form.photo.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.photo.errors|join:", " }}</p>{% endif %}
-                    <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <p class="text-xs text-content-faint">JPG, PNG o WebP. Se recorta en cuadrado y se guarda sin metadatos.</p>
-                        <button type="button" x-show="preview" x-cloak @click="clear()" class="text-xs font-semibold text-danger hover:underline">
-                            Quitar foto
-                        </button>
-                        <p x-show="remove" x-cloak class="text-xs text-warning">La foto se quitará al guardar.</p>
-                    </div>
-                </div>
+                <p class="max-w-full truncate text-sm font-semibold text-content">{{ patient }}</p>
             </div>
 
-            {# Nombre y Apellido #}
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                    <label for="{{ form.first_name.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">
-                        {{ form.first_name.label }}
-                    </label>
-                    <input
-                        type="text"
-                        name="{{ form.first_name.html_name }}"
-                        id="{{ form.first_name.id_for_label }}"
-                        value="{{ form.first_name.value|default:'' }}"
-                        placeholder="Ej. Juan"
-                        class="block w-full rounded-xl border {% if form.first_name.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
-                    >
-                    {% if form.first_name.errors %}
-                    <p class="mt-1.5 text-xs text-danger">{{ form.first_name.errors|join:", " }}</p>
+            <div class="mt-5">
+                <label for="{{ form.photo.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.photo.label }}</label>
+                <input
+                    type="file"
+                    name="{{ form.photo.html_name }}"
+                    id="{{ form.photo.id_for_label }}"
+                    accept="image/jpeg,image/png,image/webp"
+                    x-ref="file"
+                    @change="pick($event)"
+                    class="block w-full text-sm text-content-muted file:mr-4 file:rounded-xl file:border-0 file:bg-brand-soft file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand-fg hover:file:bg-brand-soft-strong"
+                >
+                <input type="checkbox" name="{{ form.remove_photo.html_name }}" class="hidden" :checked="remove" tabindex="-1" aria-hidden="true">
+                {% if form.photo.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.photo.errors|join:", " }}</p>{% endif %}
+                <p class="mt-2 text-xs text-content-faint">JPG, PNG o WebP. Se recorta en cuadrado y se guarda sin metadatos.</p>
+                <button type="button" x-show="preview" x-cloak @click="clear()" class="mt-2 text-xs font-semibold text-danger hover:underline">
+                    Quitar foto
+                </button>
+                <p x-show="remove" x-cloak class="mt-1 text-xs text-warning">La foto se quitará al guardar.</p>
+            </div>
+        </aside>
+
+        {# ================= Columna derecha: los datos ================= #}
+        <div class="min-w-0 rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+            <div class="border-b border-line px-4 py-6 sm:px-8">
+                <h2 class="text-lg font-semibold text-content">Datos del paciente</h2>
+                <p class="mt-1 text-sm text-content-subtle">Actualiza la información y la foto de perfil del paciente.</p>
+            </div>
+
+            {# --- Datos personales --- #}
+            <section class="px-4 py-6 sm:px-8" aria-labelledby="sec-personal">
+                <h3 id="sec-personal" class="text-sm font-semibold text-content">Datos personales</h3>
+                <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {% include 'patients/_edit_field.html' with field=form.first_name placeholder='Ej. Juan' %}
+                    {% include 'patients/_edit_field.html' with field=form.last_name placeholder='Ej. Pérez' %}
+                    {% include 'patients/_edit_field.html' with field=form.date_of_birth type='date' %}
+                </div>
+            </section>
+
+            {# --- Contacto --- #}
+            <section class="border-t border-line px-4 py-6 sm:px-8" aria-labelledby="sec-contact">
+                <h3 id="sec-contact" class="text-sm font-semibold text-content">Contacto</h3>
+                <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {% include 'patients/_edit_field.html' with field=form.email type='email' placeholder='ejemplo@email.com' %}
+                    {% include 'patients/_edit_field.html' with field=form.phone type='tel' placeholder='+34 600 000 000' %}
+                </div>
+            </section>
+
+            {# --- Facturación --- #}
+            <section class="border-t border-line px-4 py-6 sm:px-8" aria-labelledby="sec-billing">
+                <h3 id="sec-billing" class="text-sm font-semibold text-content">Datos de facturación</h3>
+                <p class="mt-1 text-xs text-content-subtle">Opcionales: hacen falta para facturarle. No se muestran en la ficha del paciente.</p>
+                <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    {% include 'patients/_edit_field.html' with field=form.tax_id placeholder='12345678Z' maxlength='20' autocomplete='off' %}
+                    {% include 'patients/_edit_field.html' with field=form.address placeholder='Calle, número, piso' maxlength='255' autocomplete='off' span='sm:col-span-2' %}
+                    {% include 'patients/_edit_field.html' with field=form.postal_code placeholder='28001' maxlength='10' inputmode='numeric' autocomplete='off' %}
+                    {% include 'patients/_edit_field.html' with field=form.city placeholder='Madrid' maxlength='100' autocomplete='off' span='sm:col-span-2' %}
+                </div>
+            </section>
+
+            {# --- Notas --- #}
+            <section class="border-t border-line px-4 py-6 sm:px-8" aria-labelledby="sec-notes">
+                <h3 id="sec-notes" class="text-sm font-semibold text-content">{{ form.notes.label }}</h3>
+                <div class="mt-4">
+                    <label for="{{ form.notes.id_for_label }}" class="sr-only">{{ form.notes.label }}</label>
+                    <textarea
+                        name="{{ form.notes.html_name }}"
+                        id="{{ form.notes.id_for_label }}"
+                        rows="4"
+                        placeholder="Añade notas relevantes del paciente..."
+                        class="block w-full rounded-xl border {% if form.notes.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition resize-none"
+                    >{{ form.notes.value|default:'' }}</textarea>
+                    {% if form.notes.errors %}
+                    <p class="mt-1.5 text-xs text-danger">{{ form.notes.errors|join:", " }}</p>
                     {% endif %}
                 </div>
+            </section>
 
-                <div>
-                    <label for="{{ form.last_name.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">
-                        {{ form.last_name.label }}
-                    </label>
-                    <input
-                        type="text"
-                        name="{{ form.last_name.html_name }}"
-                        id="{{ form.last_name.id_for_label }}"
-                        value="{{ form.last_name.value|default:'' }}"
-                        placeholder="Ej. Pérez"
-                        class="block w-full rounded-xl border {% if form.last_name.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
-                    >
-                    {% if form.last_name.errors %}
-                    <p class="mt-1.5 text-xs text-danger">{{ form.last_name.errors|join:", " }}</p>
-                    {% endif %}
-                </div>
-            </div>
-
-            {# Email #}
-            <div>
-                <label for="{{ form.email.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">
-                    {{ form.email.label }}
-                </label>
-                <input
-                    type="email"
-                    name="{{ form.email.html_name }}"
-                    id="{{ form.email.id_for_label }}"
-                    value="{{ form.email.value|default:'' }}"
-                    placeholder="ejemplo@email.com"
-                    class="block w-full rounded-xl border {% if form.email.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
-                >
-                {% if form.email.errors %}
-                <p class="mt-1.5 text-xs text-danger">{{ form.email.errors|join:", " }}</p>
-                {% endif %}
-            </div>
-
-            {# Teléfono #}
-            <div>
-                <label for="{{ form.phone.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">
-                    {{ form.phone.label }}
-                </label>
-                <input
-                    type="tel"
-                    name="{{ form.phone.html_name }}"
-                    id="{{ form.phone.id_for_label }}"
-                    value="{{ form.phone.value|default:'' }}"
-                    placeholder="+34 600 000 000"
-                    class="block w-full rounded-xl border {% if form.phone.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
-                >
-                {% if form.phone.errors %}
-                <p class="mt-1.5 text-xs text-danger">{{ form.phone.errors|join:", " }}</p>
-                {% endif %}
-            </div>
-
-            {# Fecha de nacimiento #}
-            <div>
-                <label for="{{ form.date_of_birth.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">
-                    {{ form.date_of_birth.label }}
-                </label>
-                <input
-                    type="date"
-                    name="{{ form.date_of_birth.html_name }}"
-                    id="{{ form.date_of_birth.id_for_label }}"
-                    value="{% with dob=form.date_of_birth.value %}{% if dob.year %}{{ dob|date:'Y-m-d' }}{% else %}{{ dob|default:'' }}{% endif %}{% endwith %}"
-                    class="block w-full rounded-xl border {% if form.date_of_birth.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition"
-                >
-                {% if form.date_of_birth.errors %}
-                <p class="mt-1.5 text-xs text-danger">{{ form.date_of_birth.errors|join:", " }}</p>
-                {% endif %}
-            </div>
-
-            {# Notas #}
-            <div>
-                <label for="{{ form.notes.id_for_label }}" class="block text-sm font-medium text-content-muted mb-1.5">
-                    {{ form.notes.label }}
-                </label>
-                <textarea
-                    name="{{ form.notes.html_name }}"
-                    id="{{ form.notes.id_for_label }}"
-                    rows="3"
-                    placeholder="Añade notas relevantes del paciente..."
-                    class="block w-full rounded-xl border {% if form.notes.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition resize-none"
-                >{{ form.notes.value|default:'' }}</textarea>
-                {% if form.notes.errors %}
-                <p class="mt-1.5 text-xs text-danger">{{ form.notes.errors|join:", " }}</p>
-                {% endif %}
-            </div>
-
-            {# Acciones #}
-            <div class="flex items-center justify-between pt-2">
+            {# --- Acciones --- #}
+            <div class="flex items-center justify-between gap-3 rounded-b-3xl border-t border-line bg-muted px-4 py-5 sm:px-8">
                 <a href="{% url 'patients:detail' patient.id %}" class="btn-secondary">
                     Cancelar
                 </a>
@@ -223,7 +173,7 @@
                     Guardar datos
                 </button>
             </div>
-        </form>
-    </div>
+        </div>
+    </form>
 </div>
 {% endblock %}

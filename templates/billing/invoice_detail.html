@@ -170,11 +170,13 @@ el de «Registrar cobro» vive dentro del panel de la derecha—.
     {# --- Acciones del borrador --- #}
     <section class="flex flex-col gap-3 rounded-3xl bg-surface px-5 py-4 shadow-soft ring-1 ring-line sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <p class="text-sm text-content-subtle">
-            Al emitirla tomará número de la serie y quedará cerrada.
+            {% if can_manage_billing %}Al emitirla tomará número de la serie y quedará cerrada.{% else %}Solo un administrador puede emitirla: al hacerlo toma número de la serie y queda cerrada.{% endif %}
         </p>
         <div class="flex flex-wrap gap-3">
             <button type="button" @click="modal = 'delete'" class="btn-secondary">Eliminar borrador</button>
+            {% if can_manage_billing %}
             <button type="button" @click="modal = 'issue'" class="btn-primary" {% if not procedures %}disabled{% endif %}>Emitir factura</button>
+            {% endif %}
         </div>
     </section>
 
@@ -219,9 +221,11 @@ el de «Registrar cobro» vive dentro del panel de la derecha—.
     {% if invoice.is_issued %}
     <section class="flex flex-col gap-3 rounded-3xl bg-surface px-5 py-4 shadow-soft ring-1 ring-line sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <p class="text-sm text-content-subtle">
-            Una factura emitida no se corrige: se anula y se emite otra.
+            Una factura emitida no se corrige: se anula y se emite otra.{% if not can_manage_billing %} Solo un administrador puede anularla.{% endif %}
         </p>
+        {% if can_manage_billing %}
         <button type="button" @click="modal = 'void'" class="btn-danger">Anular factura</button>
+        {% endif %}
     </section>
     {% endif %}
     {% endif %}
@@ -235,6 +239,7 @@ el de «Registrar cobro» vive dentro del panel de la derecha—.
 
     {# --- Modales de confirmación --------------------------------------- #}
     {% if invoice.is_draft %}
+    {% if can_manage_billing %}
     <div x-show="modal === 'issue'" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="modal-issue-title">
         <div x-show="modal === 'issue'" x-transition.opacity @click="modal = null" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
         <div x-show="modal === 'issue'" x-transition class="relative w-full max-w-sm rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
@@ -251,6 +256,8 @@ el de «Registrar cobro» vive dentro del panel de la derecha—.
             </div>
         </div>
     </div>
+
+    {% endif %}{# /can_manage_billing: emitir #}
 
     <div x-show="modal === 'delete'" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="modal-delete-title">
         <div x-show="modal === 'delete'" x-transition.opacity @click="modal = null" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
@@ -270,7 +277,7 @@ el de «Registrar cobro» vive dentro del panel de la derecha—.
     </div>
     {% endif %}
 
-    {% if invoice.is_issued %}
+    {% if invoice.is_issued and can_manage_billing %}
     <div x-show="modal === 'void'" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="modal-void-title">
         <div x-show="modal === 'void'" x-transition.opacity @click="modal = null" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
         <div x-show="modal === 'void'" x-transition class="relative w-full max-w-md rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
@@ -291,6 +298,7 @@ el de «Registrar cobro» vive dentro del panel de la derecha—.
             </form>
         </div>
     </div>
+    {% endif %}{# /anular: solo administradores #}
 
     {% comment %}
     Modal de cobro. Va bajo la MISMA condición que el botón que lo abre
@@ -308,7 +316,7 @@ el de «Registrar cobro» vive dentro del panel de la derecha—.
     `number` rechaza la coma, y aquí se teclea «25,50». Mismo criterio que los
     importes del filtro del listado.
     {% endcomment %}
-    {% if invoice.amount_due %}
+    {% if invoice.is_issued and invoice.amount_due %}
     <div x-show="modal === 'payment'" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="modal-payment-title">
         <div x-show="modal === 'payment'" x-transition.opacity @click="modal = null" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
         <div x-show="modal === 'payment'" x-transition class="relative w-full max-w-md rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
@@ -320,7 +328,6 @@ el de «Registrar cobro» vive dentro del panel de la derecha—.
             {% include 'billing/_payment_form.html' %}
         </div>
     </div>
-    {% endif %}
     {% endif %}
 </div>
 {% endblock %}

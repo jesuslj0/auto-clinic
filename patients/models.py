@@ -5,6 +5,7 @@ from django.utils import timezone
 from clinical.files import clinical_media_storage
 from core.models import Clinic, SoftDeleteModel, TimeStampedModel
 from patients.photos import patient_photo_upload_to
+from patients.tax_id import validate_tax_id
 
 
 class Patient(TimeStampedModel):
@@ -16,6 +17,14 @@ class Patient(TimeStampedModel):
     # un contacto (`Guardian`); con teléfono, sigue siendo la identidad en WhatsApp.
     phone = models.CharField(max_length=32, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
+    # Datos para facturar. Opcionales (no todo paciente los da) y delicados: salen
+    # en el formulario de alta y edición, nunca en la ficha ni en la API del agente.
+    tax_id = models.CharField(
+        'NIF / NIE / pasaporte', max_length=20, blank=True, validators=[validate_tax_id],
+    )
+    address = models.CharField('dirección', max_length=255, blank=True)
+    postal_code = models.CharField('código postal', max_length=10, blank=True)
+    city = models.CharField('ciudad', max_length=100, blank=True)
     notes = models.TextField(blank=True)
     # Foto de perfil, en el bucket PRIVADO (ver `patients/photos.py`): se guarda
     # la clave del objeto y se sirve solo firmada. No sale por la API.

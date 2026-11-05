@@ -352,7 +352,32 @@ _FIELD_CLASS = (
 )
 
 
-class ProfessionalScheduleForm(forms.ModelForm):
+class RemovableRowMixin:
+    """Estado de «quitado» de una fila de un inline formset, para la plantilla.
+
+    Quitar una fila en pantalla marca su `DELETE`; el borrado real ocurre al
+    guardar. Si el envío vuelve con errores, la fila sigue marcada. Una fila ya
+    guardada se enseña atenuada, con «Deshacer», para poder recuperarla: borrar
+    es irreversible. Una que solo existía en pantalla no tiene nada que
+    recuperar y se oculta. Lo usan el horario semanal y las ausencias.
+    """
+
+    @property
+    def is_marked_for_deletion(self):
+        return bool(self.is_bound and 'DELETE' in self.fields and self['DELETE'].value())
+
+    @property
+    def removed_existing(self):
+        """Fila guardada que se ha quitado y aún puede recuperarse."""
+        return self.is_marked_for_deletion and self.instance.pk is not None
+
+    @property
+    def removed_new(self):
+        """Fila nueva que se ha quitado: no existe en la base de datos, se oculta."""
+        return self.is_marked_for_deletion and self.instance.pk is None
+
+
+class ProfessionalScheduleForm(RemovableRowMixin, forms.ModelForm):
     """Un tramo del horario semanal. `start_time`/`end_time` son hora LOCAL.
 
     No hay conversión de zona horaria: un horario recurrente no tiene UTC (ver el
@@ -363,6 +388,14 @@ class ProfessionalScheduleForm(forms.ModelForm):
     class Meta:
         model = ProfessionalSchedule
         fields = ['day_of_week', 'start_time', 'end_time', 'is_active']
+        # Las etiquetas salen en los errores de cada tramo («Desde: …»); sin
+        # ellas Django usaría el nombre del campo en inglés («Start time: …»).
+        labels = {
+            'day_of_week': 'Día',
+            'start_time': 'Desde',
+            'end_time': 'Hasta',
+            'is_active': 'Activo',
+        }
         widgets = {
             'day_of_week': forms.Select(attrs={'class': _FIELD_CLASS}),
             'start_time': forms.TimeInput(format='%H:%M', attrs={'type': 'time', 'class': _FIELD_CLASS}),
@@ -372,6 +405,14 @@ class ProfessionalScheduleForm(forms.ModelForm):
             ),
         }
 
+    @property
+    def removal_summary(self):
+        """Qué se pierde al quitarlo, para el aviso: «09:00 – 14:00»."""
+        instance = self.instance
+        if instance.start_time is None or instance.end_time is None:
+            return ''
+        return f'{instance.start_time:%H:%M} – {instance.end_time:%H:%M}'
+
 
 class BaseScheduleFormSet(forms.BaseInlineFormSet):
     """Detecta solapamientos ENTRE las filas del propio POST.
@@ -380,6 +421,54 @@ class BaseScheduleFormSet(forms.BaseInlineFormSet):
     `is_valid()` ninguna fila nueva está aún en BD, así que dos tramos nuevos que
     se pisan pasarían su validación individual. Este `clean()` cierra ese hueco.
     """
+
+    # -- Presentación por días ---------------------------------------------
+    #
+    # El formset es una lista plana de tramos, y así se guarda y se valida; solo
+    # la pantalla los agrupa por día (siete bloques con sus tramos al lado). Se
+    # agrupa por el valor del campo —lo guardado, o lo enviado si el formulario
+    # vuelve con errores—, de modo que una fila recién añadida o movida de día
+    # cae en su bloque al repintar.
+
+    @staticmethod
+    def _day_of(form):
+        """El día del tramo como entero, o `None` si no es uno de los siete."""
+        try:
+            day = int(form['day_of_week'].value())
+        except (TypeError, ValueError):
+            return None
+        return day if day in dict(ProfessionalSchedule.DayOfWeek.choices) else None
+
+    @property
+    def week(self):
+        """Los siete días, de lunes a domingo, cada uno con sus tramos.
+
+        `live` cuenta los tramos que se ven: uno marcado para borrar sigue en el
+        formset (se borra al guardar) pero no debe impedir enseñar «sin atención».
+        """
+        groups = {value: [] for value, _ in ProfessionalSchedule.DayOfWeek.choices}
+        for form in self.forms:
+            day = self._day_of(form)
+            if day is not None:
+                groups[day].append(form)
+        return [
+            {
+                'value': value,
+                'label': label,
+                'forms': groups[value],
+                'live': sum(1 for form in groups[value] if not form.is_marked_for_deletion),
+            }
+            for value, label in ProfessionalSchedule.DayOfWeek.choices
+        ]
+
+    @property
+    def stray_forms(self):
+        """Tramos sin un día válido (un POST manipulado): no se pierden en silencio.
+
+        Se enseñan aparte, con su desplegable de día, para que el error de
+        validación tenga dónde leerse.
+        """
+        return [form for form in self.forms if self._day_of(form) is None]
 
     def clean(self):
         super().clean()
@@ -403,7 +492,7 @@ class BaseScheduleFormSet(forms.BaseInlineFormSet):
             tramos.append((dia, inicio, fin))
 
 
-class ProfessionalTimeOffForm(forms.ModelForm):
+class ProfessionalTimeOffForm(RemovableRowMixin, forms.ModelForm):
     """Una ausencia puntual. `starts_at`/`ends_at` son instantes en UTC.
 
     El staff los teclea en hora LOCAL de la clínica; aquí se convierte a UTC al
@@ -414,6 +503,14 @@ class ProfessionalTimeOffForm(forms.ModelForm):
     class Meta:
         model = ProfessionalTimeOff
         fields = ['starts_at', 'ends_at', 'reason', 'note']
+        # Salen en los errores de cada fila («Hasta: …»); sin etiquetas Django
+        # usaría el nombre del campo en inglés («Ends at: …»).
+        labels = {
+            'starts_at': 'Desde',
+            'ends_at': 'Hasta',
+            'reason': 'Motivo',
+            'note': 'Nota',
+        }
         widgets = {
             'starts_at': forms.DateTimeInput(attrs={'type': 'datetime-local', 'class': _FIELD_CLASS}),
             'ends_at': forms.DateTimeInput(attrs={'type': 'datetime-local', 'class': _FIELD_CLASS}),
@@ -434,6 +531,16 @@ class ProfessionalTimeOffForm(forms.ModelForm):
                 valor = getattr(self.instance, campo)
                 if valor:
                     self.initial[campo] = valor.astimezone(self.clinic_tz).strftime('%Y-%m-%dT%H:%M')
+
+    @property
+    def removal_summary(self):
+        """Qué se pierde al quitarla, en hora local: «01/07/2026 09:00 – 15/07/2026 20:00 · Vacaciones»."""
+        instance = self.instance
+        if instance.starts_at is None or instance.ends_at is None:
+            return ''
+        start = instance.starts_at.astimezone(self.clinic_tz)
+        end = instance.ends_at.astimezone(self.clinic_tz)
+        return f'{start:%d/%m/%Y %H:%M} – {end:%d/%m/%Y %H:%M} · {instance.get_reason_display()}'
 
     def _to_utc(self, valor):
         """Interpreta un datetime naive del input como hora local y lo pasa a UTC."""

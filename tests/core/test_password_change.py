@@ -18,6 +18,7 @@ CURRENT = 'testpass123'
 NEW = 'Roble-Marino42'
 
 ACCOUNT_URL = '/cuenta/'
+SECURITY_URL = '/cuenta/seguridad/'
 CHANGE_URL = '/cuenta/contrasena/'
 
 
@@ -39,14 +40,14 @@ def post_change(client, *, old=CURRENT, new1=NEW, new2=None, htmx=False):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
-def test_account_page_works_without_professional_profile(client, staff_user):
+def test_security_page_works_without_professional_profile(client, staff_user):
     """Cambiar la contraseña no depende de tener ficha de profesional.
 
     Es el motivo de que esta pantalla viva en `core` y no en `appointments`: un
     superusuario de plataforma sin clínica no tiene ficha, y aun así entra.
     """
     client.force_login(staff_user)
-    response = client.get(reverse('core:account'))
+    response = client.get(reverse('core:account-security'))
 
     assert response.status_code == 200
     assert 'password_form' in response.context
@@ -90,7 +91,7 @@ def test_password_is_changed_and_session_survives(client, admin_user):
     response = post_change(client)
 
     assert response.status_code == 302
-    assert response['Location'] == reverse('core:account')
+    assert response['Location'] == reverse('core:account-security')
 
     admin_user.refresh_from_db()
     assert admin_user.check_password(NEW)
@@ -221,7 +222,7 @@ def test_lockout_notice_is_hidden_until_it_applies(client, admin_user):
     Tailwind va por CDN y solo compila lo que ve en el documento.
     """
     client.force_login(admin_user)
-    html = client.get(reverse('core:account')).content.decode()
+    html = client.get(reverse('core:account-security')).content.decode()
 
     assert 'Demasiados intentos' in html
     assert 'ring-danger-line hidden' in html
@@ -295,7 +296,7 @@ def test_get_without_htmx_redirects_to_the_page(client, admin_user):
     response = client.get(reverse('core:password-change'))
 
     assert response.status_code == 302
-    assert response['Location'] == reverse('core:account')
+    assert response['Location'] == reverse('core:account-security')
 
 
 @pytest.mark.django_db
@@ -320,7 +321,7 @@ def test_history_restore_is_not_treated_as_htmx(client, admin_user):
     )
 
     assert response.status_code == 302
-    assert response['Location'] == reverse('core:account')
+    assert response['Location'] == reverse('core:account-security')
 
 
 # ---------------------------------------------------------------------------
@@ -328,14 +329,28 @@ def test_history_restore_is_not_treated_as_htmx(client, admin_user):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
-def test_card_is_rendered_on_the_account_tab(client, admin_user):
-    """Su sitio es la pestaña «Cuenta», junto a los datos de acceso.
+def test_card_is_rendered_on_the_security_tab(client, admin_user):
+    """Su sitio es la pestaña «Seguridad», encima de la verificación en dos pasos.
 
-    Estuvo repetida en «Mi perfil» mientras fueron dos páginas; ahora esa ficha
-    es otra pestaña de esta misma pantalla y la tarjeta no viaja con ella.
+    Estuvo en «Cuenta» y, antes, repetida en «Mi perfil» mientras fueron dos
+    páginas; ahora vive solo aquí y las otras pestañas no la llevan.
     """
     client.force_login(admin_user)
-    html = client.get(reverse('core:account')).content.decode()
+    html = client.get(reverse('core:account-security')).content.decode()
 
     assert 'id="password-card"' in html
     assert f'action="{CHANGE_URL}"' in html
+    assert 'id="password-card"' not in client.get(reverse('core:account')).content.decode()
+
+
+@pytest.mark.django_db
+def test_a_failed_change_without_htmx_repaints_the_security_tab(client, admin_user):
+    """El envío sin JavaScript repinta la pestaña completa, con el error a la vista."""
+    client.force_login(admin_user)
+    response = post_change(client, old='incorrecta')
+
+    assert response.status_code == 200
+    html = response.content.decode()
+    assert response.context['active_tab'] == 'seguridad'
+    assert 'La contraseña actual no es correcta' in html
+    assert 'Verificación en dos pasos' in html

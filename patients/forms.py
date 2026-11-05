@@ -5,12 +5,16 @@ from django.forms import ModelForm, DateInput, Textarea
 
 from patients.models import Patient, PatientGuardian
 from patients.photos import delete_photo_object, prepare_patient_photo
+from patients.tax_id import normalize_tax_id
 
 
 class PatientForm(ModelForm):
     class Meta:
         model = Patient
-        fields = ['first_name', 'last_name', 'email', 'phone', 'date_of_birth', 'notes']
+        fields = [
+            'first_name', 'last_name', 'email', 'phone', 'date_of_birth',
+            'tax_id', 'address', 'postal_code', 'city', 'notes',
+        ]
         widgets = {
             'date_of_birth': DateInput(attrs={'type': 'date'}),
             'notes': Textarea(attrs={'rows': 3, 'placeholder': 'Añade notas relevantes del paciente...'}),
@@ -21,8 +25,17 @@ class PatientForm(ModelForm):
             'email': 'Correo electrónico',
             'phone': 'Teléfono',
             'date_of_birth': 'Fecha de nacimiento',
+            'tax_id': 'NIF / NIE / pasaporte',
+            'address': 'Dirección',
+            'postal_code': 'Código postal',
+            'city': 'Ciudad',
             'notes': 'Notas',
         }
+
+    def clean_tax_id(self):
+        # Normalizado ANTES de que el validador del campo mire el valor: se guarda
+        # `12345678Z` aunque se teclee «12.345.678-z».
+        return normalize_tax_id(self.cleaned_data.get('tax_id'))
 
 
 class PatientEditForm(PatientForm):

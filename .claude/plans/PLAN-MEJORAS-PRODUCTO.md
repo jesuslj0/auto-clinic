@@ -172,7 +172,9 @@ ninguna vista pública. `created_by` es opcional a propósito.
 
 VeriFactu está fuera del plan. Esta fase solo prepara datos.
 
-## 2.1 NIF y dirección del paciente (S)
+## 2.1 NIF y dirección del paciente (S) — HECHO el 05/11/2026
+
+> **Entregado.** `Patient.tax_id` (se normaliza y se valida la letra de DNI/NIE; cualquier otro documento se acepta) y la dirección (`address`, `postal_code` y `city`), en el alta y la edición del panel. Fuera de la ficha y del serializer de la API; ambos en `sensitive` de la auditoría. Pendiente para 2.2: copiarlos a la factura al emitir.
 
 **Hoy.** `Patient` no tiene NIF ni dirección (solo nombre, correo, teléfono, fecha de
 nacimiento, notas y foto).

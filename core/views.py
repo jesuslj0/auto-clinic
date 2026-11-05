@@ -339,19 +339,15 @@ class AccountTabMixin(LoginRequiredMixin, TemplateResponseMixin, ContextMixin):
 
 
 class AccountView(AccountTabMixin, TemplateView):
-    """Pestaña «Cuenta»: con qué te identifica la aplicación, y la contraseña.
+    """Pestaña «Cuenta»: con qué te identifica la aplicación, foto incluida.
 
     Se accede solo con estar autenticado, sin mirar el rol: toda cuenta necesita
-    poder cambiar su contraseña, tenga ficha de profesional o no.
+    poder entrar aquí, tenga ficha de profesional o no. La contraseña vive en
+    «Seguridad», junto a la verificación en dos pasos.
     """
 
     active_tab = 'cuenta'
     panel_template = 'core/tabs/_cuenta.html'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context.setdefault('password_form', AccountPasswordChangeForm(user=self.request.user))
-        return context
 
 
 class AccountProfileView(AccountTabMixin, UpdateView):
@@ -405,10 +401,27 @@ class AccountScheduleView(AccountTabMixin, View):
         return redirect('core:account-schedule')
 
 
-class AccountSecurityView(AccountTabMixin, TemplateView):
-    """Pestaña «Seguridad»: la verificación en dos pasos de uno mismo.
+def security_tab_context(user):
+    """El estado de la verificación en dos pasos, para pintar la pestaña «Seguridad».
 
-    Solo muestra el estado y los formularios; cada acción tiene su vista en
+    Aparte de la vista porque la pestaña se pinta desde dos sitios: la propia
+    vista y el envío sin htmx del cambio de contraseña, que repinta la página
+    entera cuando algo sale mal.
+    """
+    return {
+        'two_factor_active': two_factor.has_confirmed_device(user),
+        'two_factor_required': two_factor.required_by_role(user),
+        'recovery_codes_left': two_factor.remaining_recovery_codes(user),
+        'recovery_codes_total': two_factor.RECOVERY_CODE_COUNT,
+    }
+
+
+class AccountSecurityView(AccountTabMixin, TemplateView):
+    """Pestaña «Seguridad»: la contraseña y la verificación en dos pasos, en ese orden.
+
+    La contraseña es una tarjeta que se envía a `core:password-change`
+    (`PasswordChangeSectionView`); la verificación en dos pasos solo muestra el
+    estado y los formularios, y cada acción tiene su vista en
     `core/two_factor_views.py` y vuelve a pedir contraseña y código.
     """
 
@@ -417,18 +430,13 @@ class AccountSecurityView(AccountTabMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        user = self.request.user
-        context.update(
-            two_factor_active=two_factor.has_confirmed_device(user),
-            two_factor_required=two_factor.required_by_role(user),
-            recovery_codes_left=two_factor.remaining_recovery_codes(user),
-            recovery_codes_total=two_factor.RECOVERY_CODE_COUNT,
-        )
+        context.setdefault('password_form', AccountPasswordChangeForm(user=self.request.user))
+        context.update(security_tab_context(self.request.user))
         return context
 
 
 class PasswordChangeSectionView(LoginRequiredMixin, View):
-    """La tarjeta de contraseña de «Mi cuenta», intercambiable por htmx.
+    """La tarjeta de contraseña de «Mi cuenta» (pestaña «Seguridad»), intercambiable por htmx.
 
     El mismo formulario se sirve entero (con recarga) o como fragmento, según
     quien pregunte: el marcado es un `<form method="post">` de verdad y sigue
@@ -447,7 +455,7 @@ class PasswordChangeSectionView(LoginRequiredMixin, View):
         # Sin htmx no hay nada que pintar por separado: la página es la que
         # contiene la tarjeta.
         if not self.is_htmx_request():
-            return redirect('core:account')
+            return redirect('core:account-security')
         return self.render_partial(AccountPasswordChangeForm(user=request.user))
 
     def post(self, request):
@@ -489,7 +497,7 @@ class PasswordChangeSectionView(LoginRequiredMixin, View):
                 password_changed=True,
             )
         messages.success(request, 'Contraseña actualizada correctamente.')
-        return redirect('core:account')
+        return redirect('core:account-security')
 
     def respond(self, request, form, *, locked_minutes=0):
         """Repinta la tarjeta, como fragmento o dentro de la página completa."""
@@ -500,8 +508,9 @@ class PasswordChangeSectionView(LoginRequiredMixin, View):
             'core/account.html',
             {
                 **account_tab_context(
-                    request.user, active_tab='cuenta', panel_template='core/tabs/_cuenta.html'
+                    request.user, active_tab='seguridad', panel_template='core/tabs/_seguridad.html'
                 ),
+                **security_tab_context(request.user),
                 'password_form': form,
                 'locked_minutes': locked_minutes,
             },
