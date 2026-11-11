@@ -102,7 +102,7 @@ CLINIC = {
     'nif': 'B12345678',
     'phone': '+34952110220',
     'email': 'hola@clinicapropus.example',
-    'website': 'https://propus.ink',
+    'website': 'https://propus.es',
     'address': 'Avenida de Andalucía, 42',
     'city': 'Málaga',
     'province': 'Málaga',

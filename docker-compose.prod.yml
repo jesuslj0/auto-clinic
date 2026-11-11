@@ -101,6 +101,7 @@ services:
       - traefik.http.routers.autoclinic-web.tls=true
       - traefik.http.routers.autoclinic-web.tls.certresolver=letsencrypt
       - traefik.http.services.autoclinic-web.loadbalancer.server.port=80
+      - traefik.docker.network=coolify
     depends_on:
       web:
         condition: service_healthy
@@ -191,11 +192,16 @@ services:
       B2_KEY_ID: ${B2_KEY_ID}
       B2_APPLICATION_KEY: ${B2_APPLICATION_KEY}
       B2_BUCKET: ${B2_BUCKET}
-      # Clave PÚBLICA de age (age1…). La privada no vive en el servidor.
       BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT}
       BACKUP_TIME: ${BACKUP_TIME:-02:30}
       BACKUP_ON_START: ${BACKUP_ON_START:-false}
       BACKUP_PING_URL: ${BACKUP_PING_URL:-}
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1 && pg_isready -q"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     depends_on:
       db:
         condition: service_healthy
