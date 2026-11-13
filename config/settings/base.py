@@ -314,23 +314,24 @@ AGENT_MASTER_API_KEY = config('AGENT_MASTER_API_KEY', default='')
 # /api/agent/platform-errors/. Vacía = endpoint cerrado.
 AGENT_ERRORS_API_KEY = config('AGENT_ERRORS_API_KEY', default='')
 
+# Base de n8n (sin barra final). De ella salen las tres URLs de abajo; para cambiar
+# de dominio basta con `N8N_WEBHOOK_BASE_URL`. Una variable vacía (el compose pasa
+# vacías las que no están definidas en Coolify) cuenta como no definida.
+N8N_WEBHOOK_BASE_URL = (
+    config('N8N_WEBHOOK_BASE_URL', default='') or 'https://n8n.alt4ir.online'
+).rstrip('/')
+
 # URL del webhook de n8n donde Meta entrega los mensajes entrantes de WhatsApp.
 # Es única y global: n8n resuelve la clínica por el phone_number_id del mensaje.
-WHATSAPP_WEBHOOK_URL = config(
-    'WHATSAPP_WEBHOOK_URL',
-    default='https://n8n.alt4ir.online/webhook/whatsapp-inbound',
-)
+WHATSAPP_WEBHOOK_URL = f'{N8N_WEBHOOK_BASE_URL}/webhook/whatsapp-inbound'
 
 # Webhook de n8n para probar el agente desde el panel. Recibe {clinic_id, message}
 # y responde de forma síncrona con el texto del agente. Separado del flujo real.
-WHATSAPP_TEST_WEBHOOK_URL = config(
-    'WHATSAPP_TEST_WEBHOOK_URL',
-    default='https://n8n.alt4ir.online/webhook/whatsapp-test',
-)
+WHATSAPP_TEST_WEBHOOK_URL = f'{N8N_WEBHOOK_BASE_URL}/webhook/whatsapp-test'
 
 # Healthcheck de n8n, para el botón «comprobar» junto al estado del agente.
 # Solo dice que el proceso de n8n responde, no que un workflow concreto esté activo.
-N8N_HEALTHZ_URL = config('N8N_HEALTHZ_URL', default='https://n8n.alt4ir.online/healthz')
+N8N_HEALTHZ_URL = f'{N8N_WEBHOOK_BASE_URL}/healthz'
 
 # Qué hacer si no se puede escribir un registro de auditoría (app `audit`).
 #   fail_closed → se aborta la operación auditada. Es el valor por defecto:
