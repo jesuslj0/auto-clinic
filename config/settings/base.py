@@ -288,11 +288,11 @@ CELERY_BEAT_SCHEDULE = {
     # Recordatorio de cita por WhatsApp a las 24 h: lo manda Django con la
     # plantilla aprobada que la clínica marque como «Recordatorio de cita». Cada
     # 15 minutos; la ventana (22-24 h antes) y el flag `reminder_24h_sent`
-    # impiden que se mande dos veces. El workflow `WA-Reminder-24h-Scheduler` de
-    # n8n tiene que seguir APAGADO (o borrado): mandaría el aviso duplicado, y
-    # además no marca el envío, así que lo repetiría cada hora.
+    # impiden que se mande dos veces. Todos los recordatorios van por Django: los
+    # workflows `WA-Reminder-*` de n8n se retiraron y no deben volver (el de 24 h
+    # no marcaba el envío y lo repetiría cada hora).
     #
-    # El de 3 h sigue pendiente (lo haría `WA-Reminder-3h-Followup-Scheduler`).
+    # El de 3 h sigue pendiente, también en Django.
     # Las tareas `notifications.tasks.dispatch_*_reminders` (email) quedan fuera a
     # propósito, por el mismo motivo.
     'send-whatsapp-reminders-24h': {

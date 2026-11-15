@@ -529,8 +529,9 @@ is enforced nightly. Rules:
   state the same period.
 
 **24 h reminder by WhatsApp (`notifications/whatsapp_reminders.py`).** Django sends it, not
-n8n (`WA-Reminder-24h-Scheduler` must stay off: it was an unfinished skeleton that never
-marked the send, so it would repeat hourly). Rules:
+n8n. **Every reminder goes through Django**: the old n8n flows (`WA-Reminder-24h-Scheduler`,
+`WA-Reminder-3h-Followup-Scheduler`) are gone from the instance and must not come back (the
+24 h one never marked the send, so it would repeat hourly). Rules:
 
 - **Which appointments**: `appointments.reminders.pending_reminder_queryset()`, the same
   function behind `GET /api/appointments/pending-reminders/` (accepted by the clinic, patient
@@ -556,8 +557,8 @@ marked the send, so it would repeat hourly). Rules:
 - **Safety**: row lock (`select_for_update(skip_locked)`) against overlapping runs; failures
   leave a visible `failed` message and are retried every tick up to `MAX_ATTEMPTS` (3) for that
   appointment time; a rescheduled appointment resets its flags and is reminded again.
-- Pending: the 3 h follow-up (`WA-Reminder-3h-Followup-Scheduler`, off) still has to move over;
-  outside the window it also needs a template. The email tasks `dispatch_*_reminders` stay out
+- Pending: the 3 h follow-up, to be built in Django (not in n8n); outside the window it also
+  needs a template. The email tasks `dispatch_*_reminders` stay out
   of the schedule on purpose.
 
 **Appointment notices by WhatsApp (`notifications/whatsapp_notices.py`).** Confirmed, changed
