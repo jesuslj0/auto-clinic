@@ -480,8 +480,8 @@ class AgentProfile(models.Model):
         'presentación para contactos nuevos',
         max_length=WELCOME_MAX_LENGTH,
         blank=True,
-        help_text='Lo que el agente cuenta en su primer mensaje a alguien que no es '
-                  'paciente todavía. Lo adapta a lo que le pregunten, no lo copia literal.',
+        help_text='El agente abre con este texto, tal cual, su primer mensaje a alguien que '
+                  'no es paciente todavía, seguido del aviso de que es una IA.',
     )
     style_notes = models.TextField(
         'indicaciones de estilo',

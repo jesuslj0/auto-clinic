@@ -26,19 +26,31 @@ EMOJI_LINES = {
     AgentProfile.EmojiUsage.MODERATE: 'Puedes usar algún emoji de forma ocasional, nunca más de uno por mensaje.',
 }
 
+AI_NOTICE = (
+    'que eres un asistente de inteligencia artificial de {clinic}, que los mensajes de la '
+    'conversación se guardan y que las notas de voz se transcriben a texto'
+)
+
+WELCOME_LINE = (
+    'PRIMER MENSAJE A UN CONTACTO NUEVO (ES PRIMER MENSAJE=true y aún no es paciente de la '
+    'clínica): empieza SIEMPRE con esta presentación de la clínica, copiada tal cual, sin '
+    'resumirla ni cambiarla: {welcome}. Justo después, en el mismo mensaje y en una o dos '
+    'frases cortas, di ' + AI_NOTICE + '. Si el paciente ya ha preguntado algo, respóndele a '
+    'continuación en ese mismo mensaje.'
+)
+
 PRIVACY_NOTICE_LINE = (
     'AVISO OBLIGATORIO DE IA Y PRIVACIDAD: en tu primer mensaje de la conversación (cuando '
     'ES PRIMER MENSAJE=true, sea el paciente nuevo o conocido), incluye en ese mismo mensaje, '
-    'con tus palabras y en una o dos frases cortas, que eres un asistente de inteligencia '
-    'artificial de {clinic}, que los mensajes de la conversación se guardan y que las notas '
-    'de voz se transcriben a texto. Es la excepción a cualquier regla que te diga que no '
-    'hables de la transcripción o del registro de la conversación. Dilo una sola vez; no lo '
-    'repitas en los mensajes siguientes salvo que el paciente pregunte por sus datos o su privacidad.'
+    'con tus palabras y en una o dos frases cortas, ' + AI_NOTICE + '. Es la excepción a '
+    'cualquier regla que te diga que no hables de la transcripción o del registro de la '
+    'conversación. Dilo una sola vez; no lo repitas en los mensajes siguientes salvo que el '
+    'paciente pregunte por sus datos o su privacidad. No pongas ningún enlace en ese aviso.'
 )
 
 PRIVACY_URL_LINE = (
-    'Termina ese aviso con el enlace a la política de privacidad de la clínica, copiado '
-    'tal cual: {url}'
+    'Si el paciente pregunta por la privacidad o por el uso de sus datos, dale el enlace a '
+    'la política de privacidad de la clínica, copiado tal cual: {url}'
 )
 
 NO_PRIVACY_URL_LINE = (
@@ -50,6 +62,13 @@ PRIVACY_CONTACT_LINE = (
     'Si el paciente pregunta cómo acceder, rectificar o borrar sus datos, dile que puede '
     'escribir a {contact}; no prometas que se borren, porque la historia clínica se conserva '
     'por ley, y no gestiones tú esa petición.'
+)
+
+SERVICES_LINE = (
+    'SERVICIOS: cuando el paciente quiera pedir cita, no le enumeres todos los servicios de '
+    'la clínica. Pregúntale qué necesita o qué le pasa y busca tú el servicio que encaja; si '
+    'hay dudas entre varios, ofrece solo esos. Da la lista completa de servicios únicamente '
+    'si el paciente la pide de forma explícita (por ejemplo, «¿qué servicios tenéis?»).'
 )
 
 CLOSING_LINE = (
@@ -82,11 +101,7 @@ def build_persona_prompt(profile: AgentProfile) -> str:
 
     welcome = profile.welcome_message.strip()
     if welcome:
-        lines.append(
-            'PRESENTACIÓN PARA CONTACTOS NUEVOS: en el primer mensaje a un paciente nuevo, '
-            'preséntate usando esta idea, adaptada a lo que te haya preguntado (no la copies '
-            f'literal si no encaja): {_quote(welcome)}'
-        )
+        lines.append(WELCOME_LINE.format(welcome=_quote(welcome), clinic=clinic_name))
 
     lines.append(PRIVACY_NOTICE_LINE.format(clinic=clinic_name))
     privacy_url = profile.clinic.privacy_policy_url.strip()
@@ -97,6 +112,8 @@ def build_persona_prompt(profile: AgentProfile) -> str:
     contact = ''.join(profile.clinic.data_protection_contact.split())
     if contact:
         lines.append(PRIVACY_CONTACT_LINE.format(contact=contact))
+
+    lines.append(SERVICES_LINE)
 
     notes = profile.style_notes.strip()
     if notes:

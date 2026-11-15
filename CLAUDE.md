@@ -374,11 +374,18 @@ new prompt section. Audited via `audit.registry`.
 **AI and privacy notice (fixed, not configurable).** `build_persona_prompt()` always
 adds an «AVISO OBLIGATORIO DE IA Y PRIVACIDAD»: in the first message of a conversation
 (`ES PRIMER MENSAJE=true`, new or known patient) the agent says it is an AI assistant of
-the clinic, that messages are stored and voice notes transcribed, and gives
-`Clinic.privacy_policy_url` verbatim (edited in «Clínica → Editar»; empty = it still warns, with
-no link, and is told not to invent one). The n8n prompt (`Agente IA Clinica`) carries the matching
-exceptions to its «don't mention the transcription / that you record the conversation» rules
-and asks for the notice in the first-message instructions: keep both in step.
+the clinic, that messages are stored and voice notes transcribed — **with no link**. For a
+new contact with a `welcome_message`, that first message **opens with the welcome copied
+verbatim**, then the AI notice, then the answer. `Clinic.privacy_policy_url` is given only
+if the patient asks about privacy/their data (empty = it is told not to invent one). The n8n
+prompt (`Agente IA Clinica`) carries the matching exceptions to its «don't mention the
+transcription / that you record the conversation» rules and asks for the notice in the
+first-message instructions: keep both in step.
+
+**Services.** The block also tells the agent not to list the whole service catalogue when
+someone asks for an appointment (ask what they need and offer only the matching services);
+the full list only on explicit request. The n8n rules come after and win, so they must not
+say otherwise.
 
 ### WhatsApp templates (`agent.WhatsAppTemplate`)
 
