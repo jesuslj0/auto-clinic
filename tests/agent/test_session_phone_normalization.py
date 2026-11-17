@@ -36,3 +36,12 @@ class TestSessionPhoneNormalization:
         resp = admin_client.get(URL, {'phone': 'abc'})
         results = resp.json().get('results', resp.json())
         assert results == []
+
+    def test_filter_finds_the_panel_test_thread(self, admin_client, clinic_a):
+        """Regresión: el chat de pruebas usa `panel-test`; n8n tiene que encontrar su hilo
+        o se queda sin `session_id` y la memoria de Redis falla («Invalid argument type»)."""
+        test_thread = ConversationSession.objects.create(clinic=clinic_a, phone='panel-test', is_test=True)
+        ConversationSession.objects.create(clinic=clinic_a, phone='+34600112233')
+        resp = admin_client.get(URL, {'phone': 'panel-test'})
+        results = resp.json().get('results', resp.json())
+        assert [r['id'] for r in results] == [str(test_thread.id)]

@@ -13,9 +13,11 @@ class PhoneExactFilter(django_filters.CharFilter):
         # que el número tiene derecho a ella, no para igualar.
         if self.parent.data.get('patient_id'):
             return qs
-        normalized = normalize_phone_safe(value)
-        if normalized is None:
-            return qs.none()
+        # Lo que no es un teléfono se busca literal: el chat de pruebas del panel
+        # usa `panel-test` (`agent.services.resolve_test_phone`), y sin esto n8n
+        # no encontraba su hilo, se quedaba sin `session_id` y la memoria de Redis
+        # fallaba con «Invalid argument type».
+        normalized = normalize_phone_safe(value) or value.strip()
         return super().filter(qs, normalized)
 
 
