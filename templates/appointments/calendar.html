@@ -158,10 +158,10 @@ sería marcado inválido.
     contenedor y no de la página: `position: sticky` se pega al ancestro que
     desplaza, y este ya desplazaba en horizontal.
 
-    `--app-header-h` lo escribe el script de abajo con el alto real de la barra
-    (cambia entre móvil y escritorio); el valor por defecto cubre la carga antes
-    de que corra. Todo lo de la rejilla va por DEBAJO del z-30 de la barra, para
-    que nunca la tape.
+    `--app-header-h` lo escribe base.html con el alto real de lo pegajoso de la barra
+    (en móvil solo la barra de app; en escritorio también la cabecera de sección); el
+    valor por defecto cubre la carga antes de que corra. Todo lo de la rejilla va por
+    DEBAJO del z-30 de la barra, para que nunca la tape.
     {% endcomment %}
     <section class="sticky z-20 flex flex-col overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line"
              style="top: calc(var(--app-header-h, 4.5rem) + 0.5rem); max-height: calc(100dvh - var(--app-header-h, 4.5rem) - 1rem);">
@@ -403,22 +403,7 @@ podría inicializar esos nodos antes de que el script se hubiera evaluado y el
 `x-data` fallaría con «abierto no está definido» en la primera apertura. Ver la
 cabecera de `static/js/appointment_picker.js`.{% endcomment %}
 <script src="{% static 'js/appointment_picker.js' %}"></script>
-<script>
-    /* Alto real de la barra superior sticky, para anclar la rejilla justo debajo. */
-    (function () {
-        const root = document.documentElement;
-        const medir = () => {
-            const barra = document.querySelector('header.sticky');
-            if (barra) root.style.setProperty('--app-header-h', barra.offsetHeight + 'px');
-        };
-        window.addEventListener('DOMContentLoaded', () => {
-            medir();
-            const barra = document.querySelector('header.sticky');
-            if (barra && window.ResizeObserver) new ResizeObserver(medir).observe(barra);
-        });
-        window.addEventListener('resize', medir);
-    })();
-</script>
+{# El alto real de la barra superior (`--app-header-h`) lo mide base.html para toda la app. #}
 <style>
     .htmx-indicator { display: none; }
     .htmx-request .htmx-indicator { display: flex; }

@@ -1,8 +1,29 @@
 {% with professional=request.user.professional_profile %}
 <div class="border-b border-line bg-surface">
-    <div class="mx-auto flex max-w-7xl items-center gap-3 px-4 py-1.5 sm:gap-4 sm:px-6 sm:py-2.5 lg:px-8">
+    <div class="mx-auto flex max-w-7xl items-center gap-2 px-4 py-1.5 sm:gap-4 sm:px-6 sm:py-2.5 lg:px-8">
+        {% comment %}Botón del menú, solo en móvil: el sidebar se oculta por debajo de
+        `lg`. Lleva el badge de chats sin leer, que mantiene al día `chat_live.js`
+        (busca todos los `[data-chat-unread]` de la página).{% endcomment %}
+        <button
+            @click="sidebarOpen = true"
+            type="button"
+            class="relative -ml-1 flex-shrink-0 rounded-xl p-2 text-content-subtle transition hover:bg-muted-strong hover:text-content-muted lg:hidden"
+            aria-label="Abrir menú"
+            aria-expanded="false"
+            :aria-expanded="sidebarOpen"
+        >
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            </svg>
+            {% if request.user.clinic_id %}
+            <span data-chat-unread class="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-semibold text-white ring-2 ring-surface{% if not chat_unread_total %} hidden{% endif %}">
+                <span data-chat-unread-count>{{ chat_unread_total|default:0 }}</span><span class="sr-only"> chats sin leer</span>
+            </span>
+            {% endif %}
+        </button>
+
         <!-- Buscador de pacientes -->
-        <form method="get" action="{% url 'core:search' %}" role="search" class="relative flex-1">
+        <form method="get" action="{% url 'core:search' %}" role="search" class="relative min-w-0 flex-1">
             <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-content-faint">
                 <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />

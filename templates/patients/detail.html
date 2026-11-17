@@ -40,7 +40,7 @@ Ficha del paciente. Piezas:
     {% endif %}
 
     <div class="grid items-start gap-6 xl:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
-        <aside class="rounded-3xl bg-surface p-6 shadow-soft ring-1 ring-line xl:sticky xl:top-24">
+        <aside class="rounded-3xl bg-surface p-6 shadow-soft ring-1 ring-line xl:sticky xl:top-[calc(var(--app-header-h,6rem)_+_0.75rem)]">
             <div class="flex items-center gap-4">
                 {% include 'patients/_avatar.html' with patient=patient classes="h-16 w-16 text-lg" %}
                 <div class="min-w-0">

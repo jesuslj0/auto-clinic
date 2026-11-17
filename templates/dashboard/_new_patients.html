@@ -26,7 +26,7 @@ Los avatares usan `patients/_avatar.html`, que sirve la foto por `patients:photo
                 {% if new_patients.delta_abs is not None %}Frente a {{ new_patients.previous }} en el mismo tramo del mes pasado.{% else %}Sin altas en el mismo tramo del mes pasado para comparar.{% endif %}
             </p>
         </div>
-        <a href="{% url 'patients:list' %}" aria-label="Ver la lista de pacientes"
+        <a href="{% url 'patients:create' %}" aria-label="Crear un paciente"
            class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-info-soft text-info transition hover:ring-2 hover:ring-info-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info">
             <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z" />

@@ -56,7 +56,7 @@
 
     <form method="get" id="appointment-filters" x-show="abierto" x-transition.opacity.duration.150ms class="border-t border-line p-4 sm:p-5">
         <input type="hidden" name="sort" value="{{ filters.sort }}">
-        <div class="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-5">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-5">
             <label class="block">
                 <span class="mb-1 block text-xs font-medium text-content-muted sm:mb-2 sm:text-sm">Desde</span>
                 <input type="date" name="desde" value="{{ filters.date_from|date:'Y-m-d' }}" class="block w-full rounded-2xl border-line text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500">

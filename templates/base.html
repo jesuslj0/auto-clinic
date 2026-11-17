@@ -253,35 +253,22 @@ emite en toda página del panel, aunque no contenga ningún formulario.
         exactamente, el contenido y el borde del sidebar se separan a mitad del
         movimiento.{% endcomment %}
         <div class="flex min-h-screen flex-col transition-[padding] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] {% if request.user.is_authenticated %}sidebar-shell lg:pl-72{% endif %}">
+            {% comment %}Barra de app (menú + buscador + perfil): pegajosa SIEMPRE —en
+            móvil lleva el botón del menú, que debe quedar a mano al desplazar.{% endcomment %}
+            <div class="sticky top-0 z-30" data-app-topbar>
             {% block topbar %}{% if request.user.is_authenticated %}{% include 'partials/_topbar.html' %}{% endif %}{% endblock %}
-            <header class="sticky top-0 z-30 border-b border-line bg-surface/90 backdrop-blur">
+            </div>
+            {% comment %}Cabecera de sección (icono + título + acciones): pegajosa SOLO en
+            escritorio (`lg:sticky`), anclada bajo la barra de app; en móvil hace scroll
+            para no comerse el alto de pantalla. El offset lo da `--app-topbar-h` (lo mide
+            el script del final). Va en `z-20`, por DEBAJO de la barra de app (`z-30`): si
+            se tocan por un redondeo de la medición, la barra de app manda. En móvil queda
+            estática, así que su `z`/`top` no aplican.{% endcomment %}
+            <header class="z-20 border-b border-line bg-surface/90 backdrop-blur lg:sticky lg:top-[var(--app-topbar-h,3.5rem)]" data-app-pageheader>
                 <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2 sm:px-6 sm:py-4 lg:px-8">
                     <div class="flex min-w-0 items-center gap-2 sm:gap-3">
-                        {% if request.user.is_authenticated %}
-                        <!-- Hamburger button (mobile only) -->
-                        <button
-                            @click="sidebarOpen = true"
-                            type="button"
-                            class="relative rounded-xl p-2 text-content-subtle hover:bg-muted-strong hover:text-content-muted transition lg:hidden"
-                            aria-label="Abrir menú"
-                            aria-expanded="false"
-                            :aria-expanded="sidebarOpen"
-                        >
-                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-                            </svg>
-                            {% comment %}En móvil el menú está recogido: sin esto, un chat
-                            sin leer no se ve hasta abrirlo. Lo mueve `chat_live.js`.{% endcomment %}
-                            {% if request.user.clinic_id %}
-                            <span data-chat-unread class="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-semibold text-white ring-2 ring-surface{% if not chat_unread_total %} hidden{% endif %}">
-                                <span data-chat-unread-count>{{ chat_unread_total|default:0 }}</span><span class="sr-only"> chats sin leer</span>
-                            </span>
-                            {% endif %}
-                        </button>
-                        {% endif %}
-                        {% comment %}Icono y título en su propio bloque: así el icono se alinea
-                        con la línea del título y no con la fila entera, que en móvil
-                        la hace más alta el botón del menú.{% endcomment %}
+                        {% comment %}Icono y título. El botón del menú (móvil) vive ahora en
+                        el topbar, junto al buscador y el perfil.{% endcomment %}
                         <div class="flex min-w-0 items-start gap-2 sm:gap-3">
                             {% include 'partials/_section_icon.html' %}
                             <div class="min-w-0">
@@ -311,6 +298,36 @@ emite en toda página del panel, aunque no contenga ningún formulario.
     <script src="{% static 'js/chat_live.js' %}"
             data-ws-path="/ws/chats/"
             data-unread-url="{% url 'agent:chat-list-fragment' %}"></script>
+    {% endif %}
+    {% comment %}Altos reales de la barra superior, publicados como variables CSS:
+    `--app-topbar-h` (la barra de app) ancla la cabecera de sección en escritorio, y
+    `--app-header-h` (el total pegajoso: barra + cabecera en escritorio, solo la barra en
+    móvil —donde la cabecera hace scroll—) ancla los elementos `sticky` de cada página: la
+    rejilla de la agenda, las columnas de la ficha. Así no hay que adivinar la altura, que
+    cambia entre móvil y escritorio.{% endcomment %}
+    {% if request.user.is_authenticated %}
+    <script>
+        (function () {
+            const topbar = document.querySelector('[data-app-topbar]');
+            if (!topbar) return;
+            const header = document.querySelector('[data-app-pageheader]');
+            const root = document.documentElement;
+            const desktop = window.matchMedia('(min-width: 1024px)');
+            const medir = () => {
+                const t = topbar.offsetHeight;
+                root.style.setProperty('--app-topbar-h', t + 'px');
+                root.style.setProperty('--app-header-h', (desktop.matches && header ? t + header.offsetHeight : t) + 'px');
+            };
+            medir();
+            if (window.ResizeObserver) {
+                const ro = new ResizeObserver(medir);
+                ro.observe(topbar);
+                if (header) ro.observe(header);
+            }
+            window.addEventListener('resize', medir);
+            desktop.addEventListener('change', medir);
+        })();
+    </script>
     {% endif %}
     {% block extra_scripts %}{% endblock %}
 

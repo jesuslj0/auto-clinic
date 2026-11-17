@@ -1,53 +1,97 @@
+# Entorno de DESARROLLO. Es autosuficiente: trae su propio PostgreSQL y Redis y
+# fija en claro la configuración de dev, sin leer el `.env` de producción (que
+# apunta a la base `clinic_prod` y a `autoclinic.space`, inaccesibles en local).
+# Producción usa `docker-compose.prod.yml`, que sí toma los secretos de Coolify.
+#
+#   docker compose up --build      # arranca web, db, redis, celery y celery-beat
+#   docker compose down            # para todo (conserva el volumen de datos)
+#   docker compose down -v         # además borra la base de datos de dev
+#
+# La web queda en http://localhost:8000 (admin en /admin/, API en /api/).
+
+# Configuración común de Django para los tres servicios de Python. Al ir en
+# `environment:` tiene prioridad sobre cualquier `.env` montado, así que la base
+# y el host de dev mandan aunque exista un `.env` de producción en la carpeta.
+x-django-env: &django-env
+  DJANGO_SETTINGS_MODULE: config.settings.dev
+  DEBUG: 'True'
+  SECRET_KEY: dev-insecure-secret-key-no-usar-en-produccion
+  ALLOWED_HOSTS: localhost,127.0.0.1,0.0.0.0,web
+  CSRF_TRUSTED_ORIGINS: http://localhost:8000,http://127.0.0.1:8000
+  TRUSTED_PROXY_COUNT: '0'
+  POSTGRES_DB: clinic
+  POSTGRES_USER: clinic
+  POSTGRES_PASSWORD: clinic
+  POSTGRES_HOST: db
+  POSTGRES_PORT: '5432'
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/1
+  CELERY_RESULT_BACKEND: redis://redis:6379/2
+
 services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-clinic}
-      POSTGRES_USER: ${POSTGRES_USER:-clinic}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clinic}
+      POSTGRES_DB: clinic
+      POSTGRES_USER: clinic
+      POSTGRES_PASSWORD: clinic
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data_dev:/var/lib/postgresql/data
     ports:
       - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U clinic -d clinic']
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7-alpine
     ports:
       - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   web:
     build: .
     command: bash -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    environment: *django-env
     volumes:
       - .:/app
     ports:
       - '8000:8000'
-    env_file:
-      - .env
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   celery:
     build: .
     command: celery -A config worker -l info
+    environment: *django-env
     volumes:
       - .:/app
-    env_file:
-      - .env
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   celery-beat:
     build: .
     command: celery -A config beat -l info
+    environment: *django-env
     volumes:
       - .:/app
-    env_file:
-      - .env
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
-  postgres_data:
+  postgres_data_dev:
