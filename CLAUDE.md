@@ -790,8 +790,10 @@ marcha, restauración y límites en `backup/README.md`. Reglas:
   `BACKUP_AGE_RECIPIENT`; opcionales `BACKUP_TIME`, `BACKUP_ON_START` (solo para la primera
   prueba) y `BACKUP_PING_URL` (healthchecks.io: avisa si la copia deja de llegar).
 
-Fallos típicos del último paso del workflow: `401` = token, `404` = UUID, error de
-conexión = `COOLIFY_URL`. `manifest unknown` en Coolify = intentó bajar la imagen
+Fallos típicos del último paso del workflow: `401` = token, `403` = API Access
+desactivada en Coolify (*Settings*, viene apagada en una instalación nueva), IP fuera de
+la lista permitida o token sin permiso `deploy`, `404` = UUID, `405` = llamada con `GET`
+(Coolify exige `POST`), error de conexión = `COOLIFY_URL`. `manifest unknown` en Coolify = intentó bajar la imagen
 antes de que existiera; relanzar el deploy.
 
 ## Key notes

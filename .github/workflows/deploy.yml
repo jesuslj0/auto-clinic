@@ -67,6 +67,8 @@ jobs:
 
       - name: Disparar deploy en Coolify
         run: |
-          curl --fail --silent --show-error \
+          # POST: las versiones recientes de Coolify responden 405 a un GET.
+          # --fail-with-body: si falla, el log muestra el motivo que da Coolify.
+          curl --fail-with-body --silent --show-error -X POST \
             -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
             "${{ secrets.COOLIFY_URL }}/api/v1/deploy?uuid=${{ secrets.COOLIFY_APP_UUID }}&force=false"
