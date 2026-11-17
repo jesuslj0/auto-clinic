@@ -279,9 +279,11 @@ Three layers, all in `core/` — see the module docstrings for the detail:
   (Google Authenticator included): standard SHA-1 / 6 digits / 30 s — **do not change
   them**, Google Authenticator ignores other parameters. The QR is an inline SVG made
   server-side, so the secret never reaches a third party.
-  - **Mandatory** for clinic admins (`is_clinic_admin`) and anyone with
-    `professional_profile` (`TWO_FACTOR_REQUIRED_FOR_ROLES`); anyone with a confirmed
-    device uses it regardless of role; others can opt in from «Mi cuenta → Seguridad».
+  - **Optional** (decided 2026-11-17): anyone turns it on or off from «Mi cuenta →
+    Seguridad», and anyone with a confirmed device always goes through it at login.
+    `TWO_FACTOR_REQUIRED_FOR_ROLES` (env var, default `False`) would make it mandatory
+    again for clinic admins (`is_clinic_admin`) and anyone with `professional_profile`;
+    the rest of this section describes that mode where it says «roles that require it».
   - **There is never a half-open session.** After the password, `login()` is *not*
     called: the user is only «pending» in the session (`start_pending`, 10 min) and
     `login()` runs after the code is good (`complete_login`, which also sets
@@ -706,6 +708,7 @@ CELERY_RESULT_BACKEND=redis://redis:6379/2
 Login security (all optional; defaults in `base.py`/`prod.py`):
 ```
 TRUSTED_PROXY_COUNT=2          # proxies in front of Django (prod default 2: Traefik → nginx)
+TWO_FACTOR_REQUIRED_FOR_ROLES=False  # True = 2FA mandatory for admins and professionals
 TWO_FACTOR_ENCRYPTION_KEY=     # Fernet key(s), comma-separated; set it in prod (see above)
 TWO_FACTOR_ISSUER=Auto Clinic  # name shown in the authenticator app
 CACHE_REDIS_URL=               # default: REDIS_URL on DB 3

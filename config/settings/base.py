@@ -257,13 +257,15 @@ LOGIN_LOCKOUT_SECONDS = 15 * 60
 
 # Verificación en dos pasos (`core/two_factor.py`). TOTP estándar (RFC 6238):
 # vale cualquier app de autenticación.
-#   - Obligatoria para admins y profesionales cuando `TWO_FACTOR_REQUIRED_FOR_ROLES`.
-#     Quien ya la tiene configurada la usa siempre, lo exija o no el rol.
+#   - Opcional: cada usuario la activa (o desactiva) en «Mi cuenta → Seguridad».
+#     Quien la tiene configurada la usa siempre al entrar.
+#   - `TWO_FACTOR_REQUIRED_FOR_ROLES=True` (variable de entorno) la vuelve
+#     obligatoria para admins y profesionales; por defecto está apagado.
 #   - El secreto se guarda cifrado con `TWO_FACTOR_ENCRYPTION_KEY` (una o varias
 #     claves Fernet separadas por comas; la primera cifra, todas descifran, para
 #     poder rotarla). Sin ella se deriva de `SECRET_KEY`: sirve, pero rotar la
 #     `SECRET_KEY` dejaría los secretos ilegibles. En producción, definirla.
-TWO_FACTOR_REQUIRED_FOR_ROLES = True
+TWO_FACTOR_REQUIRED_FOR_ROLES = config('TWO_FACTOR_REQUIRED_FOR_ROLES', default=False, cast=bool)
 TWO_FACTOR_ENCRYPTION_KEY = config('TWO_FACTOR_ENCRYPTION_KEY', default='')
 TWO_FACTOR_ISSUER = config('TWO_FACTOR_ISSUER', default='Auto Clinic')
 # Tiempo que se tiene para meter el código tras acertar la contraseña.

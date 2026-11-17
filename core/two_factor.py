@@ -8,9 +8,10 @@ Authenticator ignora los demás y generaría códigos que aquí no valdrían.
 
 Reglas, por si se toca:
 
-- **Quién la necesita.** Admins (`is_clinic_admin`) y profesionales (quien tiene
-  `professional_profile`), mientras `TWO_FACTOR_REQUIRED_FOR_ROLES`. Quien ya tiene
-  un dispositivo confirmado la usa siempre, lo exija o no su rol.
+- **Quién la necesita.** Es opcional: quien tiene un dispositivo confirmado la usa
+  siempre, y se activa o desactiva desde «Mi cuenta → Seguridad». Solo si
+  `TWO_FACTOR_REQUIRED_FOR_ROLES` (apagado por defecto) la exige el rol a admins
+  (`is_clinic_admin`) y profesionales (`professional_profile`).
 - **Nunca hay una sesión a medias.** Tras acertar la contraseña NO se llama a
   `login()`: el usuario queda «pendiente» en la sesión (`start_pending`) y solo
   entra cuando pasa el segundo factor. Esto incluye la primera configuración, que
