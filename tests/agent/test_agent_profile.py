@@ -93,6 +93,7 @@ class TestPersonaPrompt:
         assert welcome_line.index('«Somos') < welcome_line.index('asistente de inteligencia artificial')
         assert 'las notas de voz se transcriben' in welcome_line
         assert 'http' not in welcome_line
+        assert 'sin repetir lo que la presentación ya haya dicho' in welcome_line
 
     def test_welcome_with_braces_does_not_break_the_prompt(self, profile_a):
         profile_a.welcome_message = 'Hola {nombre}, somos {clinic}.'
@@ -102,7 +103,8 @@ class TestPersonaPrompt:
     def test_does_not_list_every_service_unless_asked(self, clinic_a):
         prompt = build_persona_prompt(AgentProfile.for_clinic(clinic_a))
 
-        assert 'no le enumeres todos los servicios' in prompt
+        assert 'no enumeres los servicios de la clínica por iniciativa propia' in prompt
+        assert 'ni en el primer mensaje o el saludo' in prompt
         assert 'únicamente si el paciente la pide de forma explícita' in prompt
 
     def test_without_a_link_it_warns_but_tells_the_agent_not_to_invent_one(self, profile_a, clinic_a):

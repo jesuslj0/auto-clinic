@@ -382,10 +382,13 @@ prompt (`Agente IA Clinica`) carries the matching exceptions to its «don't ment
 transcription / that you record the conversation» rules and asks for the notice in the
 first-message instructions: keep both in step.
 
-**Services.** The block also tells the agent not to list the whole service catalogue when
-someone asks for an appointment (ask what they need and offer only the matching services);
-the full list only on explicit request. The n8n rules come after and win, so they must not
-say otherwise.
+**Services.** The block also tells the agent never to list the service catalogue on its own
+initiative — not in the greeting/first message, not when someone asks for an appointment or
+general info (ask what they need and offer only the matching services); the full list only on
+explicit request or when the question cannot be answered without it. The welcome + AI notice
+must not repeat each other (one short sentence after the welcome). The n8n rules come after and
+win: `Agente IA Clinica` repeats the same rule in its `list_services` entry and in
+«INSTRUCCIONES PARA PRIMER MENSAJE» — keep them in step.
 
 ### WhatsApp templates (`agent.WhatsAppTemplate`)
 
