@@ -15,7 +15,7 @@ Qué crea:
 - veinte pacientes, con altas repartidas en el tiempo;
 - citas en las semanas pasadas y en las próximas, con la mezcla real de estados
   (completadas, confirmadas, pendientes, canceladas y no presentados) y de
-  orígenes (panel, agente de WhatsApp y reserva pública);
+  orígenes (panel y agente de WhatsApp);
 - la cadena clínica de cada cita completada: episodio, visita y procedimiento con
   el precio del catálogo congelado;
 - la facturación que sale de ahí: facturas emitidas y cobros repartidos día a
@@ -632,8 +632,8 @@ class Command(BaseCommand):
         # Casi la mitad del trabajo entra por el agente de WhatsApp: es lo que
         # vende el producto, y una agenda donde todo viene del panel lo esconde.
         source = self.rng.choices(
-            [Appointment.Source.STAFF, Appointment.Source.AGENT, Appointment.Source.BOOKING],
-            weights=[45, 40, 15],
+            [Appointment.Source.STAFF, Appointment.Source.AGENT],
+            weights=[55, 45],
         )[0]
 
         # Una cita del agente NACE pendiente de que la clínica la valide, y con

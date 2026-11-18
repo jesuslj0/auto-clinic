@@ -57,6 +57,32 @@ class Professional(models.Model):
     license_number = models.CharField(max_length=30, blank=True)
     license_body = models.CharField(max_length=120, blank=True)
 
+    class Language(models.TextChoices):
+        ES = 'es', 'Español'
+        EN = 'en', 'Inglés'
+        FR = 'fr', 'Francés'
+        DE = 'de', 'Alemán'
+        PT = 'pt', 'Portugués'
+        IT = 'it', 'Italiano'
+        CA = 'ca', 'Catalán'
+        EU = 'eu', 'Euskera'
+        GL = 'gl', 'Gallego'
+        RO = 'ro', 'Rumano'
+        AR = 'ar', 'Árabe'
+        ZH = 'zh', 'Chino'
+
+    # Datos de contacto y trayectoria. Son de presentación: no tocan la
+    # elegibilidad ni la agenda, y no se exponen al agente ni a la API.
+    # Teléfono de trabajo (firmas, informes, facturas); no es el del paciente
+    # ni sirve para identificar a nadie, así que va como texto libre.
+    contact_phone = models.CharField(max_length=30, blank=True)
+    # Áreas en las que trabaja, separadas por comas («Pie diabético, Ortopodología»).
+    specialties = models.CharField(max_length=200, blank=True)
+    education = models.CharField(max_length=300, blank=True)
+    years_experience = models.PositiveSmallIntegerField(null=True, blank=True)
+    # Códigos de `Language`, sin repetir y en el orden del catálogo.
+    languages = models.JSONField(default=list, blank=True)
+
     is_active = models.BooleanField(default=True, db_index=True)
     accepts_online_booking = models.BooleanField(default=True)
     buffer_minutes = models.PositiveSmallIntegerField(default=0)
@@ -77,6 +103,16 @@ class Professional(models.Model):
         propósito: lo usan el agente y los avisos, que no deben cambiar por esto."""
         name = str(self)
         return f'{self.get_title_display()} {name}' if self.title else name
+
+    @property
+    def languages_display(self):
+        """Nombres de los idiomas guardados, en el orden del catálogo."""
+        names = dict(self.Language.choices)
+        return [names[code] for code in self.Language.values if code in (self.languages or [])]
+
+    @property
+    def specialties_list(self):
+        return [item.strip() for item in self.specialties.split(',') if item.strip()]
 
     @property
     def professional_type_label(self):
@@ -265,7 +301,9 @@ class Appointment(models.Model):
     class Source(models.TextChoices):
         AGENT = 'agent', 'Agente WhatsApp'
         STAFF = 'staff', 'Panel'
-        BOOKING = 'booking', 'Reserva pública'
+        # Origen retirado (la reserva web se eliminó): ya no se crea, pero puede
+        # haber citas antiguas con este valor, así que se conserva para leerlas.
+        BOOKING = 'booking', 'Reserva web (antigua)'
 
     scheduled_at = models.DateTimeField()
     end_at = models.DateTimeField(null=True, blank=True)
@@ -294,7 +332,7 @@ class Appointment(models.Model):
 
     # Hasta cuándo se le guarda el hueco a una cita que aún no ha validado el
     # staff. Solo lo llevan las citas que nacen `pending` por una vía no
-    # presencial (agente, reserva pública). Al validarla, `confirm_by_clinic()`
+    # presencial (agente). Al validarla, `confirm_by_clinic()`
     # lo pone a None: una cita en firme no caduca.
     hold_expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
     cancelled_by = models.CharField(

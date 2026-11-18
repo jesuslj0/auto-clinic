@@ -188,7 +188,7 @@ def test_profile_uploads_photo(client, staff_user, settings, tmp_path):
 def test_profile_toggles_online_booking(client, staff_user):
     """El único ajuste de la pestaña que no es un dato: la vía pública.
 
-    Apagarlo saca al profesional de la reserva pública y del agente, pero no de
+    Apagarlo saca al profesional del agente de WhatsApp, pero no de
     la clínica: el staff puede seguir dándole citas a mano (`es_elegible()` en
     `appointments/services.py` solo lo mira con `require_online_booking`).
     """
@@ -475,3 +475,73 @@ def test_the_professional_list_shows_title_and_license(client, admin_user):
 
     assert f'Dr. {admin_user.get_full_name()}' in html
     assert 'Nº col. 28/9999' in html
+
+
+# ---------------------------------------------------------------------------
+# Contacto y trayectoria
+# ---------------------------------------------------------------------------
+
+def _profile_post(**extra):
+    return {
+        'first_name': 'Lucía', 'last_name': 'Martín',
+        'professional_type': 'podologo', 'accepts_online_booking': 'on',
+        **extra,
+    }
+
+
+@pytest.mark.django_db
+def test_contact_and_background_fields_are_saved_and_shown(client, staff_user):
+    client.force_login(staff_user)
+
+    response = client.post(ACCOUNT_URL, _profile_post(
+        contact_phone='+34 600 000 000',
+        specialties='Pie diabético, Ortopodología',
+        education='Grado en Podología, UCM',
+        years_experience='12',
+        languages=['en', 'es'],
+    ))
+
+    assert response.status_code == 302
+    professional = Professional.objects.get(pk=staff_user.professional_profile.pk)
+    assert professional.contact_phone == '+34 600 000 000'
+    assert professional.specialties_list == ['Pie diabético', 'Ortopodología']
+    assert professional.years_experience == 12
+    # El orden de lectura es el del catálogo, no el del envío.
+    assert professional.languages_display == ['Español', 'Inglés']
+
+    html = client.get(ACCOUNT_URL).content.decode()
+    assert '+34 600 000 000' in html
+    assert 'Ortopodología' in html
+    assert 'Español, Inglés' in html
+
+
+@pytest.mark.django_db
+def test_an_unknown_language_is_rejected(client, staff_user):
+    client.force_login(staff_user)
+
+    response = client.post(ACCOUNT_URL, _profile_post(languages=['klingon']))
+
+    assert response.status_code == 200
+    assert 'languages' in response.context['form'].errors
+
+
+@pytest.mark.django_db
+def test_years_of_experience_must_be_plausible(client, staff_user):
+    client.force_login(staff_user)
+
+    response = client.post(ACCOUNT_URL, _profile_post(years_experience='120'))
+
+    assert response.status_code == 200
+    assert 'years_experience' in response.context['form'].errors
+
+
+@pytest.mark.django_db
+def test_the_new_fields_are_optional(client, staff_user):
+    client.force_login(staff_user)
+
+    response = client.post(ACCOUNT_URL, _profile_post())
+
+    assert response.status_code == 302
+    professional = Professional.objects.get(pk=staff_user.professional_profile.pk)
+    assert professional.years_experience is None
+    assert professional.languages == []

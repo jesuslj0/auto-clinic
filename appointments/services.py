@@ -161,7 +161,7 @@ def ineligibility_reason(
 
     `require_online_booking` lo fija QUIEN LLAMA, según de dónde venga la cita, y
     nunca según si el profesional venía explícito en el payload:
-      - True  → API/agente y reserva pública (toda vía no autenticada por staff).
+      - True  → API/agente (toda vía no autenticada por staff).
       - False → panel y admin. El staff sí puede asignar citas a un profesional
         que no acepta reservas online: el flag significa "el agente no puede
         ofrecerlo", no "está de baja" (para eso está `is_active`).
@@ -410,7 +410,7 @@ def create_appointment(
       los dos casos se crea una cita sin profesional: si no hay ninguno válido,
       la cita NO se crea y se lanza un error de dominio.
     - `require_online_booking` va atado al llamante, no al camino interno: la API
-      y la reserva pública pasan True (con o sin `professional` explícito), el
+      y el agente pasan True (con o sin `professional` explícito), el
       panel y el admin pasan False. Ver `ineligibility_reason`.
 
     `source` es OBLIGATORIO y explícito, igual que `require_online_booking`: lo

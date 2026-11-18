@@ -43,3 +43,49 @@ del admin (`appointments/professional_form.html`) y «Mi cuenta»
     </div>
     <p class="mt-3 text-xs text-content-faint">Aparece en informes, justificantes y facturas.</p>
 </fieldset>
+
+<fieldset class="rounded-2xl bg-muted p-4 ring-1 ring-line">
+    <legend class="sr-only">Contacto y trayectoria</legend>
+    <p class="mb-3 text-sm font-medium text-content">Contacto y trayectoria</p>
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+            <label for="{{ form.contact_phone.id_for_label }}" class="mb-1.5 block text-xs font-medium text-content-subtle">{{ form.contact_phone.label }}</label>
+            <input type="tel" name="{{ form.contact_phone.html_name }}" id="{{ form.contact_phone.id_for_label }}" value="{{ form.contact_phone.value|default:'' }}" maxlength="30" placeholder="Ej. +34 600 000 000"
+                class="block w-full rounded-xl border {% if form.contact_phone.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+            <p class="mt-1.5 text-xs text-content-faint">{{ form.contact_phone.help_text }}</p>
+            {% if form.contact_phone.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.contact_phone.errors|join:", " }}</p>{% endif %}
+        </div>
+        <div>
+            <label for="{{ form.years_experience.id_for_label }}" class="mb-1.5 block text-xs font-medium text-content-subtle">{{ form.years_experience.label }}</label>
+            <input type="number" min="0" max="70" name="{{ form.years_experience.html_name }}" id="{{ form.years_experience.id_for_label }}" value="{{ form.years_experience.value|default_if_none:'' }}"
+                class="block w-full rounded-xl border {% if form.years_experience.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+            {% if form.years_experience.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.years_experience.errors|join:", " }}</p>{% endif %}
+        </div>
+        <div class="sm:col-span-2">
+            <label for="{{ form.specialties.id_for_label }}" class="mb-1.5 block text-xs font-medium text-content-subtle">{{ form.specialties.label }}</label>
+            <input type="text" name="{{ form.specialties.html_name }}" id="{{ form.specialties.id_for_label }}" value="{{ form.specialties.value|default:'' }}" maxlength="200" placeholder="Pie diabético, Ortopodología"
+                class="block w-full rounded-xl border {% if form.specialties.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+            <p class="mt-1.5 text-xs text-content-faint">{{ form.specialties.help_text }}</p>
+            {% if form.specialties.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.specialties.errors|join:", " }}</p>{% endif %}
+        </div>
+        <div class="sm:col-span-2">
+            <label for="{{ form.education.id_for_label }}" class="mb-1.5 block text-xs font-medium text-content-subtle">{{ form.education.label }}</label>
+            <input type="text" name="{{ form.education.html_name }}" id="{{ form.education.id_for_label }}" value="{{ form.education.value|default:'' }}" maxlength="300" placeholder="Grado en Podología, Universidad Complutense"
+                class="block w-full rounded-xl border {% if form.education.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+            {% if form.education.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.education.errors|join:", " }}</p>{% endif %}
+        </div>
+        <div class="sm:col-span-2">
+            <p class="mb-1.5 text-xs font-medium text-content-subtle">{{ form.languages.label }}</p>
+            <div class="flex flex-wrap gap-x-5 gap-y-2">
+                {% for value, label in form.languages.field.choices %}
+                <label class="inline-flex cursor-pointer items-center gap-2 text-sm text-content">
+                    <input type="checkbox" name="{{ form.languages.html_name }}" value="{{ value }}" {% if value in form.languages.value %}checked{% endif %}
+                        class="h-4 w-4 rounded border-line-strong text-brand-600 focus:ring-brand-500">
+                    {{ label }}
+                </label>
+                {% endfor %}
+            </div>
+            {% if form.languages.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.languages.errors|join:", " }}</p>{% endif %}
+        </div>
+    </div>
+</fieldset>

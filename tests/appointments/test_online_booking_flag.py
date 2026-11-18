@@ -1,7 +1,7 @@
 """
 `accepts_online_booking` solo aplica a la vía online.
 
-El campo significa "el agente / la reserva pública pueden ofrecer a este
+El campo significa "el agente de WhatsApp puede ofrecer a este
 profesional", no "está de baja" (para eso está `is_active`). El staff sí puede
 asignarle citas desde el panel y el admin.
 

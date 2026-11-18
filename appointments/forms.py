@@ -14,23 +14,55 @@ from services.models import Service
 
 # Campos de presentación y colegiación: los mismos en el edit del admin y en
 # «Mi cuenta», con el mismo marcado (`appointments/partials/_professional_identity_fields.html`).
-PROFESSIONAL_IDENTITY_FIELDS = ['title', 'bio', 'license_number', 'license_body']
+PROFESSIONAL_IDENTITY_FIELDS = [
+    'title', 'bio', 'license_number', 'license_body',
+    'contact_phone', 'specialties', 'education', 'years_experience', 'languages',
+]
 PROFESSIONAL_IDENTITY_LABELS = {
     'title': 'Tratamiento',
     'bio': 'Presentación',
     'license_number': 'Nº de colegiado',
     'license_body': 'Colegio profesional',
+    'contact_phone': 'Teléfono profesional',
+    'specialties': 'Especialidades',
+    'education': 'Formación',
+    'years_experience': 'Años de experiencia',
+    'languages': 'Idiomas',
 }
 PROFESSIONAL_IDENTITY_HELP = {
     'bio': 'Unas líneas sobre experiencia y enfoque. Máximo 500 caracteres.',
     'license_body': 'Ej. Colegio Oficial de Podólogos de Madrid.',
+    'contact_phone': 'Teléfono de trabajo para informes y facturas.',
+    'specialties': 'Separadas por comas. Ej. Pie diabético, Ortopodología.',
+    'education': 'Ej. Grado en Podología, Universidad Complutense.',
 }
 PROFESSIONAL_IDENTITY_WIDGETS = {
     'bio': forms.Textarea(attrs={'rows': 4, 'maxlength': 500}),
+    'years_experience': forms.NumberInput(attrs={'min': 0, 'max': 70}),
 }
 
 
+def languages_field():
+    """JSONField no ofrece una lista cerrada: se valida contra el catálogo."""
+    return forms.MultipleChoiceField(
+        choices=Professional.Language.choices, required=False,
+        widget=forms.CheckboxSelectMultiple, label='Idiomas',
+    )
+
+
+def clean_years_experience(form):
+    value = form.cleaned_data.get('years_experience')
+    if value is not None and not 0 <= value <= 70:
+        raise forms.ValidationError('Indica un valor entre 0 y 70.')
+    return value
+
+
 class ProfessionalForm(forms.ModelForm):
+    languages = languages_field()
+
+    def clean_years_experience(self):
+        return clean_years_experience(self)
+
     class Meta:
         model = Professional
         fields = ['user', 'professional_type', *PROFESSIONAL_IDENTITY_FIELDS, 'services']
@@ -96,6 +128,10 @@ class ProfessionalProfileForm(forms.ModelForm):
 
     first_name = forms.CharField(label='Nombre', max_length=150, required=False)
     last_name = forms.CharField(label='Apellidos', max_length=150, required=False)
+    languages = languages_field()
+
+    def clean_years_experience(self):
+        return clean_years_experience(self)
 
     class Meta:
         model = Professional
@@ -116,9 +152,8 @@ class ProfessionalProfileForm(forms.ModelForm):
             # `appointments/services.py`: apaga la vía pública, no al profesional.
             # Para eso está `is_active`, que decide la clínica y aquí no se toca.
             'accepts_online_booking': (
-                'Si lo desactivas dejas de aparecer en la reserva pública y el '
-                'agente de WhatsApp no te ofrecerá. La clínica podrá seguir '
-                'dándote citas a mano.'
+                'Si lo desactivas, el agente de WhatsApp dejará de ofrecerte '
+                'a los pacientes. La clínica podrá seguir dándote citas a mano.'
             ),
         }
         widgets = {

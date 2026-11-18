@@ -107,8 +107,8 @@ reagendada y no presentado. Cada cambio de estado queda registrado con quién lo
 hizo y cuándo, así que una cita no es solo su situación actual sino su recorrido
 completo.
 
-Cada cita guarda también **de dónde vino**: del panel, del agente de WhatsApp o
-de la reserva pública. Eso es lo que permite enseñarle al cliente cuánta agenda
+Cada cita guarda también **de dónde vino**: del panel o del agente de WhatsApp.
+Eso es lo que permite enseñarle al cliente cuánta agenda
 le está llenando el bot.
 
 El alta manual desde el panel valida en el momento que el profesional presta ese
@@ -411,17 +411,12 @@ podría constar, porque la contraseña en sí nunca se escribe en ningún log.
 
 ---
 
-### 3.15 Reserva pública
+### 3.15 Confirmar o cancelar desde el recordatorio
 
 **Titular:** Para quien prefiere no escribir.
 
-Un flujo de reserva web sin necesidad de cuenta: elegir servicio, elegir día y
-hora entre los huecos realmente libres, y confirmar. Usa el mismo motor de
-disponibilidad que el agente, así que no puede ofrecer un hueco que el bot acaba
-de dar.
-
-Existen además enlaces de un solo uso para que el paciente **confirme o cancele**
-su cita desde el recordatorio, sin autenticarse.
+Enlaces de un solo uso para que el paciente **confirme o cancele** su cita desde
+el recordatorio, sin autenticarse.
 
 ---
 
@@ -484,7 +479,7 @@ Datos exactos que se pueden afirmar sin miedo:
 
 - Seis estados de cita: pendiente, confirmada, completada, cancelada, reagendada
   y no presentado.
-- Tres orígenes de cita: panel, agente de WhatsApp y reserva pública.
+- Dos orígenes de cita: panel y agente de WhatsApp.
 - Seis pestañas en la ficha del paciente.
 - Cuatro vistas del mapa del pie y los dos pies.
 - Recordatorios automáticos por WhatsApp a 24 h y a 3 h de la cita; el segundo

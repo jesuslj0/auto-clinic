@@ -128,7 +128,7 @@ class Clinic(models.Model):
     hold_ttl_minutes = models.PositiveIntegerField(
         default=1440,
         help_text=(
-            "Minutos que una cita creada por el agente o la reserva pública queda "
+            "Minutos que una cita creada por el agente queda "
             "reservada esperando validación del staff. Pasado ese plazo se cancela "
             "y el hueco se libera. 0 = sin caducidad."
         ),

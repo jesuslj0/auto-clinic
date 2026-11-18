@@ -219,6 +219,32 @@ hubiera en la barra de direcciones. La ficha de OTRO profesional se edita en
                     {% else %}—{% endif %}
                 </dd>
             </div>
+            <div>
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Teléfono profesional</dt>
+                <dd class="mt-1 text-sm text-content">{{ professional.contact_phone|default:"—" }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Años de experiencia</dt>
+                <dd class="mt-1 text-sm text-content">{{ professional.years_experience|default_if_none:"—" }}</dd>
+            </div>
+            <div class="sm:col-span-2">
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Especialidades</dt>
+                <dd class="mt-1.5 flex flex-wrap gap-2">
+                    {% for item in professional.specialties_list %}
+                    <span class="inline-flex items-center rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent-fg ring-1 ring-accent-line">{{ item }}</span>
+                    {% empty %}
+                    <span class="text-sm text-content">—</span>
+                    {% endfor %}
+                </dd>
+            </div>
+            <div class="sm:col-span-2">
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Formación</dt>
+                <dd class="mt-1 break-words text-sm text-content">{{ professional.education|default:"—" }}</dd>
+            </div>
+            <div class="sm:col-span-2">
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Idiomas</dt>
+                <dd class="mt-1 text-sm text-content">{{ professional.languages_display|join:", "|default:"—" }}</dd>
+            </div>
             <div class="sm:col-span-2">
                 <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Servicios que ofreces</dt>
                 <dd class="mt-1.5 flex flex-wrap gap-2">
