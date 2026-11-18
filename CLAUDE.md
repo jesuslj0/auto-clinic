@@ -346,7 +346,7 @@ Panel map (namespace in brackets):
 
 | Prefix | Routes |
 |---|---|
-| `/` (`core`) | `buscar/`, `login/` (+ `login/verificacion/`, `login/verificacion/configurar/`: 2FA, no session yet), `logout/`, `cuenta/` (`perfil/`, `horario/`, `contrasena/`, `seguridad/` + `activar/`, `codigos/`, `cambiar-dispositivo/`, `desactivar/`, `restablecer/<user_id>/`), `clinica/` (`editar/`, `integraciones/` → redirect to `/agente/`), `panel/citas/<uuid>/` (`gestionar/`, `accion/`, `resumen/`) |
+| `/` (`core`) | `buscar/`, `login/` (+ `login/verificacion/`, `login/verificacion/configurar/`: 2FA, no session yet), `logout/`, `cuenta/` (datos de acceso + datos profesionales en una pestaña y un formulario; `perfil/` redirige, `horario/`, `contrasena/`, `seguridad/` + `activar/`, `codigos/`, `cambiar-dispositivo/`, `desactivar/`, `restablecer/<user_id>/`), `clinica/` (`editar/`, `integraciones/` → redirect to `/agente/`), `panel/citas/<uuid>/` (`gestionar/`, `accion/`, `resumen/`) |
 | `/citas/` (`appointments`) | `crear/`, `listado/`, `<uuid>/editar/`, `<uuid>/procedimiento/`, `<uuid>/visita/`, `mi-perfil/` (redirect) |
 | `/profesionales/` (`professionals`) | `crear/`, `<pk>/editar/` — top-level, views live in `appointments` (`appointments/professional_urls.py`) |
 | `/pacientes/` (`patients`) | `crear/`, `<id>/` + tabs `historia/` (+ `episodios/…`, `visitas/…`, `notas/…`), `documentos/` (anamnesis + consentimientos in one tab; the old `anamnesis/` and `consentimientos/` routes return the same tab), `alertas/` (+ `nueva/`, `<id>/editar|desactivar|reactivar/`), `lesiones/`, `consentimientos/firmar/`, `enviar-ficha/`, `enlaces-ficha/<id>/anular/`, `procedimientos/`, `editar/`, `foto/` |
@@ -366,7 +366,7 @@ name, tone, tú/usted, emojis (all coded choices), a welcome text for new
 contacts and capped free `style_notes`. The prompt block is written in Django
 (`agent/persona.py`, pure) and served ready-made at `GET /api/agent/profile/`
 (clinic `Api-Key` only; the clinic comes from the key). n8n
-(`WA-Inbound-Orchestrator con buffer`) calls it on every execution — both the
+(`WA-Inbound-Orchestrator`) calls it on every execution — both the
 WhatsApp and the panel-test path — in the `Cargar Perfil Agente` node, and pastes
 `persona_prompt` at the top of the system message; on failure it falls back to
 the default tone. The fixed rules come *after* the block and it says it cannot

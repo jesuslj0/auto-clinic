@@ -270,7 +270,6 @@ def _password_attempts_reset(session) -> None:
 # pestaña y el título de su tarjeta: mismo trazo en los dos sitios.
 ACCOUNT_TABS = [
     {'key': 'cuenta', 'label': 'Cuenta', 'url_name': 'core:account', 'icon': 'cuenta', 'needs_professional': False},
-    {'key': 'perfil', 'label': 'Datos profesionales', 'url_name': 'core:account-profile', 'icon': 'perfil', 'needs_professional': True},
     {'key': 'horario', 'label': 'Horario y ausencias', 'url_name': 'core:account-schedule', 'icon': 'horario', 'needs_professional': True},
     {'key': 'seguridad', 'label': 'Seguridad', 'url_name': 'core:account-security', 'icon': 'seguridad', 'needs_professional': False},
 ]
@@ -338,37 +337,38 @@ class AccountTabMixin(LoginRequiredMixin, TemplateResponseMixin, ContextMixin):
         return context
 
 
-class AccountView(AccountTabMixin, TemplateView):
-    """Pestaña «Cuenta»: con qué te identifica la aplicación, foto incluida.
+class AccountView(AccountTabMixin, UpdateView):
+    """Pestaña «Cuenta»: datos de acceso y datos profesionales, en un solo formulario.
 
     Se accede solo con estar autenticado, sin mirar el rol: toda cuenta necesita
-    poder entrar aquí, tenga ficha de profesional o no. La contraseña vive en
-    «Seguridad», junto a la verificación en dos pasos.
-    """
-
-    active_tab = 'cuenta'
-    panel_template = 'core/tabs/_cuenta.html'
-
-
-class AccountProfileView(AccountTabMixin, UpdateView):
-    """Pestaña «Datos profesionales»: la propia ficha (foto, nombre, tipo, servicios).
-
-    Cada uno edita la suya. La ficha de OTRO se gestiona desde Profesionales, y
-    eso sí es cosa de administradores (`ProfessionalUpdateView`).
+    poder entrar aquí, tenga ficha de profesional o no (sin ficha solo se ve la
+    tarjeta de acceso y no hay nada que editar). La contraseña vive en
+    «Seguridad». Cada uno edita lo suyo; la ficha de OTRO se gestiona desde
+    Profesionales (`ProfessionalUpdateView`), reservada a administradores.
     """
 
     form_class = ProfessionalProfileForm
-    active_tab = 'perfil'
-    panel_template = 'core/tabs/_perfil.html'
-    needs_professional = True
+    active_tab = 'cuenta'
+    panel_template = 'core/tabs/_cuenta.html'
     context_object_name = 'professional'
-    success_url = reverse_lazy('core:account-profile')
+    success_url = reverse_lazy('core:account')
 
     def get_object(self, queryset=None):
         return self.professional
 
+    def get(self, request, *args, **kwargs):
+        if self.professional is None:
+            self.object = None
+            return self.render_to_response(self.get_context_data())
+        return super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        if self.professional is None:
+            return redirect('core:account')
+        return super().post(request, *args, **kwargs)
+
     def form_valid(self, form):
-        messages.success(self.request, 'Perfil actualizado correctamente.')
+        messages.success(self.request, 'Datos actualizados correctamente.')
         return super().form_valid(form)
 
 

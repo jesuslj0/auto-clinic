@@ -1,81 +1,311 @@
 {% comment %}
-Pestaña «Cuenta»: con qué te identifica la aplicación, foto incluida.
+Pestaña «Cuenta»: con qué te identifica la aplicación (datos de acceso) y, debajo,
+tu ficha profesional. Antes eran dos pestañas casi idénticas.
 
-Los datos van en solo lectura a propósito. El nombre y la foto se editan en la
-pestaña de datos profesionales (donde vive el resto de la ficha) y el correo no
-se edita en ningún sitio: es el identificador de acceso. La contraseña vive en
-«Seguridad», junto a la verificación en dos pasos.
+Es UN solo formulario para todo: nombre, foto y datos profesionales se guardan
+juntos. Se ve fijo —en modo lectura— y el botón «Editar» de la cabecera de «Datos
+de acceso» lo pasa a edición. Hay dos bloques en el DOM por sección y `editing`
+decide cuál se ve. Si el envío vuelve con errores (`form.is_bound`) arranca ya en
+edición, para que el error se lea donde está el campo; `x-cloak` evita el
+parpadeo antes de que arranque Alpine.
 
-La foto es la del profesional; sin ella (o sin ficha) salen las iniciales, igual
-que en la pestaña de datos profesionales.
+El correo, el rol, la clínica y el estado nunca se editan aquí: el correo es el
+identificador de acceso y el resto son decisión de la administración. La
+contraseña vive en «Seguridad».
+
+Sin ficha de profesional (superusuario de plataforma sin clínica) solo se ve la
+tarjeta de acceso, sin botón ni formulario: no hay nada que editar.
+
+El `action` del formulario es explícito: cuando htmx trae este panel la URL del
+navegador la ha empujado él, y un `action` implícito ataría el envío a lo que
+hubiera en la barra de direcciones. La ficha de OTRO profesional se edita en
+`professionals:edit`, reservada a administradores.
 {% endcomment %}
-<div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
-    <div class="flex items-start gap-3 border-b border-line px-4 py-6 sm:px-8">
-        <span class="mt-1 inline-flex flex-shrink-0 text-brand-fg">{% include 'core/_account_icon.html' with icon='cuenta' %}</span>
-        <div>
-            <h2 class="text-lg font-semibold text-content">Datos de acceso</h2>
-            <p class="mt-1 text-sm text-content-subtle">Así te identifica la aplicación.</p>
+{% if professional %}
+<form method="post" action="{% url 'core:account' %}" enctype="multipart/form-data" novalidate
+      class="space-y-6"
+      x-data="{ editing: {{ form.is_bound|yesno:'true,false' }}, ...dirtyForm({{ form.is_bound|yesno:'true,false' }}) }"
+      @input="check()" @change="check()" @click="check()">
+    {% csrf_token %}
+{% else %}
+<div class="space-y-6">
+{% endif %}
+
+    {# ===================== Datos de acceso ===================== #}
+    <div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+        <div class="flex flex-wrap items-start justify-between gap-4 border-b border-line px-4 py-6 sm:px-8">
+            <div class="flex min-w-0 items-start gap-3">
+                <span class="mt-1 inline-flex flex-shrink-0 text-brand-fg">{% include 'core/_account_icon.html' with icon='cuenta' %}</span>
+                <div>
+                    <h2 class="text-lg font-semibold text-content">Datos de acceso</h2>
+                    <p class="mt-1 text-sm text-content-subtle">Así te identifica la aplicación.</p>
+                </div>
+            </div>
+            {% if professional %}
+            <button type="button" @click="editing = true"
+                    x-show="!editing"{% if form.is_bound %} x-cloak{% endif %}
+                    class="btn-secondary flex-shrink-0">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+                </svg>
+                Editar
+            </button>
+            {% endif %}
         </div>
+
+        {# --- Modo lectura --- #}
+        <div {% if professional %}x-show="!editing"{% if form.is_bound %} x-cloak{% endif %} {% endif %}class="flex flex-col gap-6 px-4 py-7 sm:flex-row sm:items-start sm:px-8">
+            <div class="flex flex-shrink-0 flex-col items-center gap-2">
+                {% if professional.photo %}
+                <img src="{{ professional.photo.url }}" alt="Foto de perfil" class="h-24 w-24 rounded-2xl object-cover ring-2 ring-brand-line">
+                {% else %}
+                <span aria-hidden="true" class="flex h-24 w-24 items-center justify-center rounded-2xl bg-brand-gradient text-3xl font-semibold text-white shadow-glow">
+                    {{ request.user.get_full_name|default:request.user.email|make_list|first|upper }}
+                </span>
+                {% endif %}
+            </div>
+            <dl class="grid min-w-0 flex-1 grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
+                <div class="sm:col-span-2">
+                    <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Correo electrónico</dt>
+                    <dd class="mt-1 text-sm font-medium text-content">{{ request.user.email }}</dd>
+                    <p class="mt-1 text-xs text-content-faint">Es tu identificador de acceso y no puede cambiarse.</p>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Nombre</dt>
+                    <dd class="mt-1 text-sm text-content">{{ request.user.get_full_name|default:"—" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Rol</dt>
+                    <dd class="mt-1 text-sm text-content">{{ request.user.get_role_display|default:"Personal" }}</dd>
+                </div>
+                <div{% if not professional %} class="sm:col-span-2"{% endif %}>
+                    <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Clínica</dt>
+                    <dd class="mt-1 text-sm text-content">{{ request.user.clinic.name|default:"—" }}</dd>
+                </div>
+                {% if professional %}
+                {% comment %}`is_active` decide si puedes recibir citas por cualquier
+                vía (`es_elegible()` en appointments/services.py). Va en solo lectura
+                porque es una decisión de la clínica sobre ti, no una preferencia
+                tuya: apagarla a uno mismo sería vaciarse la agenda sin querer. No
+                confundir con «aceptar reservas online», que sí eliges tú abajo.{% endcomment %}
+                <div>
+                    <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Estado</dt>
+                    <dd class="mt-1">
+                        {% if professional.is_active %}
+                        <span class="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-xs font-medium text-success ring-1 ring-success-line">
+                            <span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true"></span>
+                            En activo
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center gap-1.5 rounded-full bg-muted-strong px-2.5 py-1 text-xs font-medium text-content-muted ring-1 ring-line">
+                            <span class="h-1.5 w-1.5 rounded-full bg-content-faint" aria-hidden="true"></span>
+                            No activo
+                        </span>
+                        {% endif %}
+                    </dd>
+                    <p class="mt-1 text-xs text-content-faint">Lo gestiona la administración de la clínica.</p>
+                </div>
+                {% endif %}
+            </dl>
+        </div>
+
+        {% if professional %}
+        {# --- Modo edición: foto, nombre y apellidos --- #}
+        <div x-show="editing"{% if not form.is_bound %} x-cloak{% endif %} class="space-y-6 px-4 py-7 sm:px-8">
+            {% if form.non_field_errors %}
+            <div class="rounded-xl bg-danger-soft px-4 py-3 ring-1 ring-danger-line">
+                {% for error in form.non_field_errors %}
+                <p class="text-sm text-danger">{{ error }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {# Foto de perfil #}
+            <div class="flex flex-col items-center gap-4 sm:flex-row sm:items-center"
+                 x-data="{ preview: '{% if professional.photo %}{{ professional.photo.url }}{% endif %}', original: '{% if professional.photo %}{{ professional.photo.url }}{% endif %}' }"
+                 @reset.window="preview = original">
+                <template x-if="preview">
+                    <img :src="preview" alt="Foto de perfil" class="h-20 w-20 flex-shrink-0 rounded-2xl object-cover ring-2 ring-brand-line">
+                </template>
+                <template x-if="!preview">
+                    <span class="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-2xl bg-brand-gradient text-2xl font-semibold text-white shadow-glow">
+                        {{ request.user.get_full_name|default:request.user.email|make_list|first|upper }}
+                    </span>
+                </template>
+                <div class="flex-1">
+                    <label for="{{ form.photo.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.photo.label }}</label>
+                    <input
+                        type="file"
+                        name="{{ form.photo.html_name }}"
+                        id="{{ form.photo.id_for_label }}"
+                        accept="image/*"
+                        @change="const f = $event.target.files[0]; if (f) preview = URL.createObjectURL(f)"
+                        class="block w-full text-sm text-content-muted file:mr-4 file:rounded-xl file:border-0 file:bg-brand-soft file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand-fg hover:file:bg-brand-soft-strong"
+                    >
+                    {% if form.photo.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.photo.errors|join:", " }}</p>{% endif %}
+                    <p class="mt-1 text-xs text-content-faint">JPG o PNG. Se mostrará en el calendario y el menú superior.</p>
+                </div>
+            </div>
+
+            {# Nombre y apellidos #}
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                    <label for="{{ form.first_name.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.first_name.label }}</label>
+                    <input type="text" name="{{ form.first_name.html_name }}" id="{{ form.first_name.id_for_label }}" value="{{ form.first_name.value|default:'' }}" placeholder="Ej. Lucía"
+                        class="block w-full rounded-xl border {% if form.first_name.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                    {% if form.first_name.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.first_name.errors|join:", " }}</p>{% endif %}
+                </div>
+                <div>
+                    <label for="{{ form.last_name.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.last_name.label }}</label>
+                    <input type="text" name="{{ form.last_name.html_name }}" id="{{ form.last_name.id_for_label }}" value="{{ form.last_name.value|default:'' }}" placeholder="Ej. Martín"
+                        class="block w-full rounded-xl border {% if form.last_name.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                    {% if form.last_name.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.last_name.errors|join:", " }}</p>{% endif %}
+                </div>
+            </div>
+            <p class="text-xs text-content-faint">El correo, el rol, la clínica y el estado no se editan aquí.</p>
+        </div>
+        {% endif %}
     </div>
 
-    <div class="flex flex-col gap-6 px-4 py-7 sm:flex-row sm:items-start sm:px-8">
-        <div class="flex flex-shrink-0 flex-col items-center gap-2">
-            {% if professional.photo %}
-            <img src="{{ professional.photo.url }}" alt="Foto de perfil" class="h-24 w-24 rounded-2xl object-cover ring-2 ring-brand-line">
-            {% else %}
-            <span aria-hidden="true" class="flex h-24 w-24 items-center justify-center rounded-2xl bg-brand-gradient text-3xl font-semibold text-white shadow-glow">
-                {{ request.user.get_full_name|default:request.user.email|make_list|first|upper }}
-            </span>
-            {% endif %}
-            {% if professional %}
-            <a href="{% url 'core:account-profile' %}"
-               hx-get="{% url 'core:account-profile' %}" hx-target="#account-tab-region" hx-swap="innerHTML" hx-push-url="true"
-               class="text-xs font-semibold text-brand-fg hover:underline">Cambiar foto</a>
-            {% endif %}
+    {% if professional %}
+    {# ===================== Datos profesionales ===================== #}
+    <div class="rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+        <div class="flex items-start gap-3 border-b border-line px-4 py-6 sm:px-8">
+            <span class="mt-1 inline-flex flex-shrink-0 text-brand-fg">{% include 'core/_account_icon.html' with icon='perfil' %}</span>
+            <div>
+                <h2 class="text-lg font-semibold text-content">Datos profesionales</h2>
+                <p class="mt-1 text-sm text-content-subtle">
+                    <span x-show="!editing"{% if form.is_bound %} x-cloak{% endif %}>Tu información y los servicios que ofreces.</span>
+                    <span x-show="editing"{% if not form.is_bound %} x-cloak{% endif %}>Actualiza tu información y los servicios que ofreces.</span>
+                </p>
+            </div>
         </div>
-        <dl class="grid min-w-0 flex-1 grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
+
+        {# --- Modo lectura --- #}
+        <dl x-show="!editing"{% if form.is_bound %} x-cloak{% endif %} class="grid grid-cols-1 gap-x-6 gap-y-5 px-4 py-7 sm:grid-cols-2 sm:px-8">
+            <div>
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Tipo de profesional</dt>
+                <dd class="mt-1 text-sm text-content">{{ professional.professional_type_label }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Tratamiento</dt>
+                <dd class="mt-1 text-sm text-content">{{ professional.get_title_display|default:"Sin tratamiento" }}</dd>
+            </div>
             <div class="sm:col-span-2">
-                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Correo electrónico</dt>
-                <dd class="mt-1 text-sm font-medium text-content">{{ request.user.email }}</dd>
-                <p class="mt-1 text-xs text-content-faint">Es tu identificador de acceso y no puede cambiarse.</p>
-            </div>
-            <div>
-                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Nombre</dt>
-                <dd class="mt-1 text-sm text-content">{{ request.user.get_full_name|default:"—" }}</dd>
-            </div>
-            <div>
-                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Rol</dt>
-                <dd class="mt-1 text-sm text-content">{{ request.user.get_role_display|default:"Personal" }}</dd>
-            </div>
-            <div{% if not professional %} class="sm:col-span-2"{% endif %}>
-                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Clínica</dt>
-                <dd class="mt-1 text-sm text-content">{{ request.user.clinic.name|default:"—" }}</dd>
-            </div>
-            {% if professional %}
-            {% comment %}`is_active` decide si puedes recibir citas por cualquier
-            vía (`es_elegible()` en appointments/services.py). Va en solo lectura
-            porque es una decisión de la clínica sobre ti, no una preferencia
-            tuya: apagarla a uno mismo sería vaciarse la agenda sin querer. No
-            confundir con «aceptar reservas online», que sí eliges tú en la
-            pestaña de al lado.{% endcomment %}
-            <div>
-                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Estado</dt>
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Reservas online</dt>
                 <dd class="mt-1">
-                    {% if professional.is_active %}
+                    {% if professional.accepts_online_booking %}
                     <span class="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-xs font-medium text-success ring-1 ring-success-line">
                         <span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true"></span>
-                        En activo
+                        Aceptas reservas online
                     </span>
                     {% else %}
                     <span class="inline-flex items-center gap-1.5 rounded-full bg-muted-strong px-2.5 py-1 text-xs font-medium text-content-muted ring-1 ring-line">
                         <span class="h-1.5 w-1.5 rounded-full bg-content-faint" aria-hidden="true"></span>
-                        No activo
+                        Sin reservas online
                     </span>
                     {% endif %}
                 </dd>
-                <p class="mt-1 text-xs text-content-faint">Lo gestiona la administración de la clínica.</p>
             </div>
-            {% endif %}
+            <div class="sm:col-span-2">
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Presentación</dt>
+                <dd class="mt-1 whitespace-pre-line break-words text-sm text-content">{{ professional.bio|default:"—" }}</dd>
+            </div>
+            <div class="sm:col-span-2">
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Colegiación</dt>
+                <dd class="mt-1 text-sm text-content">
+                    {% if professional.license_number or professional.license_body %}
+                    {{ professional.license_number }}{% if professional.license_number and professional.license_body %} · {% endif %}{{ professional.license_body }}
+                    {% else %}—{% endif %}
+                </dd>
+            </div>
+            <div class="sm:col-span-2">
+                <dt class="text-xs font-medium uppercase tracking-wide text-content-faint">Servicios que ofreces</dt>
+                <dd class="mt-1.5 flex flex-wrap gap-2">
+                    {% for service in professional.services.all %}
+                    <span class="inline-flex items-center rounded-full bg-brand-soft px-2.5 py-1 text-xs font-medium text-brand-fg ring-1 ring-brand-line">{{ service.name }}</span>
+                    {% empty %}
+                    <span class="text-sm text-content-subtle">Ninguno todavía.</span>
+                    {% endfor %}
+                </dd>
+            </div>
         </dl>
+
+        {# --- Modo edición --- #}
+        <div x-show="editing"{% if not form.is_bound %} x-cloak{% endif %} class="space-y-6 px-4 py-7 sm:px-8">
+            {# Tipo de profesional #}
+            <div>
+                <label for="{{ form.professional_type.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.professional_type.label }}</label>
+                <select name="{{ form.professional_type.html_name }}" id="{{ form.professional_type.id_for_label }}"
+                    class="block w-full rounded-xl border {% if form.professional_type.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                    {% for value, label in form.professional_type.field.choices %}
+                    <option value="{{ value }}" {% if form.professional_type.value == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                {% if form.professional_type.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.professional_type.errors|join:", " }}</p>{% endif %}
+            </div>
+
+            {% include 'appointments/partials/_professional_identity_fields.html' %}
+
+            {# Servicios #}
+            <div>
+                <label for="{{ form.services.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.services.label }}</label>
+                <p class="mb-2 text-xs text-content-faint">Mantén pulsado Ctrl (o Cmd en Mac) para seleccionar varios.</p>
+                <select name="{{ form.services.html_name }}" id="{{ form.services.id_for_label }}" multiple size="6"
+                    class="block w-full rounded-xl border {% if form.services.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+                    {% for value, label in form.services.field.choices %}
+                    <option value="{{ value }}" {% if value in form.services.value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                {% if form.services.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.services.errors|join:", " }}</p>{% endif %}
+            </div>
+
+            {# Reservas online. La única preferencia que no es un dato #}
+            <div class="rounded-2xl bg-muted p-4 ring-1 ring-line">
+                <label class="flex cursor-pointer items-start gap-3">
+                    <input
+                        type="checkbox"
+                        name="{{ form.accepts_online_booking.html_name }}"
+                        id="{{ form.accepts_online_booking.id_for_label }}"
+                        {% if form.accepts_online_booking.value %}checked{% endif %}
+                        class="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+                    >
+                    <span>
+                        <span class="block text-sm font-medium text-content">{{ form.accepts_online_booking.label }}</span>
+                        <span class="mt-0.5 block text-xs text-content-faint">{{ form.accepts_online_booking.help_text }}</span>
+                    </span>
+                </label>
+                {% if form.accepts_online_booking.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.accepts_online_booking.errors|join:", " }}</p>{% endif %}
+            </div>
+
+            <div class="flex items-center justify-end gap-3 border-t border-line pt-6">
+                {% comment %}
+                Con el formulario recién cargado, «Cancelar» lo devuelve a lo guardado
+                (`reset`) y vuelve al resumen. Si viene de un envío con errores, el
+                `reset` dejaría los valores inválidos como «guardados», así que ahí
+                es un enlace que recarga la pestaña limpia.
+                {% endcomment %}
+                {% if form.is_bound %}
+                <a href="{% url 'core:account' %}"
+                   hx-get="{% url 'core:account' %}" hx-target="#account-tab-region" hx-swap="innerHTML" hx-push-url="true"
+                   class="btn-secondary">Cancelar</a>
+                {% else %}
+                <button type="button" class="btn-secondary"
+                        @click="$root.reset(); $root.dispatchEvent(new Event('change')); editing = false">Cancelar</button>
+                {% endif %}
+                <button type="submit" class="btn-primary" :disabled="!dirty" :title="dirty ? null : 'No hay cambios que guardar'" {% if not form.is_bound %}disabled{% endif %}>
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                    Guardar cambios
+                </button>
+            </div>
+        </div>
     </div>
+    {% endif %}
+
+{% if professional %}
+</form>
+{% else %}
 </div>
+{% endif %}

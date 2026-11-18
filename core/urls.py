@@ -3,7 +3,6 @@ from django.views.generic import RedirectView
 
 from core import two_factor_views
 from core.views import (
-    AccountProfileView,
     AccountSecurityView,
     AccountScheduleView,
     AccountView,
@@ -31,7 +30,7 @@ urlpatterns = [
     # `hx-push-url`, y sin JavaScript siguen siendo enlaces normales. Las dos
     # últimas sólo existen para quien tiene ficha de profesional.
     path('cuenta/', AccountView.as_view(), name='account'),
-    path('cuenta/perfil/', AccountProfileView.as_view(), name='account-profile'),
+    path('cuenta/perfil/', RedirectView.as_view(pattern_name='core:account', permanent=False), name='account-profile'),
     path('cuenta/horario/', AccountScheduleView.as_view(), name='account-schedule'),
     path('cuenta/contrasena/', PasswordChangeSectionView.as_view(), name='password-change'),
     path('cuenta/seguridad/', AccountSecurityView.as_view(), name='account-security'),

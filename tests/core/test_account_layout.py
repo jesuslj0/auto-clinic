@@ -11,7 +11,7 @@ from django.urls import reverse
 from appointments.models import Professional
 
 ACCOUNT_URL = '/cuenta/'
-PROFILE_URL = '/cuenta/perfil/'
+PROFILE_URL = '/cuenta/'
 SECURITY_URL = '/cuenta/seguridad/'
 
 
@@ -61,14 +61,16 @@ class TestAccountTabShowsThePhoto:
     def test_without_a_photo_the_initials_are_shown(self, staff_session):
         html = _html(staff_session, ACCOUNT_URL)
 
-        assert 'alt="Foto de perfil"' not in html
+        assert '<img src="' not in html[html.index('Datos de acceso'):html.index('Datos profesionales')]
+
         assert 'bg-brand-gradient' in html
-
-    def test_a_professional_can_jump_to_change_it(self, staff_session):
+    def test_the_edit_button_sits_in_the_access_card_header(self, staff_session):
         html = _html(staff_session, ACCOUNT_URL)
+        header = html[html.index("Datos de acceso"):html.index("Datos profesionales")]
 
-        assert 'Cambiar foto' in html
-        assert f'href="{PROFILE_URL}"' in html
+        assert "Editar" in header
+        assert "Cambiar foto" not in html
+        assert "M16.862 4.487" in header   # el lápiz
 
     def test_without_a_professional_profile_there_is_nothing_to_change(self, client, superuser):
         client.force_login(superuser)
@@ -94,16 +96,15 @@ class TestProfileIsReadOnlyUntilYouAskToEdit:
     def test_it_starts_in_read_mode_with_an_edit_button(self, staff_session):
         html = _html(staff_session, PROFILE_URL)
 
-        assert 'x-data="{ editing: false }"' in html
-        assert 'Editar datos' in html
+        assert 'editing: false' in html
+        assert 'Editar' in html
 
     def test_the_form_is_hidden_until_editing(self, staff_session):
         html = _html(staff_session, PROFILE_URL)
-        form_tag = html[html.index('<form method="post" action="/cuenta/perfil/"'):]
-        form_tag = form_tag[:form_tag.index('>')]
-
-        assert 'x-show="editing"' in form_tag
-        assert 'x-cloak' in form_tag
+        # Un solo formulario para todo, y los campos solo se ven editando.
+        assert html.count("<form method=\"post\" action=\"/cuenta/\"") == 1
+        assert html.count("x-show=\"editing\"") >= 2
+        assert "name=\"first_name\"" in html and "name=\"bio\"" in html
 
     def test_the_saved_values_are_shown_as_text(self, staff_session, staff_user, service_a):
         professional = staff_user.professional_profile
@@ -115,7 +116,7 @@ class TestProfileIsReadOnlyUntilYouAskToEdit:
         professional.services.add(service_a)
 
         html = _html(staff_session, PROFILE_URL)
-        read_mode = html[:html.index('<form method="post" action="/cuenta/perfil/"')]
+        read_mode = html
 
         assert 'Podóloga especializada en pie diabético.' in read_mode
         assert '28/1234 · Colegio de Madrid' in read_mode
@@ -125,7 +126,7 @@ class TestProfileIsReadOnlyUntilYouAskToEdit:
 
     def test_empty_fields_show_a_dash_not_blank(self, staff_session):
         html = _html(staff_session, PROFILE_URL)
-        read_mode = html[:html.index('<form method="post" action="/cuenta/perfil/"')]
+        read_mode = html
 
         assert 'Sin tratamiento' in read_mode
         assert 'Ninguno todavía.' in read_mode
@@ -146,20 +147,20 @@ class TestProfileIsReadOnlyUntilYouAskToEdit:
         assert 'editing = false' in html
 
     def test_a_rejected_save_reopens_the_form_in_edit_mode(self, staff_session):
-        response = staff_session.post(reverse('core:account-profile'), {
+        response = staff_session.post(reverse('core:account'), {
             'first_name': 'Lucía', 'last_name': 'Martín',
             'professional_type': 'podologo', 'bio': 'x' * 501,
         })
 
         assert response.status_code == 200
         html = response.content.decode()
-        assert 'x-data="{ editing: true }"' in html
+        assert 'editing: true' in html
         # Con un envío fallido, «Cancelar» recarga la pestaña limpia en vez de
         # dejar los valores inválidos como si estuvieran guardados.
         assert f'href="{PROFILE_URL}"' in html
 
     def test_saving_still_works(self, staff_session, staff_user):
-        response = staff_session.post(reverse('core:account-profile'), {
+        response = staff_session.post(reverse('core:account'), {
             'first_name': 'Lucía', 'last_name': 'Martín',
             'professional_type': 'podologo', 'bio': 'Nueva presentación',
             'accepts_online_booking': 'on',

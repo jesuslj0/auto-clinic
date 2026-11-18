@@ -21,7 +21,7 @@ from core.models import User
 from services.models import Service
 
 ACCOUNT_URL = '/cuenta/'
-PROFILE_URL = '/cuenta/perfil/'
+PROFILE_URL = '/cuenta/'  # el formulario unificado vive en «Cuenta»
 SCHEDULE_URL = '/cuenta/horario/'
 
 
@@ -59,7 +59,7 @@ def _schedule_post(**overrides):
     'url_name,expected',
     [
         ('core:account', ACCOUNT_URL),
-        ('core:account-profile', PROFILE_URL),
+        ('core:account-profile', '/cuenta/perfil/'),
         ('core:account-schedule', SCHEDULE_URL),
     ],
 )
@@ -69,7 +69,7 @@ def test_urls(url_name, expected):
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize('url', [ACCOUNT_URL, PROFILE_URL, SCHEDULE_URL])
+@pytest.mark.parametrize('url', [ACCOUNT_URL, SCHEDULE_URL])
 def test_requires_login(client, url):
     response = client.get(url)
     assert response.status_code == 302
@@ -77,13 +77,13 @@ def test_requires_login(client, url):
 
 
 @pytest.mark.django_db
-def test_the_four_tabs_render_for_a_professional(client, staff_user):
+def test_the_three_tabs_render_for_a_professional(client, staff_user):
     client.force_login(staff_user)
-    for url in (ACCOUNT_URL, PROFILE_URL, SCHEDULE_URL, '/cuenta/seguridad/'):
+    for url in (ACCOUNT_URL, SCHEDULE_URL, '/cuenta/seguridad/'):
         response = client.get(url)
         assert response.status_code == 200, url
         assert [tab['key'] for tab in response.context['account_tabs']] == [
-            'cuenta', 'perfil', 'horario', 'seguridad',
+            'cuenta', 'horario', 'seguridad',
         ], url
 
 
@@ -104,7 +104,7 @@ def test_a_user_without_a_professional_only_sees_the_account_tabs(client, superu
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize('url', [PROFILE_URL, SCHEDULE_URL])
+@pytest.mark.parametrize('url', [SCHEDULE_URL])
 def test_professional_tabs_redirect_when_there_is_no_profile(client, superuser, url):
     client.force_login(superuser)
     response = client.get(url)
@@ -142,7 +142,7 @@ def test_the_old_profile_url_redirects_to_the_tab(client, staff_user):
     response = client.get(reverse('appointments:profile'))
 
     assert response.status_code == 302
-    assert response['Location'] == PROFILE_URL
+    assert response['Location'] == '/cuenta/perfil/'
 
 
 # ---------------------------------------------------------------------------
@@ -262,7 +262,7 @@ def test_every_tab_declares_an_icon(client, staff_user):
     client.force_login(staff_user)
     tabs = client.get(ACCOUNT_URL).context['account_tabs']
 
-    assert [tab['icon'] for tab in tabs] == ['cuenta', 'perfil', 'horario', 'seguridad']
+    assert [tab['icon'] for tab in tabs] == ['cuenta', 'horario', 'seguridad']
 
 
 @pytest.mark.django_db
