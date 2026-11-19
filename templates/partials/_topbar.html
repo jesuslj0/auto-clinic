@@ -39,6 +39,33 @@
             >
         </form>
 
+        {% comment %}Campana de notificaciones: el badge lo mantiene `notifications.js`
+        (`[data-notif-unread]`); el desplegable se carga por htmx al abrirse.{% endcomment %}
+        {% if request.user.clinic_id %}
+        <div class="relative flex-shrink-0" x-data="{ open: false }" @keydown.escape.window="open = false" @click.outside="open = false">
+            <button type="button"
+                    @click="open = !open"
+                    hx-get="{% url 'notifications:recent' %}"
+                    hx-target="#notif-dropdown"
+                    hx-trigger="click"
+                    class="relative rounded-xl p-2 text-content-subtle transition hover:bg-muted-strong hover:text-content-muted"
+                    aria-label="Notificaciones"
+                    aria-haspopup="true"
+                    :aria-expanded="open">
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                </svg>
+                <span data-notif-unread class="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-semibold text-white ring-2 ring-surface{% if not notification_unread_total %} hidden{% endif %}">
+                    <span data-notif-unread-count>{{ notification_unread_total|default:0 }}</span><span class="sr-only"> notificaciones sin leer</span>
+                </span>
+            </button>
+            <div x-show="open" x-cloak x-transition
+                 class="absolute right-0 z-40 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl bg-surface shadow-soft ring-1 ring-line">
+                <div id="notif-dropdown"><p class="px-4 py-6 text-center text-sm text-content-subtle">Cargando…</p></div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Separador -->
         <div class="h-6 w-px flex-shrink-0 bg-line sm:h-8" aria-hidden="true"></div>
 

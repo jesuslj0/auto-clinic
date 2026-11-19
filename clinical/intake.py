@@ -272,6 +272,21 @@ def _resolve_episode(link: PatientFormLink) -> Episode:
     )
 
 
+def _notify_completed(link: PatientFormLink) -> None:
+    """Avisa al personal de que un paciente envió su ficha (texto genérico, sin nombre)."""
+    # Import local: `notifications` importa de otras apps y evita ciclos al cargar.
+    from django.urls import reverse
+
+    from notifications.inbox import notify
+
+    notify(
+        link.clinic,
+        'patient_form_completed',
+        url=reverse('patients:detail', args=[link.patient_id]),
+        object_id=link.pk,
+    )
+
+
 def complete_link(
     link: PatientFormLink,
     *,
@@ -323,4 +338,5 @@ def complete_link(
             locked.completed_by_relationship = (completed_by_relationship or '').strip()
             locked.privacy_notice_version = PRIVACY_NOTICE_VERSION
             locked.save()
+        _notify_completed(locked)
     return locked

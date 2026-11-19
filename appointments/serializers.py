@@ -366,7 +366,19 @@ class AppointmentSerializer(ClinicScopedSerializerMixin, serializers.ModelSerial
             except AppointmentDomainError as error:
                 campo = 'scheduled_at' if isinstance(error, BookingTooSoon) else 'professional'
                 raise serializers.ValidationError({campo: error.detail['message']})
+            estado_previo = instance.status
             appointment = super().update(instance, validated_data)
+
+            # El agente cancela con un PATCH de `status` (no pasa por
+            # `cancel_appointment`): hay que avisar al personal igualmente.
+            if (
+                isinstance(usuario, ClinicAgent)
+                and estado_previo != Appointment.Status.CANCELLED
+                and appointment.status == Appointment.Status.CANCELLED
+            ):
+                from appointments.services import notify_staff
+
+                notify_staff(appointment, 'appointment_cancelled')
 
             # El agente ya salió por la rama de arriba, así que quien mueve la hora
             # aquí es el staff: al paciente hay que contárselo. Sin usuario

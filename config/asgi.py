@@ -6,6 +6,7 @@ from django.core.asgi import get_asgi_application
 
 from agent.routing import websocket_urlpatterns as agent_websocket_urlpatterns
 from appointments.routing import websocket_urlpatterns as appointment_websocket_urlpatterns
+from notifications.routing import websocket_urlpatterns as notification_websocket_urlpatterns
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.dev')
 
@@ -15,7 +16,11 @@ application = ProtocolTypeRouter(
     {
         'http': django_asgi_app,
         'websocket': AuthMiddlewareStack(
-            URLRouter(appointment_websocket_urlpatterns + agent_websocket_urlpatterns)
+            URLRouter(
+                appointment_websocket_urlpatterns
+                + agent_websocket_urlpatterns
+                + notification_websocket_urlpatterns
+            )
         ),
     }
 )

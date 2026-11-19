@@ -88,6 +88,9 @@ def get_or_create_session(clinic, phone: str, *, is_test: bool = False) -> Conve
         phone=normalized,
         defaults={'is_test': is_test},
     )
+    # Marca no persistida: quien lo necesita (`record_message`, para avisar de una
+    # conversación nueva) la lee; el resto de llamadores no cambia.
+    session.just_created = created
     if is_test and not session.is_test:
         session.is_test = True
         session.save(update_fields=['is_test'])
@@ -134,10 +137,12 @@ def record_message(
     existente sin duplicarlo ni volver a tocar los contadores. Meta reintenta
     la entrega de sus webhooks, así que sin esto el hilo se llena de repetidos.
     """
+    session_is_new = False
     if session is None:
         if not phone:
             raise ValueError('Hace falta `phone` o `session` para registrar el mensaje.')
         session = get_or_create_session(clinic, phone)
+        session_is_new = bool(getattr(session, 'just_created', False))
 
     if wa_message_id:
         existing = ChatMessage.objects.filter(wa_message_id=wa_message_id).first()
@@ -184,7 +189,23 @@ def record_message(
 
     broadcast_message(message)
     broadcast_session(session)
+    if direction == ChatMessage.Direction.INBOUND and not session.is_test:
+        _notify_inbound(clinic, session, new=session_is_new)
     return message
+
+
+def _notify_inbound(clinic, session, *, new):
+    """Aviso al personal de un mensaje entrante (texto genérico: sin nombre ni contenido)."""
+    from django.urls import reverse
+
+    from notifications.inbox import notify
+
+    notify(
+        clinic,
+        'chat_new' if new else 'chat_message',
+        url=reverse('agent:chat-thread', args=[session.pk]),
+        object_id=session.pk,
+    )
 
 
 def resolve_test_phone(clinic) -> str:
@@ -614,4 +635,15 @@ def apply_delivery_status(*, clinic, wa_message_id: str, status: str, timestamp=
             # `save()` y no `update()`: el mensaje está en la auditoría.
             message.save(update_fields=fields)
             broadcast_message(message)
+            if 'status' in fields and message.status == ChatMessage.Status.FAILED and not message.session.is_test:
+                from django.urls import reverse
+
+                from notifications.inbox import notify
+
+                notify(
+                    clinic,
+                    'message_failed',
+                    url=reverse('agent:chat-thread', args=[message.session_id]),
+                    object_id=message.session_id,
+                )
     return message

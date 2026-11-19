@@ -511,6 +511,10 @@ def create_appointment(
         if source == Appointment.Source.STAFF and status == Appointment.Status.CONFIRMED:
             _queue_notice(appointment, 'booking_confirmed')
 
+        # Lo que el agente reserva queda pendiente de validar: el personal debe verlo.
+        if source == Appointment.Source.AGENT:
+            notify_staff(appointment, 'appointment_pending')
+
     return appointment
 
 
@@ -713,6 +717,30 @@ def _queue_notice(appointment, kind, **kwargs):
     queue_notice(appointment, kind, **kwargs)
 
 
+def notify_staff(appointment, kind):
+    """Aviso in-app al personal de la clínica sobre una cita (texto genérico, sin paciente).
+
+    Import local: `notifications` depende de `appointments`, no al revés.
+    """
+    from django.urls import reverse
+
+    from notifications.inbox import notify
+
+    notify(
+        appointment.clinic,
+        kind,
+        url=reverse('core:dashboard-manage-appointment', args=[appointment.pk]),
+        object_id=appointment.pk,
+    )
+
+
+#: Quién, al mover o cancelar, deja algo que el personal no sabe todavía.
+_ACTORS_TO_ANNOUNCE = (
+    AppointmentStatusHistory.Actor.AGENT,
+    AppointmentStatusHistory.Actor.PATIENT,
+)
+
+
 def _record_transition(appointment, from_status, *, actor, actor_label=''):
     AppointmentStatusHistory.objects.create(
         appointment=appointment,
@@ -833,6 +861,10 @@ def cancel_appointment(
         notify = actor == AppointmentStatusHistory.Actor.STAFF
     if notify:
         _queue_notice(appointment, 'booking_cancelled')
+    # Al personal se le avisa de lo que hacen el agente o el paciente, no de
+    # lo que hace la propia clínica ni de la caducidad de un hold (SYSTEM).
+    if actor in _ACTORS_TO_ANNOUNCE:
+        notify_staff(appointment, 'appointment_cancelled')
     return appointment
 
 
@@ -933,6 +965,8 @@ def reschedule_appointment(
         # lo mueve la clínica, hay que contárselo, con la hora que tenía.
         if actor == AppointmentStatusHistory.Actor.STAFF:
             _queue_notice(appointment, 'booking_changed', previous_scheduled_at=hora_anterior)
+        if actor in _ACTORS_TO_ANNOUNCE:
+            notify_staff(appointment, 'appointment_rescheduled')
 
     return appointment
 

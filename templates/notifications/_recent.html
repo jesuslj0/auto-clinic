@@ -1,0 +1,28 @@
+{% comment %}Desplegable de la campana (HTMX). Solo avisos genéricos del usuario.{% endcomment %}
+<div class="flex items-center justify-between border-b border-line px-4 py-2.5">
+    <p class="text-sm font-semibold text-content">Notificaciones</p>
+    {% if unread_total %}
+    <form method="post" action="{% url 'notifications:read-all' %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit" class="text-xs font-medium text-brand-fg hover:underline">Marcar todas como leídas</button>
+    </form>
+    {% endif %}
+</div>
+<ul class="max-h-80 divide-y divide-line overflow-y-auto">
+    {% for n in recent %}
+    <li>
+        <a href="{% url 'notifications:open' n.pk %}" class="flex items-start gap-3 px-4 py-3 transition hover:bg-muted">
+            <span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full {% if n.is_read %}bg-transparent{% else %}bg-brand-600{% endif %}" aria-hidden="true"></span>
+            <span class="min-w-0 flex-1">
+                <span class="block truncate text-sm {% if n.is_read %}text-content-muted{% else %}font-semibold text-content{% endif %}">{{ n.title }}</span>
+                <span class="block truncate text-xs text-content-subtle">{{ n.body }}</span>
+                <span class="block text-[11px] text-content-faint">{{ n.created_at|timesince }}</span>
+            </span>
+        </a>
+    </li>
+    {% empty %}
+    <li class="px-4 py-8 text-center text-sm text-content-subtle">No tienes notificaciones.</li>
+    {% endfor %}
+</ul>
+<a href="{% url 'notifications:list' %}" class="block border-t border-line px-4 py-2.5 text-center text-sm font-medium text-brand-fg hover:bg-muted">Ver todas</a>

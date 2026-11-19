@@ -7,6 +7,8 @@
     <link rel="icon" type="image/x-icon" href="{% static 'img/favicon/favicon.ico' %}">
     <link rel="icon" type="image/png" sizes="32x32" href="{% static 'img/favicon/favicon-32x32.png' %}">
     <link rel="icon" type="image/png" sizes="16x16" href="{% static 'img/favicon/favicon-16x16.png' %}">
+    <link rel="manifest" href="{% url 'manifest' %}">
+    <meta name="theme-color" content="#7c3aed">
     <title>{% block title %}{{ clinic.name|default:"Auto Clinic" }}{% endblock %}</title>
     {% include "partials/_head_theme.html" %}
     {% include "partials/_head_sidebar.html" %}
@@ -298,6 +300,9 @@ emite en toda página del panel, aunque no contenga ningún formulario.
     <script src="{% static 'js/chat_live.js' %}"
             data-ws-path="/ws/chats/"
             data-unread-url="{% url 'agent:chat-list-fragment' %}"></script>
+    <script src="{% static 'js/notifications.js' %}"
+            data-ws-path="/ws/notifications/"
+            data-count-url="{% url 'notifications:count' %}"></script>
     {% endif %}
     {% comment %}Altos reales de la barra superior, publicados como variables CSS:
     `--app-topbar-h` (la barra de app) ancla la cabecera de sección en escritorio, y
@@ -416,7 +421,9 @@ emite en toda página del panel, aunque no contenga ningún formulario.
                 x-transition:leave-end="opacity-0 translate-y-2 scale-95"
                 :class="toast.type === 'error'
                     ? 'bg-danger-soft ring-danger-line text-danger'
-                    : 'bg-success-soft ring-success-line text-success'"
+                    : (toast.type === 'info'
+                        ? 'bg-info-soft ring-info-line text-info'
+                        : 'bg-success-soft ring-success-line text-success')"
                 class="flex w-80 items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium shadow-soft ring-1"
                 role="alert"
             >
@@ -424,7 +431,10 @@ emite en toda página del panel, aunque no contenga ningún formulario.
                     <path x-show="toast.type !== 'error'" stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                     <path x-show="toast.type === 'error'" stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                 </svg>
-                <span class="flex-1" x-text="toast.message"></span>
+                <template x-if="toast.href">
+                    <a :href="toast.href" class="flex-1 underline-offset-2 hover:underline" x-text="toast.message"></a>
+                </template>
+                <span x-show="!toast.href" class="flex-1" x-text="toast.message"></span>
                 <button @click="dismiss(toast.id)" class="ml-1 rounded-lg p-1 opacity-60 transition hover:opacity-100" aria-label="Cerrar">
                     <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -465,10 +475,12 @@ emite en toda página del panel, aunque no contenga ningún formulario.
         function toastManager() {
             return {
                 toasts: [],
-                add(message, type = 'success') {
-                    const id = Date.now();
-                    this.toasts.push({ id, message, type, visible: true });
-                    setTimeout(() => this.dismiss(id), 4500);
+                // `opts.href`: el toast enlaza a ese destino. `opts.sticky`: no se cierra
+                // solo, solo con el botón (avisos que no deben perderse).
+                add(message, type = 'success', opts = {}) {
+                    const id = Date.now() + Math.random();
+                    this.toasts.push({ id, message, type, href: opts.href || '', visible: true });
+                    if (!opts.sticky) setTimeout(() => this.dismiss(id), 4500);
                 },
                 dismiss(id) {
                     const t = this.toasts.find(t => t.id === id);
@@ -477,6 +489,12 @@ emite en toda página del panel, aunque no contenga ningún formulario.
                 },
             };
         }
+
+        // API global de toasts: `window.acToast(msg, 'success'|'error'|'info', {href, sticky})`.
+        window.acToast = function (message, type, opts) {
+            const mgr = document.getElementById('toast-container')?._x_dataStack?.[0];
+            if (mgr) mgr.add(message, type || 'success', opts || {});
+        };
 
         document.addEventListener('DOMContentLoaded', () => {
             const mgr = document.getElementById('toast-container')?._x_dataStack?.[0];

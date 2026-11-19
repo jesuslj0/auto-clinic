@@ -20,6 +20,9 @@ pyotp>=2.9
 segno>=1.6
 cryptography>=42.0
 
+# Notificaciones push del panel (Web Push, VAPID)
+pywebpush>=2.0
+
 # Adjuntos clínicos en Cloudflare R2 (S3-compatible), bucket privado
 django-storages>=1.14
 boto3>=1.34

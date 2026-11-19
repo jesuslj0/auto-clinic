@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+
+{% block title %}Notificaciones · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Notificaciones{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'notifications:preferences' %}" class="btn-secondary max-sm:px-3" aria-label="Preferencias de notificaciones">
+    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 011.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l.527.738c.32.447.269 1.06-.12 1.45l-.774.773a1.125 1.125 0 01-1.449.12l-.738-.527c-.35-.25-.806-.272-1.203-.107-.397.165-.71.505-.781.929l-.149.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527c-.447.32-1.06.269-1.45-.12l-.773-.774a1.125 1.125 0 01-.12-1.45l.527-.737c.25-.35.273-.806.108-1.204-.165-.397-.505-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.107-1.204l-.527-.738a1.125 1.125 0 01.12-1.45l.773-.773a1.125 1.125 0 011.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894z" />
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+    <span class="hidden sm:inline">Preferencias</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<section class="space-y-4">
+    <form method="get" class="flex flex-wrap items-center gap-2">
+        <select name="estado" onchange="this.form.submit()" class="rounded-xl border-0 bg-surface py-2 pl-3 pr-8 text-sm text-content ring-1 ring-line focus:ring-2 focus:ring-brand-500" aria-label="Estado">
+            <option value="">Todas</option>
+            <option value="sin-leer" {% if state == 'sin-leer' %}selected{% endif %}>Sin leer</option>
+            <option value="leidas" {% if state == 'leidas' %}selected{% endif %}>Leídas</option>
+        </select>
+        <select name="categoria" onchange="this.form.submit()" class="rounded-xl border-0 bg-surface py-2 pl-3 pr-8 text-sm text-content ring-1 ring-line focus:ring-2 focus:ring-brand-500" aria-label="Categoría">
+            <option value="">Todas las categorías</option>
+            {% for value, label in kinds %}
+            <option value="{{ value }}" {% if kind == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        <noscript><button type="submit" class="btn-secondary">Filtrar</button></noscript>
+    </form>
+    <form method="post" action="{% url 'notifications:read-all' %}" class="flex justify-end">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit" class="text-sm font-medium text-brand-fg hover:underline">Marcar todas como leídas</button>
+    </form>
+
+    <ul class="divide-y divide-line overflow-hidden rounded-2xl bg-surface shadow-soft ring-1 ring-line">
+        {% for n in notifications %}
+        <li class="flex items-start gap-3 px-4 py-3 {% if not n.is_read %}bg-brand-soft{% endif %}">
+            <span class="mt-2 h-2 w-2 flex-shrink-0 rounded-full {% if n.is_read %}bg-transparent{% else %}bg-brand-600{% endif %}" aria-hidden="true"></span>
+            <a href="{% url 'notifications:open' n.pk %}" class="min-w-0 flex-1">
+                <span class="block text-sm {% if n.is_read %}text-content-muted{% else %}font-semibold text-content{% endif %}">{{ n.title }}</span>
+                <span class="block text-sm text-content-subtle">{{ n.body }}</span>
+                <span class="block text-xs text-content-faint">{{ n.get_kind_display }} · {{ n.created_at|timesince }}</span>
+            </a>
+            <form method="post" action="{% url 'notifications:dismiss' n.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button type="submit" class="rounded-lg p-1.5 text-content-faint transition hover:bg-muted-strong hover:text-content-muted" aria-label="Descartar">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </form>
+        </li>
+        {% empty %}
+        <li class="px-4 py-12 text-center text-sm text-content-subtle">No hay notificaciones que mostrar.</li>
+        {% endfor %}
+    </ul>
+
+    {% if page_obj.has_other_pages %}
+    <nav class="flex items-center justify-between text-sm" aria-label="Paginación">
+        {% if page_obj.has_previous %}<a class="btn-secondary" href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.previous_page_number }}">Anterior</a>{% else %}<span></span>{% endif %}
+        <span class="text-content-subtle">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}<a class="btn-secondary" href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.next_page_number }}">Siguiente</a>{% else %}<span></span>{% endif %}
+    </nav>
+    {% endif %}
+</section>
+{% endblock %}

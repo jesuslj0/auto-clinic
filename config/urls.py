@@ -25,6 +25,7 @@ from core.views import (
     UserViewSet,
 )
 from knowledge.views import ClinicInfoCacheViewSet, ClinicInfoQueryViewSet, ClinicKnowledgeBaseViewSet
+from notifications.panel_views import ManifestView, ServiceWorkerView
 from notifications.views import ReminderViewSet
 from patients.views import PatientViewSet
 from services.views import ServiceCategoryViewSet, ServiceViewSet
@@ -77,6 +78,10 @@ urlpatterns = [
     path('chats/', include('agent.urls')),
     path('agente/', include('agent.settings_urls')),
     path('facturacion/', include('billing.urls')),
+    path('notificaciones/', include('notifications.urls')),
+    # PWA: el service worker ha de colgar de la raíz para controlar todo el panel.
+    path('sw.js', ServiceWorkerView.as_view(), name='service-worker'),
+    path('manifest.webmanifest', ManifestView.as_view(), name='manifest'),
     # Capa clínica: NO es API. Solo el servido protegido de adjuntos, bajo
     # sesión y con AccessLog. Ver `clinical/README.md`.
     path('clinico/', include('clinical.urls')),

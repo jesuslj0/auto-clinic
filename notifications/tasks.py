@@ -83,3 +83,29 @@ def send_whatsapp_reminders_24h():
     from notifications.whatsapp_reminders import send_due_reminders
 
     return send_due_reminders()
+
+
+@shared_task(bind=True, max_retries=2, default_retry_delay=30)
+def send_web_push(self, notification_ids):
+    """Envía el push de unas notificaciones a los dispositivos de sus destinatarios.
+
+    El payload es genérico (título y cuerpo de la categoría): sin nombre ni texto
+    de paciente. Un 404/410 del servicio de push borra la suscripción.
+    """
+    from notifications.push import deliver
+
+    deliver(notification_ids)
+
+
+@shared_task
+def purge_old_notifications():
+    """Retención: leídas con más de 30 días y descartadas con más de 7."""
+    from django.utils import timezone
+
+    from notifications.models import Notification
+
+    now = timezone.now()
+    # Modelo no auditado (avisos genéricos, no datos clínicos): el bulk está permitido.
+    read, _ = Notification.objects.filter(read_at__lt=now - timedelta(days=30)).delete()
+    dismissed, _ = Notification.objects.filter(dismissed_at__lt=now - timedelta(days=7)).delete()
+    return read + dismissed

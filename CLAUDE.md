@@ -44,7 +44,7 @@ python manage.py runserver    # Uses config.settings.dev by default
 | `patients` | Patient records, scoped per clinic. `tax_id` (NIF/NIE/pasaporte, `patients/tax_id.py`) y la dirección (`address`, `postal_code`, `city`) son datos de facturación: opcionales, en `sensitive` de la auditoría, solo en los formularios de alta/edición — **ni en la ficha ni en la API del agente** (excluidos del serializer) |
 | `services` | Service catalog per clinic |
 | `appointments` | Appointment lifecycle, WebSocket signals, token-based public actions |
-| `notifications` | Celery beat tasks for reminder dispatch |
+| `notifications` | Celery beat tasks for reminder dispatch; WhatsApp reminders/notices; **panel notifications** (`Notification`, `NotificationPreference`, `PushSubscription`, see «Notificaciones del panel») |
 | `billing` | `Subscription` (planes de la clínica) y `PatientInvoice`: factura de paciente que agrupa `PerformedProcedure`. Borrador editable; al emitir copia sus líneas (`lines`), congela `total`, toma número de la serie de su clínica (`InvoiceSequence`) y no vuelve a mirar los procedimientos. No se corrige: se anula (`void()`) y se emite otra. **Emitir y anular son solo de administradores** (`ClinicAdminRequiredMixin`: gastan número de la serie y no se deshacen); el staff prepara borradores, los lee y **cobra** (el cobro no cierra nada y queda a nombre de quien lo registra). Las series cuentan el año en la zona de la clínica (`billing.managers.series_year`), y un cobro no puede fecharse en el futuro ni en un día anterior a la emisión |
 | `agent` | WhatsApp bot state: `AgentMemory` (contexto del LLM), `ConversationSession` (hilo), `ChatMessage` (historial append-only, auditado), `ChatAttachment` (foto/nota de voz del paciente, irremplazable), `WorkflowError`, `AgentProfile` (personalidad del agente por clínica) |
 | `knowledge` | Clinic knowledge base: `ClinicKnowledgeBase`, `ClinicInfoQuery`, `ClinicInfoCache` |
@@ -354,6 +354,7 @@ Panel map (namespace in brackets):
 | `/conocimiento/` (`knowledge`) | `crear/`, `<uuid>/editar/`, `<uuid>/eliminar/` |
 | `/chats/` (`agent`) | `agente/`, `lista/`, `adjuntos/<uuid>/`, `<uuid>/` (`mensajes/`, `enviar/`, `escribiendo/`, `modo/`) |
 | `/agente/` (`agent_settings`, admins only) | test chat at the root («Chat»), `probar/enviar/`, `personalidad/`, `plantillas/` (+ `nueva/`, `sincronizar/`, `<pk>/` with `enviar/`, `duplicar/`, `eliminar/`), `configuracion/` (Meta credentials + webhook, two forms told apart by a hidden `form` field) — views in `agent/settings_views.py` and `agent/template_views.py` |
+| `/notificaciones/` (`notifications`) | `` (listado), `contador/`, `recientes/`, `leer-todas/`, `preferencias/`, `push/suscribir/`, `push/baja/`, `<id>/abrir|leer|descartar/`; además `/sw.js` y `/manifest.webmanifest` en la raíz |
 | `/facturacion/` (`billing`) | `nueva/`, `pendientes/`, `<pk>/` (`emitir/`, `anular/`, `cobrar/`, `procedimientos/`, `eliminar/`) |
 | `/clinico/` (`clinical`) | `procedimientos/` (listado global), `adjuntos/<uuid>/`, `consentimientos/<uuid>/firma/` |
 | `/ficha/` (`intake`, **public, no session**) | `<token>/` (the patient's form), `gracias/` — views in `clinical/public_views.py` |
@@ -484,6 +485,42 @@ variable). Bubbles use `.chat-bubble-agent` / `.chat-bubble-staff`, never a lite
 colour or an inline `--bubble-tail`. An inline script in `chat_inbox.html` applies the
 saved theme before first paint; `chatThemePicker` (`chat_inbox.js`) changes it. The
 agent test chat (`agent/settings/test.html`) is not themed.
+
+### Notificaciones del panel (`notifications`)
+
+Avisos al personal de lo que ocurre solo: citas que el agente deja pendientes/reagendadas/canceladas
+(o que cancela el paciente), chats y mensajes nuevos, mensajes no entregados, ficha completada por el
+paciente y plantillas de WhatsApp revisadas por Meta (solo admins). Un único punto de entrada,
+`notifications.inbox.notify(clinic, kind, url=…, object_id=…)`:
+
+- **Una fila por usuario** (`Notification`) para los usuarios activos de la clínica, filtrada por
+  `NotificationPreference` (`in_app`/`push` por categoría; sin fila = activo). Sale con
+  `transaction.on_commit` y un fallo nunca tumba la petición que lo origina. Mientras haya una sin leer del
+  mismo `kind`+`object_id` (p. ej. el mismo chat) se **agrupa** (`count`) en vez de apilar otra.
+- **Texto genérico, siempre** (`inbox.TEXTS`): ni nombre de paciente, ni teléfono, ni texto de mensajes. El
+  push pasa por Google/Apple; **ampliar lo que lleva un aviso es una decisión de privacidad**. Por eso no
+  están en `audit.registry` (no son datos clínicos) y se permite el bulk (`update`/`delete`).
+- **Enganches** (imports locales, `notifications` depende de las demás apps): `appointments.services.notify_staff`
+  desde `create_appointment` (`source=AGENT`), `reschedule_appointment` y `cancel_appointment` (actor
+  AGENT/PATIENT; STAFF y SYSTEM no), y el PATCH `status` del agente en `AppointmentSerializer.update`;
+  `agent.services.record_message` (solo entrantes, no `is_test`; `chat_new` si la sesión se acaba de crear,
+  marca `session.just_created`) y `apply_delivery_status` (→ failed); `clinical.intake.complete_link`;
+  `agent.wa_templates.sync_templates` (→ approved/rejected).
+- **Tiempo real:** `NotificationConsumer` (`ws/notifications/`, mismo patrón por clínica) solo avisa «hay algo»;
+  `static/js/notifications.js` pide `GET /notificaciones/contador/` (filtrado por `request.user`), pinta la
+  campana (`[data-notif-unread]`) y lanza un toast con `window.acToast(msg, type, {href, sticky})`. Sondeo
+  de 30 s si el socket falla.
+- **Vistas** (`/notificaciones/`, namespace `notifications`): listado, `recientes/` (desplegable de la
+  campana), `contador/`, `leer-todas/`, `<id>/abrir|leer|descartar/`, `preferencias/` (+ alta/baja de
+  dispositivo). Cada usuario solo toca las suyas.
+- **Web Push + PWA:** `pywebpush`, claves `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_CLAIMS_EMAIL`
+  (sin claves = push desactivado, el in-app sigue; generar con `vapid --gen`, ponerlas en Coolify web y celery).
+  `/sw.js` y `/manifest.webmanifest` son **vistas de Django** (el SW debe colgar de la raíz, con
+  `Service-Worker-Allowed: /` y sin caché; el código vive en `static/js/sw.js`). La suscripción solo acepta
+  endpoints `https://`; un 404/410 del servicio de push la borra. En iPhone exige iOS 16.4+ y «Añadir a
+  pantalla de inicio».
+- **Retención:** `purge_old_notifications` (beat, 03:45): leídas > 30 días, descartadas > 7.
+- Fuera de v1: «cita completada sin procedimiento» (haría falta tarea periódica) y `WorkflowError`.
 
 ### Real-time (WebSockets)
 
@@ -711,6 +748,9 @@ TRUSTED_PROXY_COUNT=2          # proxies in front of Django (prod default 2: Tra
 TWO_FACTOR_REQUIRED_FOR_ROLES=False  # True = 2FA mandatory for admins and professionals
 TWO_FACTOR_ENCRYPTION_KEY=     # Fernet key(s), comma-separated; set it in prod (see above)
 TWO_FACTOR_ISSUER=Auto Clinic  # name shown in the authenticator app
+VAPID_PUBLIC_KEY=              # Web Push (notifications); empty = push off
+VAPID_PRIVATE_KEY=
+VAPID_CLAIMS_EMAIL=            # generic service mailbox, not a person's
 CACHE_REDIS_URL=               # default: REDIS_URL on DB 3
 ```
 

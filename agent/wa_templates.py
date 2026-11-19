@@ -109,6 +109,20 @@ def _examples_from(components):
     return []
 
 
+def _notify_template_reviewed(clinic, template):
+    """Avisa a los administradores de que Meta aprobó o rechazó una plantilla."""
+    from django.urls import reverse
+
+    from notifications.inbox import notify
+
+    notify(
+        clinic,
+        'template_status',
+        url=reverse('agent_settings:template-edit', args=[template.pk]),
+        object_id=template.pk,
+    )
+
+
 def sync_templates(clinic):
     """Trae de Meta el estado de las plantillas de la clínica e importa las que falten.
 
@@ -177,10 +191,13 @@ def sync_templates(clinic):
             )
             if not changed:
                 continue
+            previous_status = template.status
             template.status = status
             template.rejection_reason = reason
             template.meta_template_id = str(item['id'])
             template.status_synced_at = now
             template.save()
             updated += 1
+            if previous_status != status and status in (Status.APPROVED, Status.REJECTED):
+                _notify_template_reviewed(clinic, template)
     return updated, imported

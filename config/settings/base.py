@@ -73,6 +73,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'agent.context_processors.chat_unread',
+                'notifications.context_processors.notification_unread',
             ],
         },
     }
@@ -308,7 +309,19 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'agent.tasks.purge_old_conversations',
         'schedule': crontab(hour=3, minute=30),
     },
+    # Retención de notificaciones del panel (leídas > 30 días, descartadas > 7).
+    'purge-old-notifications': {
+        'task': 'notifications.tasks.purge_old_notifications',
+        'schedule': crontab(hour=3, minute=45),
+    },
 }
+
+# Web Push (VAPID). Sin claves el push queda desactivado y las notificaciones
+# in-app siguen funcionando. `VAPID_CLAIMS_EMAIL`: buzón genérico del servicio, no
+# el de ninguna persona. Generar el par con `vapid --gen` (pywebpush).
+VAPID_PUBLIC_KEY = config('VAPID_PUBLIC_KEY', default='')
+VAPID_PRIVATE_KEY = config('VAPID_PRIVATE_KEY', default='')
+VAPID_CLAIMS_EMAIL = config('VAPID_CLAIMS_EMAIL', default='') or 'admin@example.com'
 
 AGENT_MASTER_API_KEY = config('AGENT_MASTER_API_KEY', default='')
 
