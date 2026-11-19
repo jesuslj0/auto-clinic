@@ -48,7 +48,7 @@ from core.dashboard import (
     upcoming_days,
     week_occupancy,
 )
-from patients.models import Patient
+from patients.models import Patient, PatientGuardian
 from core.forms import (
     AccountPasswordChangeForm,
     ClinicForm,
@@ -748,10 +748,27 @@ class DashboardAppointmentActionView(LoginRequiredMixin, View):
             success_message = 'Cita marcada como no presentada.'
         elif action in ('create_patient', 'link_patient'):
             # Cita de una primera visita: el contacto pasa a ser ficha, o se
-            # vincula con la que ya exista con ese teléfono.
+            # vincula con la que ya exista con ese teléfono. El modal deja
+            # corregir antes de confirmar (un nombre mal escrito, un teléfono
+            # que se apuntó mal al reservar): lo tecleado sustituye al contacto
+            # de la cita ANTES de crear o vincular, así que una corrección que
+            # haga coincidir el teléfono con una ficha existente vincula en vez
+            # de duplicar.
             if appointment.patient_id:
                 messages.info(request, 'Esta cita ya tiene ficha de paciente.')
             else:
+                appointment.patient_name = request.POST.get('patient_name', appointment.patient_name).strip()
+                appointment.patient_phone = request.POST.get('patient_phone', appointment.patient_phone).strip()
+                appointment.contact_email = request.POST.get('contact_email', appointment.contact_email).strip()
+                update_fields = ['patient_name', 'patient_phone', 'contact_email']
+                if appointment.booked_for_other:
+                    appointment.contact_name = request.POST.get('contact_name', appointment.contact_name).strip()
+                    relationship = request.POST.get('contact_relationship', appointment.contact_relationship)
+                    if relationship in PatientGuardian.Relationship.values:
+                        appointment.contact_relationship = relationship
+                        update_fields.append('contact_relationship')
+                    update_fields.append('contact_name')
+                appointment.save(update_fields=update_fields + ['updated_at'])
                 try:
                     patient, created = create_patient_from_appointment(appointment)
                 except ValueError as exc:
@@ -842,6 +859,8 @@ class DashboardAppointmentManageView(LoginRequiredMixin, TemplateView):
         context['procedure_count'] = self.count_procedures(appointment)
         context['has_visit'] = self.has_visit(appointment)
         context['section'] = 'dashboard'
+        if appointment.booked_for_other and not appointment.patient_id:
+            context['relationship_choices'] = PatientGuardian.Relationship.choices
         return context
 
     def _get_scoped_appointment(self):

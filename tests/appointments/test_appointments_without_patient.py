@@ -288,3 +288,54 @@ class TestApi:
         assert response.status_code == 201, response.data
         assert response.data['patient'] == patient.pk
         assert response.data['patient_name'] == 'Marta Gil'
+
+
+@pytest.mark.django_db
+class TestCreatePatientActionEditedInModal:
+    """El modal «Crear ficha de paciente» deja corregir los datos antes de confirmar."""
+
+    def test_edited_data_is_used_to_create_the_patient(self, panel_client, clinic_a, service_a, professional_a):
+        appointment = make_orphan(clinic_a, service_a, professional_a, patient_name='Nombre Mal')
+        url = reverse('core:dashboard-appointment-action', args=[appointment.pk])
+        response = panel_client.post(url, {
+            'action': 'create_patient',
+            'patient_name': 'Marta Gil Soto',
+            'patient_phone': '+34600999888',
+            'contact_email': 'marta@example.com',
+        })
+        assert response.status_code == 302
+        appointment.refresh_from_db()
+        assert appointment.patient_name == 'Marta Gil Soto'
+        assert appointment.patient.phone == '+34600999888'
+        assert appointment.patient.email == 'marta@example.com'
+
+    def test_correcting_the_phone_links_the_existing_patient_instead_of_duplicating(
+        self, panel_client, clinic_a, service_a, professional_a, patient_a
+    ):
+        appointment = make_orphan(clinic_a, service_a, professional_a, patient_phone='+34600000000')
+        url = reverse('core:dashboard-appointment-action', args=[appointment.pk])
+        panel_client.post(url, {
+            'action': 'create_patient',
+            'patient_name': appointment.patient_name,
+            'patient_phone': patient_a.phone,
+        })
+        appointment.refresh_from_db()
+        assert appointment.patient == patient_a
+        assert not Patient.objects.filter(phone='+34600000000').exists()
+
+    def test_blank_name_is_rejected_with_a_message(self, panel_client, clinic_a, service_a, professional_a):
+        appointment = make_orphan(clinic_a, service_a, professional_a)
+        url = reverse('core:dashboard-appointment-action', args=[appointment.pk])
+        panel_client.post(url, {'action': 'create_patient', 'patient_name': '', 'patient_phone': PHONE})
+        appointment.refresh_from_db()
+        assert appointment.patient_id is None
+
+    def test_other_clinic_cannot_create_the_file_even_with_edited_data(
+        self, client, admin_user_b, clinic_a, service_a, professional_a
+    ):
+        appointment = make_orphan(clinic_a, service_a, professional_a)
+        client.force_login(admin_user_b)
+        url = reverse('core:dashboard-appointment-action', args=[appointment.pk])
+        client.post(url, {'action': 'create_patient', 'patient_name': 'Otro'})
+        appointment.refresh_from_db()
+        assert appointment.patient_id is None and appointment.patient_name != 'Otro'

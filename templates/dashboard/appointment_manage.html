@@ -106,29 +106,57 @@ marcado.
                                   class="relative w-full max-w-md rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
                                 {% csrf_token %}
                                 <input type="hidden" name="action" value="create_patient">
-                                <h3 id="create-patient-title" class="text-base font-semibold text-content">¿Crear la ficha con estos datos?</h3>
+                                <h3 id="create-patient-title" class="text-base font-semibold text-content">Crear ficha de paciente</h3>
                                 {% if appointment.booked_for_other %}
-                                <p class="mt-1 text-sm text-content-subtle">Se creará la ficha de esta persona, sin teléfono, y quien pidió la cita quedará como su contacto responsable.</p>
+                                <p class="mt-1 text-sm text-content-subtle">Se creará la ficha de esta persona, sin teléfono, y quien pidió la cita quedará como su contacto responsable. Revisa los datos antes de confirmar.</p>
                                 {% else %}
-                                <p class="mt-1 text-sm text-content-subtle">Se tomarán del contacto de la cita. Si la clínica ya tiene un paciente con ese teléfono, se vinculará en vez de crear otro.</p>
+                                <p class="mt-1 text-sm text-content-subtle">Revisa o corrige los datos del contacto antes de confirmar. Si la clínica ya tiene un paciente con ese teléfono, se vinculará en vez de crear otro.</p>
                                 {% endif %}
-                                <dl class="mt-4 divide-y divide-line rounded-xl bg-muted px-4 ring-1 ring-line">
-                                    <div class="py-2.5 sm:grid sm:grid-cols-3 sm:gap-3">
-                                        <dt class="text-xs font-medium text-content-muted sm:pt-0.5">Nombre</dt>
-                                        <dd class="mt-0.5 break-words text-sm sm:col-span-2 sm:mt-0 {% if appointment.patient_name %}text-content{% else %}text-content-faint{% endif %}">{{ appointment.patient_name|default:"—" }}</dd>
+                                {% with field_class="block w-full rounded-xl border border-line-strong bg-surface px-3.5 py-2 text-sm text-content placeholder-content-faint shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-500 transition" %}
+                                <div class="mt-4 space-y-3">
+                                    <div>
+                                        <label for="create-patient-name" class="block text-xs font-medium text-content-muted">Nombre</label>
+                                        <input type="text" id="create-patient-name" name="patient_name" required maxlength="255"
+                                               value="{{ appointment.patient_name }}" class="mt-1 {{ field_class }}">
                                     </div>
-                                    <div class="py-2.5 sm:grid sm:grid-cols-3 sm:gap-3">
-                                        <dt class="text-xs font-medium text-content-muted sm:pt-0.5">{% if appointment.booked_for_other %}Contacto{% else %}Teléfono{% endif %}</dt>
-                                        <dd class="mt-0.5 break-words text-sm sm:col-span-2 sm:mt-0 {% if appointment.patient_phone %}text-content{% else %}text-content-faint{% endif %}">{% if appointment.booked_for_other %}{{ appointment.contact_name|default:"—" }} · {% endif %}{{ appointment.patient_phone|default:"—" }}</dd>
+                                    {% if appointment.booked_for_other %}
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label for="create-patient-contact-name" class="block text-xs font-medium text-content-muted">Contacto (quien pidió la cita)</label>
+                                            <input type="text" id="create-patient-contact-name" name="contact_name" maxlength="255"
+                                                   value="{{ appointment.contact_name }}" class="mt-1 {{ field_class }}">
+                                        </div>
+                                        <div>
+                                            <label for="create-patient-relationship" class="block text-xs font-medium text-content-muted">Relación</label>
+                                            <select id="create-patient-relationship" name="contact_relationship" class="mt-1 {{ field_class }}">
+                                                {% for value, label in relationship_choices %}
+                                                <option value="{{ value }}" {% if appointment.contact_relationship == value %}selected{% endif %}>{{ label }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
                                     </div>
-                                    <div class="py-2.5 sm:grid sm:grid-cols-3 sm:gap-3">
-                                        <dt class="text-xs font-medium text-content-muted sm:pt-0.5">Correo electrónico</dt>
-                                        <dd class="mt-0.5 break-words text-sm sm:col-span-2 sm:mt-0 {% if appointment.contact_email %}text-content{% else %}text-content-faint{% endif %}">{{ appointment.contact_email|default:"—" }}</dd>
+                                    <div>
+                                        <label for="create-patient-phone" class="block text-xs font-medium text-content-muted">Teléfono del contacto</label>
+                                        <input type="tel" id="create-patient-phone" name="patient_phone" maxlength="32"
+                                               value="{{ appointment.patient_phone }}" class="mt-1 {{ field_class }}">
                                     </div>
-                                </dl>
+                                    {% else %}
+                                    <div>
+                                        <label for="create-patient-phone" class="block text-xs font-medium text-content-muted">Teléfono</label>
+                                        <input type="tel" id="create-patient-phone" name="patient_phone" required maxlength="32"
+                                               value="{{ appointment.patient_phone }}" class="mt-1 {{ field_class }}">
+                                    </div>
+                                    {% endif %}
+                                    <div>
+                                        <label for="create-patient-email" class="block text-xs font-medium text-content-muted">Correo electrónico</label>
+                                        <input type="email" id="create-patient-email" name="contact_email" maxlength="254"
+                                               value="{{ appointment.contact_email }}" class="mt-1 {{ field_class }}">
+                                    </div>
+                                </div>
+                                {% endwith %}
                                 <div class="mt-5 flex justify-end gap-2">
                                     <button type="button" @click="open = false" class="btn-secondary">Cancelar</button>
-                                    <button type="submit" class="btn-primary">Sí, crear ficha</button>
+                                    <button type="submit" class="btn-primary">Crear ficha</button>
                                 </div>
                             </form>
                         </div>

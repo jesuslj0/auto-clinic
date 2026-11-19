@@ -99,3 +99,27 @@ def test_normal_appointment_without_file_still_links_by_phone(agent, clinic_a, s
     }, format='json')
     assert response.status_code == 201, response.json()
     assert Appointment.objects.get(pk=response.json()['id']).patient == me
+
+
+@pytest.mark.django_db
+def test_admin_edits_dependent_and_contact_before_creating(book, clinic_a, admin_user, client):
+    response = book(contact_name='Juan Pérez')
+    assert response.status_code == 201, response.json()
+    appointment = Appointment.objects.get(pk=response.json()['id'])
+    from django.urls import reverse
+
+    client.force_login(admin_user)
+    url = reverse('core:dashboard-appointment-action', args=[appointment.pk])
+    client.post(url, {
+        'action': 'create_patient',
+        'patient_name': 'Luis Pérez Soto',
+        'contact_name': 'Juana Pérez',
+        'contact_relationship': 'parent',
+        'patient_phone': '+34600333444',
+    })
+    appointment.refresh_from_db()
+    patient = appointment.patient
+    assert (patient.first_name, patient.last_name) == ('Luis', 'Pérez Soto')
+    link = PatientGuardian.objects.get(patient=patient)
+    assert link.relationship == 'parent'
+    assert link.guardian.first_name == 'Juana' and link.guardian.phone == '+34600333444'
