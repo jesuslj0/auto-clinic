@@ -207,3 +207,12 @@ marimo/_lsp/
 __marimo__/
 
 media/
+
+# Contratos con proveedores (DPA y similares): documentos legales con datos de
+# la empresa, no van al repo. Se guardan en local.
+.claude/docs/DPA-*
+
+# Guías de onboarding en PDF y las capturas con las que se hacen: llevan IDs y
+# datos de cuentas reales (Propus, clientes). La fuente HTML sí puede ir.
+.claude/docs/*.pdf
+.claude/captures/
