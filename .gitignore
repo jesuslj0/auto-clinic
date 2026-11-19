@@ -216,3 +216,8 @@ media/
 # datos de cuentas reales (Propus, clientes). La fuente HTML sí puede ir.
 .claude/docs/*.pdf
 .claude/captures/
+
+# Material de trabajo que se administra en local: fuente de las guías de
+# onboarding y el plan de ajustes del agente para Gaena.
+.claude/docs/onboarding/
+.claude/plans/PLAN-AJUSTES-AGENTE-GAENA.md
