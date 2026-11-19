@@ -32,6 +32,20 @@ def test_list_shows_only_own(web, mine, theirs):
     assert list(response.context['notifications']) == [mine]
 
 
+def test_list_separates_read_from_unread(web, admin_user, clinic_a):
+    unread = Notification.objects.create(clinic=clinic_a, user=admin_user, kind='chat_new', title='Sin leer')
+    from django.utils import timezone
+
+    read = Notification.objects.create(
+        clinic=clinic_a, user=admin_user, kind='chat_message', title='Leída', read_at=timezone.now()
+    )
+    response = web.get(reverse('notifications:list'))
+    assert list(response.context['unread_notifications']) == [unread]
+    assert list(response.context['read_notifications']) == [read]
+    html = response.content.decode()
+    assert 'Sin leer' in html and 'Leídas' in html
+
+
 def test_anonymous_is_redirected_to_login(client, mine):
     response = client.get(reverse('notifications:list'))
     assert response.status_code == 302 and 'login' in response['Location']

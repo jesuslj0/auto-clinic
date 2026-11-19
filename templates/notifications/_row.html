@@ -1,0 +1,23 @@
+{% load notification_tags %}
+{% comment %}
+Una fila de notificación en el listado. `n` es la `Notification`.
+
+    {% templatetag openblock %} include 'notifications/_row.html' with n=notification {% templatetag closeblock %}
+{% endcomment %}
+<li class="flex items-center gap-3 px-4 py-3 {% if not n.is_read %}bg-brand-soft{% endif %}">
+    {% notification_badge n.kind n.is_read %}
+    <a href="{% url 'notifications:open' n.pk %}" class="min-w-0 flex-1">
+        <span class="block truncate text-sm {% if n.is_read %}text-content-muted{% else %}font-semibold text-content{% endif %}">
+            {{ n.title }}{% if n.count > 1 %} ({{ n.count }}){% endif %}
+            <span class="font-normal text-content-faint">· {{ n.created_at|short_timesince }}</span>
+        </span>
+        <span class="mt-0.5 block text-sm text-content-subtle">{{ n.body }}</span>
+    </a>
+    <form method="post" action="{% url 'notifications:dismiss' n.pk %}" class="flex-shrink-0 self-center">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit" class="rounded-lg p-1.5 text-content-faint transition hover:bg-muted-strong hover:text-content-muted" aria-label="Descartar">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+    </form>
+</li>

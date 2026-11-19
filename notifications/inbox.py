@@ -33,7 +33,7 @@ Kind = Notification.Kind
 
 #: (título, cuerpo) genéricos por categoría. `{n}` se rellena con el contador.
 TEXTS = {
-    Kind.APPOINTMENT_PENDING: ('Nueva cita pendiente de validar', 'El agente ha reservado una cita.'),
+    Kind.APPOINTMENT_PENDING: ('Nueva cita pendiente', 'El agente ha reservado una cita.'),
     Kind.APPOINTMENT_RESCHEDULED: ('Cita reagendada', 'Un paciente ha movido su cita.'),
     Kind.APPOINTMENT_CANCELLED: ('Cita cancelada', 'Se ha cancelado una cita.'),
     Kind.CHAT_MESSAGE: ('Mensaje nuevo', 'Tienes mensajes sin leer en un chat.'),

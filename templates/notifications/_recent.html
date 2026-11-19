@@ -1,3 +1,4 @@
+{% load notification_tags %}
 {% comment %}Desplegable de la campana (HTMX). Solo avisos genéricos del usuario.{% endcomment %}
 <div class="flex items-center justify-between border-b border-line px-4 py-2.5">
     <p class="text-sm font-semibold text-content">Notificaciones</p>
@@ -12,12 +13,11 @@
 <ul class="max-h-80 divide-y divide-line overflow-y-auto">
     {% for n in recent %}
     <li>
-        <a href="{% url 'notifications:open' n.pk %}" class="flex items-start gap-3 px-4 py-3 transition hover:bg-muted">
-            <span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full {% if n.is_read %}bg-transparent{% else %}bg-brand-600{% endif %}" aria-hidden="true"></span>
-            <span class="min-w-0 flex-1">
-                <span class="block truncate text-sm {% if n.is_read %}text-content-muted{% else %}font-semibold text-content{% endif %}">{{ n.title }}</span>
-                <span class="block truncate text-xs text-content-subtle">{{ n.body }}</span>
-                <span class="block text-[11px] text-content-faint">{{ n.created_at|timesince }}</span>
+        <a href="{% url 'notifications:open' n.pk %}" class="flex items-center gap-3 px-4 py-2.5 transition hover:bg-muted">
+            {% notification_badge n.kind n.is_read %}
+            <span class="min-w-0 flex-1 truncate text-sm {% if n.is_read %}text-content-muted{% else %}font-semibold text-content{% endif %}">
+                {{ n.title }}{% if n.count > 1 %} ({{ n.count }}){% endif %}
+                <span class="font-normal text-content-faint">· {{ n.created_at|short_timesince }}</span>
             </span>
         </a>
     </li>

@@ -38,7 +38,7 @@ class Notification(models.Model):
     """
 
     class Kind(models.TextChoices):
-        APPOINTMENT_PENDING = 'appointment_pending', 'Cita pendiente de validar'
+        APPOINTMENT_PENDING = 'appointment_pending', 'Cita pendiente'
         APPOINTMENT_RESCHEDULED = 'appointment_rescheduled', 'Cita reagendada'
         APPOINTMENT_CANCELLED = 'appointment_cancelled', 'Cita cancelada'
         CHAT_MESSAGE = 'chat_message', 'Mensaje nuevo'

@@ -419,22 +419,42 @@ emite en toda página del panel, aunque no contenga ningún formulario.
                 x-transition:leave="transition ease-in duration-200"
                 x-transition:leave-start="opacity-100 translate-y-0 scale-100"
                 x-transition:leave-end="opacity-0 translate-y-2 scale-95"
-                :class="toast.type === 'error'
-                    ? 'bg-danger-soft ring-danger-line text-danger'
-                    : (toast.type === 'info'
-                        ? 'bg-info-soft ring-info-line text-info'
-                        : 'bg-success-soft ring-success-line text-success')"
+                :class="toast.icon
+                    ? 'bg-surface ring-line text-content'
+                    : (toast.type === 'error'
+                        ? 'bg-danger-soft ring-danger-line text-danger'
+                        : (toast.type === 'info'
+                            ? 'bg-info-soft ring-info-line text-info'
+                            : 'bg-success-soft ring-success-line text-success'))"
                 class="flex w-80 items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium shadow-soft ring-1"
                 role="alert"
             >
-                <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                    <path x-show="toast.type !== 'error'" stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                    <path x-show="toast.type === 'error'" stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                </svg>
-                <template x-if="toast.href">
-                    <a :href="toast.href" class="flex-1 underline-offset-2 hover:underline" x-text="toast.message"></a>
+                {% comment %}Con categoría (`toast.icon`, de una notificación del panel): su trazo de
+                color, igual que en el listado —sin círculo, suelto. Sin ella (mensajes de Django,
+                éxito/error de un formulario): el check o el aviso de siempre.{% endcomment %}
+                <template x-if="toast.icon">
+                    <svg class="h-5 w-5 flex-shrink-0 self-center" :class="toast.icon.fg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" :d="toast.icon.path" />
+                    </svg>
                 </template>
-                <span x-show="!toast.href" class="flex-1" x-text="toast.message"></span>
+                <template x-if="!toast.icon">
+                    <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path x-show="toast.type !== 'error'" stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        <path x-show="toast.type === 'error'" stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                    </svg>
+                </template>
+                {% comment %}`toast.meta` (solo en los de categoría): «hace 1 h» bajo el título, sin
+                el texto descriptivo —ese ya se ve al abrir la notificación.{% endcomment %}
+                <template x-if="toast.href">
+                    <a :href="toast.href" class="flex-1 underline-offset-2 hover:underline">
+                        <span class="block" x-text="toast.message"></span>
+                        <span x-show="toast.meta" class="block text-xs font-normal text-content-faint" x-text="toast.meta"></span>
+                    </a>
+                </template>
+                <span x-show="!toast.href" class="flex-1">
+                    <span class="block" x-text="toast.message"></span>
+                    <span x-show="toast.meta" class="block text-xs font-normal text-content-faint" x-text="toast.meta"></span>
+                </span>
                 <button @click="dismiss(toast.id)" class="ml-1 rounded-lg p-1 opacity-60 transition hover:opacity-100" aria-label="Cerrar">
                     <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -476,10 +496,16 @@ emite en toda página del panel, aunque no contenga ningún formulario.
             return {
                 toasts: [],
                 // `opts.href`: el toast enlaza a ese destino. `opts.sticky`: no se cierra
-                // solo, solo con el botón (avisos que no deben perderse).
+                // solo, solo con el botón (avisos que no deben perderse). `opts.icon`:
+                // trazo de categoría ({path, fg}, ver `notifications.js`); sin él, el
+                // check/aviso genérico de siempre. `opts.meta`: una línea corta debajo
+                // del título («hace 1 h»); sin texto descriptivo, que ya se ve al abrirla.
                 add(message, type = 'success', opts = {}) {
                     const id = Date.now() + Math.random();
-                    this.toasts.push({ id, message, type, href: opts.href || '', visible: true });
+                    this.toasts.push({
+                        id, message, type, href: opts.href || '', icon: opts.icon || null,
+                        meta: opts.meta || '', visible: true,
+                    });
                     if (!opts.sticky) setTimeout(() => this.dismiss(id), 4500);
                 },
                 dismiss(id) {

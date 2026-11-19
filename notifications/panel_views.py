@@ -60,9 +60,15 @@ class NotificationListView(NotificationAccessMixin, TemplateView):
         page = Paginator(queryset, PAGE_SIZE).get_page(self.request.GET.get('page'))
         query = self.request.GET.copy()
         query.pop('page', None)
+        # Separadas dentro de la propia página (sin otra consulta): con un filtro
+        # de estado ya puesto, una de las dos queda vacía y no se pinta su título.
+        unread = [n for n in page.object_list if not n.is_read]
+        read = [n for n in page.object_list if n.is_read]
         context.update(
             page_obj=page,
             notifications=page.object_list,
+            unread_notifications=unread,
+            read_notifications=read,
             state=state,
             kind=kind,
             kinds=Notification.Kind.choices,
@@ -126,6 +132,7 @@ class NotificationCountView(NotificationAccessMixin, View):
         if latest is not None:
             payload['latest'] = {
                 'id': latest.pk,
+                'kind': latest.kind,
                 'title': latest.title,
                 'body': latest.body,
                 'href': reverse('notifications:open', args=[latest.pk]),

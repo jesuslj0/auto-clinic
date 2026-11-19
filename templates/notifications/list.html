@@ -35,27 +35,31 @@
         <button type="submit" class="text-sm font-medium text-brand-fg hover:underline">Marcar todas como leídas</button>
     </form>
 
-    <ul class="divide-y divide-line overflow-hidden rounded-2xl bg-surface shadow-soft ring-1 ring-line">
-        {% for n in notifications %}
-        <li class="flex items-start gap-3 px-4 py-3 {% if not n.is_read %}bg-brand-soft{% endif %}">
-            <span class="mt-2 h-2 w-2 flex-shrink-0 rounded-full {% if n.is_read %}bg-transparent{% else %}bg-brand-600{% endif %}" aria-hidden="true"></span>
-            <a href="{% url 'notifications:open' n.pk %}" class="min-w-0 flex-1">
-                <span class="block text-sm {% if n.is_read %}text-content-muted{% else %}font-semibold text-content{% endif %}">{{ n.title }}</span>
-                <span class="block text-sm text-content-subtle">{{ n.body }}</span>
-                <span class="block text-xs text-content-faint">{{ n.get_kind_display }} · {{ n.created_at|timesince }}</span>
-            </a>
-            <form method="post" action="{% url 'notifications:dismiss' n.pk %}">
-                {% csrf_token %}
-                <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                <button type="submit" class="rounded-lg p-1.5 text-content-faint transition hover:bg-muted-strong hover:text-content-muted" aria-label="Descartar">
-                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-            </form>
-        </li>
-        {% empty %}
-        <li class="px-4 py-12 text-center text-sm text-content-subtle">No hay notificaciones que mostrar.</li>
-        {% endfor %}
-    </ul>
+    {% if not unread_notifications and not read_notifications %}
+    <p class="rounded-2xl bg-surface px-4 py-12 text-center text-sm text-content-subtle shadow-soft ring-1 ring-line">No hay notificaciones que mostrar.</p>
+    {% endif %}
+
+    {% if unread_notifications %}
+    <div>
+        <h2 class="mb-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-content-subtle">Sin leer</h2>
+        <ul class="divide-y divide-line overflow-hidden rounded-2xl bg-surface shadow-soft ring-1 ring-line">
+            {% for n in unread_notifications %}
+            {% include 'notifications/_row.html' with n=n %}
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if read_notifications %}
+    <div>
+        <h2 class="mb-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-content-subtle">Leídas</h2>
+        <ul class="divide-y divide-line overflow-hidden rounded-2xl bg-surface shadow-soft ring-1 ring-line">
+            {% for n in read_notifications %}
+            {% include 'notifications/_row.html' with n=n %}
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
 
     {% if page_obj.has_other_pages %}
     <nav class="flex items-center justify-between text-sm" aria-label="Paginación">
