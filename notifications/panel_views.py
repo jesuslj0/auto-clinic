@@ -268,8 +268,8 @@ class ManifestView(View):
         from django.templatetags.static import static
 
         data = {
-            'name': 'Auto Clinic',
-            'short_name': 'Clínica',
+            'name': 'AutoClinic',
+            'short_name': 'AutoClinic',
             'description': 'Panel de gestión de la clínica',
             'start_url': '/',
             'scope': '/',
