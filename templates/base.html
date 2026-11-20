@@ -120,6 +120,7 @@ emite en toda página del panel, aunque no contenga ningún formulario.
                 </svg>
                 Mi cuenta
             </a>
+            {% include "partials/_install_app.html" %}
             {% include "partials/_theme_toggle.html" %}
             {# El panel se va antes de que aparezca el modal: si no, quedaría debajo. #}
             <button type="button" @click="sidebarOpen = false; logoutOpen = true"
@@ -227,6 +228,9 @@ emite en toda página del panel, aunque no contenga ningún formulario.
                         </svg>
                         <span class="sidebar-label">Mi cuenta</span>
                     </a>
+                </div>
+                <div class="mt-3 -mx-3">
+                    {% include "partials/_install_app.html" with text_size="text-xs" %}
                 </div>
                 <div class="mt-1 -mx-3">
                     {% include "partials/_theme_toggle.html" with text_size="text-xs" %}

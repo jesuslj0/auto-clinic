@@ -522,7 +522,7 @@ paciente y plantillas de WhatsApp revisadas por Meta (solo admins). Un único pu
   `Service-Worker-Allowed: /` y sin caché; el código vive en `static/js/sw.js`). La suscripción solo acepta
   endpoints `https://`; un 404/410 del servicio de push la borra. En iPhone exige iOS 16.4+ y «Añadir a
   pantalla de inicio».
-- **Instalar como app:** `static/js/notifications.js` guarda `beforeinstallprompt` (`window.acInstall`) y «Preferencias de notificaciones» muestra el botón «Instalar la app» (en iPhone, la indicación de «Añadir a pantalla de inicio»).
+- **Instalar como app:** `static/js/notifications.js` guarda `beforeinstallprompt` (`window.acInstall`) y `partials/_install_app.html` pinta el botón «Instalar la app» en el pie de la barra lateral (escritorio y móvil), solo mientras se puede instalar (en iPhone, la indicación de «Añadir a pantalla de inicio»); desaparece al instalarla.
 - **Retención:** `purge_old_notifications` (beat, 03:45): leídas > 30 días, descartadas > 7.
 - Fuera de v1: «cita completada sin procedimiento» (haría falta tarea periódica) y `WorkflowError`.
 

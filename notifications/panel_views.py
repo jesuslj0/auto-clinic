@@ -46,6 +46,7 @@ class NotificationListView(NotificationAccessMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context['section'] = 'notifications'
         queryset = self.mine()
         state = self.request.GET.get('estado', '')
         kind = self.request.GET.get('categoria', '')
@@ -180,6 +181,7 @@ class NotificationPreferencesView(NotificationAccessMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(
+            section='notifications',
             rows=self._rows(),
             push_available=push_enabled(),
             vapid_public_key=settings.VAPID_PUBLIC_KEY if push_enabled() else '',

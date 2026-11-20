@@ -1,0 +1,25 @@
+{% comment %}
+Botón «Instalar la app» del pie de la barra lateral. Solo aparece cuando el navegador
+ofrece instalar (Chrome/Android/escritorio: `beforeinstallprompt`) o en iPhone, donde
+no hay evento y se da la indicación; desaparece solo al instalarla. El evento lo
+guarda `static/js/notifications.js` (`window.acInstall`) y avisa con `ac:install-changed`.
+
+`text_size` (opcional, por defecto `text-sm`) iguala la letra con el resto del pie.
+{% endcomment %}
+<div x-data="{
+        can: false, ios: false, help: false,
+        sync() { const a = window.acInstall; if (!a) return; this.can = a.available(); this.ios = a.ios() && !a.installed(); },
+        async install() { if (this.can) { await window.acInstall.prompt(); } else { this.help = !this.help; } },
+     }"
+     x-init="sync(); document.addEventListener('ac:install-changed', () => sync())"
+     x-show="can || ios" x-cloak>
+    <button type="button" @click="install()"
+            title="Instalar la app en este dispositivo"
+            class="sidebar-action flex w-full items-center gap-2 rounded-lg bg-brand-soft px-3 py-2 {{ text_size|default:'text-sm' }} font-semibold text-brand-fg transition hover:bg-brand-soft-strong">
+        <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+        </svg>
+        <span class="sidebar-label">Instalar la app</span>
+    </button>
+    <p x-show="help && !can" x-cloak class="sidebar-label mt-1 px-3 text-xs text-content-muted">En iPhone: «Compartir → Añadir a pantalla de inicio».</p>
+</div>

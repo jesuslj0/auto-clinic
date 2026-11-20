@@ -119,3 +119,13 @@ def test_service_worker_and_manifest(client):
     assert sw.status_code == 200 and sw['Service-Worker-Allowed'] == '/' and sw['Cache-Control'] == 'no-cache'
     manifest = client.get('/manifest.webmanifest').json()
     assert manifest['display'] == 'standalone' and manifest['icons']
+
+
+def test_notification_pages_show_the_section_icon_and_a_disabled_save(client, admin_user):
+    client.force_login(admin_user)
+    for url in ('/notificaciones/', '/notificaciones/preferencias/'):
+        html = client.get(url).content.decode()
+        assert 'mt-0.5 inline-flex flex-shrink-0 self-start text-brand-fg' in html  # icono del título
+        assert 'Instalar la app' in html  # botón del pie de la barra lateral
+    prefs = client.get('/notificaciones/preferencias/').content.decode()
+    assert ':disabled="!dirty"' in prefs
