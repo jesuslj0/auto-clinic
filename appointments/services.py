@@ -717,9 +717,28 @@ def _queue_notice(appointment, kind, **kwargs):
     queue_notice(appointment, kind, **kwargs)
 
 
-def notify_staff(appointment, kind):
-    """Aviso in-app al personal de la clínica sobre una cita (texto genérico, sin paciente).
+def _staff_notice_detail(appointment, kind, actor):
+    """Frase con el nombre para el panel («María ha cancelado su cita por el agente»).
 
+    Solo se pinta dentro del panel: el push lleva el texto genérico de la categoría.
+    """
+    name = (str(appointment.patient) if appointment.patient_id else appointment.patient_name) or 'Un paciente'
+    via = {
+        AppointmentStatusHistory.Actor.AGENT: ' por el agente',
+        AppointmentStatusHistory.Actor.PATIENT: ' al responder al recordatorio',
+    }.get(actor, '')
+    phrase = {
+        'appointment_pending': 'ha pedido una cita',
+        'appointment_rescheduled': 'ha movido su cita',
+        'appointment_cancelled': 'ha cancelado su cita',
+    }.get(kind)
+    return f'{name} {phrase}{via}' if phrase else ''
+
+
+def notify_staff(appointment, kind, actor=AppointmentStatusHistory.Actor.AGENT):
+    """Aviso in-app al personal de la clínica sobre una cita.
+
+    El título/cuerpo son genéricos (son los del push); el nombre va solo en `detail`.
     Import local: `notifications` depende de `appointments`, no al revés.
     """
     from django.urls import reverse
@@ -731,6 +750,7 @@ def notify_staff(appointment, kind):
         kind,
         url=reverse('core:dashboard-manage-appointment', args=[appointment.pk]),
         object_id=appointment.pk,
+        detail=_staff_notice_detail(appointment, kind, actor),
     )
 
 
@@ -864,7 +884,7 @@ def cancel_appointment(
     # Al personal se le avisa de lo que hacen el agente o el paciente, no de
     # lo que hace la propia clínica ni de la caducidad de un hold (SYSTEM).
     if actor in _ACTORS_TO_ANNOUNCE:
-        notify_staff(appointment, 'appointment_cancelled')
+        notify_staff(appointment, 'appointment_cancelled', actor)
     return appointment
 
 
@@ -966,7 +986,7 @@ def reschedule_appointment(
         if actor == AppointmentStatusHistory.Actor.STAFF:
             _queue_notice(appointment, 'booking_changed', previous_scheduled_at=hora_anterior)
         if actor in _ACTORS_TO_ANNOUNCE:
-            notify_staff(appointment, 'appointment_rescheduled')
+            notify_staff(appointment, 'appointment_rescheduled', actor)
 
     return appointment
 

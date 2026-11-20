@@ -195,17 +195,32 @@ def record_message(
 
 
 def _notify_inbound(clinic, session, *, new):
-    """Aviso al personal de un mensaje entrante (texto genérico: sin nombre ni contenido)."""
+    """Aviso al personal de un mensaje entrante.
+
+    Título/cuerpo genéricos (los del push); el nombre va solo en `detail`, para el
+    panel. Nunca el contenido del mensaje.
+    """
     from django.urls import reverse
 
     from notifications.inbox import notify
 
+    who = session_display_name(session)
     notify(
         clinic,
         'chat_new' if new else 'chat_message',
         url=reverse('agent:chat-thread', args=[session.pk]),
         object_id=session.pk,
+        detail=f'{who} ha escrito por primera vez' if new else f'{who} te ha enviado un mensaje',
     )
+
+
+def session_display_name(session) -> str:
+    """Nombre con el que el panel conoce el hilo: ficha, contacto o, si no, el teléfono."""
+    if session.patient_id:
+        return str(session.patient)
+    if session.guardian_id:
+        return f'{session.guardian.first_name} {session.guardian.last_name}'.strip() or session.phone
+    return session.phone or 'Un contacto'
 
 
 def resolve_test_phone(clinic) -> str:
@@ -645,5 +660,6 @@ def apply_delivery_status(*, clinic, wa_message_id: str, status: str, timestamp=
                     'message_failed',
                     url=reverse('agent:chat-thread', args=[message.session_id]),
                     object_id=message.session_id,
+                    detail=f'No se entregó un mensaje a {session_display_name(message.session)}',
                 )
     return message

@@ -11,7 +11,7 @@ Una fila de notificación en el listado. `n` es la `Notification`.
             {{ n.title }}{% if n.count > 1 %} ({{ n.count }}){% endif %}
             <span class="font-normal text-content-faint">· {{ n.created_at|short_timesince }}</span>
         </span>
-        <span class="mt-0.5 block text-sm text-content-subtle">{{ n.body }}</span>
+        <span class="mt-0.5 block text-sm text-content-subtle">{% if n.detail %}{{ n.detail }}{% else %}{{ n.body }}{% endif %}</span>
     </a>
     <form method="post" action="{% url 'notifications:dismiss' n.pk %}" class="flex-shrink-0 self-center">
         {% csrf_token %}

@@ -135,6 +135,7 @@ class NotificationCountView(NotificationAccessMixin, View):
                 'kind': latest.kind,
                 'title': latest.title,
                 'body': latest.body,
+                'detail': latest.detail,
                 'href': reverse('notifications:open', args=[latest.pk]),
                 'at': latest.created_at.isoformat(),
             }

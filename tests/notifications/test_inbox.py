@@ -170,3 +170,55 @@ class TestHooks:
     def test_notify_staff_links_to_the_appointment(self, admin_user, appointment_a, django_capture_on_commit_callbacks):
         _run(django_capture_on_commit_callbacks, lambda: notify_staff(appointment_a, 'appointment_pending'))
         assert str(appointment_a.pk) in Notification.objects.get().url
+
+
+class TestNamedDetail:
+    """El nombre va en `detail` (solo panel); título/cuerpo —lo que viaja en el push— siguen genéricos."""
+
+    def test_cancellation_by_the_agent_names_the_patient(
+        self, admin_user, appointment_a, django_capture_on_commit_callbacks
+    ):
+        _run(
+            django_capture_on_commit_callbacks,
+            lambda: cancel_appointment(
+                appointment_a, actor=AppointmentStatusHistory.Actor.AGENT, notify=False
+            ),
+        )
+        row = Notification.objects.get(kind=Kind.APPOINTMENT_CANCELLED)
+        assert row.detail == f'{appointment_a.patient} ha cancelado su cita por el agente'
+        assert appointment_a.patient.first_name not in f'{row.title} {row.body}'
+
+    def test_inbound_message_names_the_sender_but_not_the_content(
+        self, admin_user, clinic_a, patient_a, django_capture_on_commit_callbacks
+    ):
+        session = ConversationSession.objects.create(clinic=clinic_a, phone=patient_a.phone, patient=patient_a)
+        _run(
+            django_capture_on_commit_callbacks,
+            lambda: record_message(
+                clinic=clinic_a, session=session, direction=ChatMessage.Direction.INBOUND,
+                sender=ChatMessage.Sender.PATIENT, body='me duele el pie', wa_message_id='wamid.N',
+            ),
+        )
+        row = Notification.objects.get()
+        assert row.detail == f'{patient_a} te ha enviado un mensaje'
+        assert 'duele' not in row.detail
+
+    def test_push_payload_does_not_carry_the_name(self, admin_user, clinic_a, django_capture_on_commit_callbacks):
+        from notifications.push import build_payload
+
+        _run(
+            django_capture_on_commit_callbacks,
+            lambda: notify(clinic_a, Kind.CHAT_NEW, url='/x/', detail='María ha escrito por primera vez'),
+        )
+        row = Notification.objects.get()
+        assert row.detail == 'María ha escrito por primera vez'
+        assert 'María' not in str(build_payload(row))
+
+    def test_grouped_row_keeps_the_latest_detail(self, admin_user, clinic_a, django_capture_on_commit_callbacks):
+        for who in ('Ana', 'Ana'):
+            _run(
+                django_capture_on_commit_callbacks,
+                lambda: notify(clinic_a, Kind.CHAT_MESSAGE, url='/c/', object_id='s', detail=f'{who} te ha enviado un mensaje'),
+            )
+        row = Notification.objects.get()
+        assert row.count == 2 and row.detail == 'Ana te ha enviado un mensaje'

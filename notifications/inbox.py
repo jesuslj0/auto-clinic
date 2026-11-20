@@ -2,10 +2,11 @@
 
 Reglas (ver CLAUDE.md, «Notificaciones»):
 
-- **Texto genérico siempre.** Ni nombre de paciente, ni teléfono, ni texto de
-  mensajes: el aviso viaja por Google/Apple cuando hay push, y un nombre de
-  paciente junto a «cita» ya es dato de salud. Ampliarlo es una decisión de
-  privacidad, no un detalle de UI.
+- **Push genérico siempre; el panel puede llevar el nombre.** `title`/`body` no
+  llevan nombre de paciente, teléfono ni texto de mensajes: viajan por
+  Google/Apple, y un nombre junto a «cita» ya es dato de salud. El nombre va solo
+  en `detail`, que únicamente se pinta en el panel (sesión). Nunca el contenido
+  de un mensaje. Ampliar el push es una decisión de privacidad, no de UI.
 - **Nunca dentro de la petición que lo origina.** Todo sale con `on_commit` y un
   fallo aquí no tumba la reserva ni el mensaje de WhatsApp.
 - **Agrupa mientras no se lea.** Misma persona, tipo y objeto con una sin leer →
@@ -70,17 +71,18 @@ def recipients(clinic, kind, *, exclude_user=None):
     return [u for u in users if u.pk not in muted]
 
 
-def notify(clinic, kind, *, url='', object_id='', exclude_user=None) -> None:
+def notify(clinic, kind, *, url='', object_id='', exclude_user=None, detail='') -> None:
     """Avisa al personal de la clínica. Se ejecuta al confirmarse la transacción."""
     if clinic is None or not kind_is_valid(kind):
         return
     object_id = str(object_id or '')
+    detail = str(detail or '')[:200]
     clinic_pk = clinic.pk
 
     def run():
         try:
             with transaction.atomic():
-                _deliver(clinic_pk, kind, url=url, object_id=object_id, exclude_user=exclude_user)
+                _deliver(clinic_pk, kind, url=url, object_id=object_id, exclude_user=exclude_user, detail=detail)
         except Exception:
             # El aviso es un extra: nunca debe romper lo que lo originó.
             logger.exception('No se pudo crear la notificación %s', kind)
@@ -88,7 +90,7 @@ def notify(clinic, kind, *, url='', object_id='', exclude_user=None) -> None:
     transaction.on_commit(run)
 
 
-def _deliver(clinic_pk, kind, *, url, object_id, exclude_user):
+def _deliver(clinic_pk, kind, *, url, object_id, exclude_user, detail=''):
     from core.models import Clinic
 
     clinic = Clinic.objects.filter(pk=clinic_pk).first()
@@ -114,11 +116,12 @@ def _deliver(clinic_pk, kind, *, url, object_id, exclude_user):
             existing.created_at = now
             existing.url = url or existing.url
             existing.body = GROUPED_BODY.format(n=existing.count)
-            existing.save(update_fields=['count', 'created_at', 'url', 'body'])
+            existing.detail = detail or existing.detail
+            existing.save(update_fields=['count', 'created_at', 'url', 'body', 'detail'])
             touched.append(existing.pk)
         else:
             created = Notification.objects.create(
-                clinic=clinic, user=user, kind=kind, title=title, body=body,
+                clinic=clinic, user=user, kind=kind, title=title, body=body, detail=detail,
                 url=url, object_id=object_id, created_at=now,
             )
             touched.append(created.pk)

@@ -497,9 +497,12 @@ paciente y plantillas de WhatsApp revisadas por Meta (solo admins). Un único pu
   `NotificationPreference` (`in_app`/`push` por categoría; sin fila = activo). Sale con
   `transaction.on_commit` y un fallo nunca tumba la petición que lo origina. Mientras haya una sin leer del
   mismo `kind`+`object_id` (p. ej. el mismo chat) se **agrupa** (`count`) en vez de apilar otra.
-- **Texto genérico, siempre** (`inbox.TEXTS`): ni nombre de paciente, ni teléfono, ni texto de mensajes. El
-  push pasa por Google/Apple; **ampliar lo que lleva un aviso es una decisión de privacidad**. Por eso no
-  están en `audit.registry` (no son datos clínicos) y se permite el bulk (`update`/`delete`).
+- **Push genérico, panel con nombre.** `title`/`body` (`inbox.TEXTS`) son genéricos y son lo único que viaja en el
+  push (Google/Apple): ni nombre, ni teléfono, ni texto de mensajes. El nombre va en `Notification.detail`
+  («María ha cancelado su cita por el agente», «Ficha completada por Javier mediante enlace»), que solo se
+  pinta en el panel (lista, campana, toast). **Nunca el contenido de un mensaje**, y **ampliar el push es una
+  decisión de privacidad**. No están en `audit.registry` (no son datos clínicos; la retención de 30 días limita
+  los nombres guardados) y se permite el bulk (`update`/`delete`).
 - **Enganches** (imports locales, `notifications` depende de las demás apps): `appointments.services.notify_staff`
   desde `create_appointment` (`source=AGENT`), `reschedule_appointment` y `cancel_appointment` (actor
   AGENT/PATIENT; STAFF y SYSTEM no), y el PATCH `status` del agente en `AppointmentSerializer.update`;
@@ -519,6 +522,7 @@ paciente y plantillas de WhatsApp revisadas por Meta (solo admins). Un único pu
   `Service-Worker-Allowed: /` y sin caché; el código vive en `static/js/sw.js`). La suscripción solo acepta
   endpoints `https://`; un 404/410 del servicio de push la borra. En iPhone exige iOS 16.4+ y «Añadir a
   pantalla de inicio».
+- **Instalar como app:** `static/js/notifications.js` guarda `beforeinstallprompt` (`window.acInstall`) y «Preferencias de notificaciones» muestra el botón «Instalar la app» (en iPhone, la indicación de «Añadir a pantalla de inicio»).
 - **Retención:** `purge_old_notifications` (beat, 03:45): leídas > 30 días, descartadas > 7.
 - Fuera de v1: «cita completada sin procedimiento» (haría falta tarea periódica) y `WorkflowError`.
 

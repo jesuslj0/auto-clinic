@@ -59,7 +59,7 @@
             setBadge(data.unread);
             document.dispatchEvent(new CustomEvent('notifications:updated', { detail: data }));
             if (announce && data.latest && data.latest.id !== lastToastId && window.acToast) {
-                window.acToast(data.latest.title, 'info', {
+                window.acToast(data.latest.detail || data.latest.title, 'info', {
                     href: data.latest.href, sticky: true, icon: iconFor(data.latest.kind),
                     meta: shortTimeSince(data.latest.at),
                 });
@@ -89,6 +89,34 @@
 
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(false); });
     connect();
+
+    // --- Instalar como app ------------------------------------------------
+    // Chrome lanza `beforeinstallprompt` una sola vez y puede hacerlo antes de que Alpine
+    // pinte la página: se guarda aquí y el botón de «Preferencias» lo usa cuando quiera.
+    let installEvent = null;
+    const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        installEvent = e;
+        document.dispatchEvent(new CustomEvent('ac:install-changed'));
+    });
+    window.addEventListener('appinstalled', () => {
+        installEvent = null;
+        document.dispatchEvent(new CustomEvent('ac:install-changed'));
+    });
+    window.acInstall = {
+        installed: standalone,
+        available: () => !!installEvent && !standalone(),
+        ios: () => /iphone|ipad|ipod/i.test(navigator.userAgent) && !standalone(),
+        async prompt() {
+            if (!installEvent) return false;
+            installEvent.prompt();
+            const choice = await installEvent.userChoice;
+            installEvent = null;
+            document.dispatchEvent(new CustomEvent('ac:install-changed'));
+            return choice.outcome === 'accepted';
+        },
+    };
 
     // --- Web Push ---------------------------------------------------------
     function b64ToBytes(b64) {

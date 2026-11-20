@@ -31,10 +31,10 @@ class Reminder(TimeStampedModel):
 class Notification(models.Model):
     """Aviso in-app para un usuario del panel. Una fila por destinatario.
 
-    NO es dato clínico y no está en la auditoría: el texto es siempre genérico
-    («Nueva cita pendiente»), nunca lleva nombre de paciente ni texto de mensajes.
-    El push sale por servicios de terceros (Google/Apple): ampliar lo que lleva el
-    aviso es una decisión de privacidad.
+    NO es dato clínico y no está en la auditoría. `title`/`body` son siempre genéricos
+    («Nueva cita pendiente») y son lo único que viaja en el push (Google/Apple).
+    `detail` lleva el nombre de la persona y solo se muestra dentro del panel, nunca
+    en el push ni con texto de mensajes: ampliar el push es una decisión de privacidad.
     """
 
     class Kind(models.TextChoices):
@@ -54,6 +54,9 @@ class Notification(models.Model):
     kind = models.CharField(max_length=40, choices=Kind.choices)
     title = models.CharField(max_length=120)
     body = models.CharField(max_length=200, blank=True)
+    #: Texto con nombres («María ha cancelado su cita»). SOLO para el panel: el push
+    #: usa `title`/`body`, que son genéricos. Se borra con la notificación (retención).
+    detail = models.CharField(max_length=200, blank=True)
     url = models.CharField(max_length=300, blank=True)
     object_id = models.CharField(max_length=64, blank=True)
     count = models.PositiveIntegerField(default=1)

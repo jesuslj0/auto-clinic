@@ -273,7 +273,7 @@ def _resolve_episode(link: PatientFormLink) -> Episode:
 
 
 def _notify_completed(link: PatientFormLink) -> None:
-    """Avisa al personal de que un paciente envió su ficha (texto genérico, sin nombre)."""
+    """Avisa al personal de que un paciente envió su ficha (nombre solo en `detail`, no en el push)."""
     # Import local: `notifications` importa de otras apps y evita ciclos al cargar.
     from django.urls import reverse
 
@@ -284,6 +284,7 @@ def _notify_completed(link: PatientFormLink) -> None:
         'patient_form_completed',
         url=reverse('patients:detail', args=[link.patient_id]),
         object_id=link.pk,
+        detail=f'Ficha completada por {link.patient} mediante enlace',
     )
 
 

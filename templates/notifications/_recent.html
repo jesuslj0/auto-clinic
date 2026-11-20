@@ -16,7 +16,7 @@
         <a href="{% url 'notifications:open' n.pk %}" class="flex items-center gap-3 px-4 py-2.5 transition hover:bg-muted">
             {% notification_badge n.kind n.is_read %}
             <span class="min-w-0 flex-1 truncate text-sm {% if n.is_read %}text-content-muted{% else %}font-semibold text-content{% endif %}">
-                {{ n.title }}{% if n.count > 1 %} ({{ n.count }}){% endif %}
+                {% if n.detail %}{{ n.detail }}{% else %}{{ n.title }}{% endif %}{% if n.count > 1 %} ({{ n.count }}){% endif %}
                 <span class="font-normal text-content-faint">· {{ n.created_at|short_timesince }}</span>
             </span>
         </a>
