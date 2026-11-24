@@ -185,6 +185,22 @@ class ProfessionalProfileForm(forms.ModelForm):
         return professional
 
 
+def _end_at_from_form(cleaned, date, tz, scheduled_at, add_error):
+    """`end_at` en UTC desde `end_time` (hora local de la clínica), o None si va vacía.
+
+    La cita termina el mismo día que empieza, y después de empezar. Con None el
+    service calcula el fin desde la duración del servicio.
+    """
+    end_time = cleaned.get('end_time')
+    if not end_time:
+        return None
+    end_at = datetime.combine(date, end_time).replace(tzinfo=tz).astimezone(ZoneInfo('UTC'))
+    if end_at <= scheduled_at:
+        add_error('end_time', 'La hora de fin debe ser posterior a la de inicio.')
+        return None
+    return end_at
+
+
 class AppointmentForm(forms.Form):
     """
     Alta manual de citas desde el panel.
@@ -222,7 +238,14 @@ class AppointmentForm(forms.Form):
         widget=forms.DateInput(attrs={'type': 'date'}),
     )
     time = forms.TimeField(
-        label='Hora',
+        label='Hora de inicio',
+        widget=forms.TimeInput(attrs={'type': 'time'}),
+    )
+    # Opcional: vacía, la cita dura lo que el servicio (`booking_duration_minutes`).
+    # Rellena, manda ella aunque difiera de la duración del servicio.
+    end_time = forms.TimeField(
+        label='Hora de fin',
+        required=False,
         widget=forms.TimeInput(attrs={'type': 'time'}),
     )
     notes = forms.CharField(
@@ -294,6 +317,7 @@ class AppointmentForm(forms.Form):
                 )
 
             cleaned['scheduled_at'] = scheduled_at
+            cleaned['end_at'] = _end_at_from_form(cleaned, date, tz, scheduled_at, self.add_error)
 
         return cleaned
 
@@ -317,7 +341,10 @@ class AppointmentEditForm(forms.Form):
         empty_label='— Selecciona un profesional —',
     )
     date = forms.DateField(label='Fecha', widget=forms.DateInput(attrs={'type': 'date'}))
-    time = forms.TimeField(label='Hora', widget=forms.TimeInput(attrs={'type': 'time'}))
+    time = forms.TimeField(label='Hora de inicio', widget=forms.TimeInput(attrs={'type': 'time'}))
+    end_time = forms.TimeField(
+        label='Hora de fin', required=False, widget=forms.TimeInput(attrs={'type': 'time'}),
+    )
     notes = forms.CharField(label='Notas', required=False, widget=forms.Textarea(attrs={'rows': 3}))
     notify_patient = forms.BooleanField(
         label='Avisar al paciente por WhatsApp', required=False, initial=True,
@@ -334,6 +361,7 @@ class AppointmentEditForm(forms.Form):
             'professional': appointment.professional_id,
             'date': local.date(),
             'time': local.time().replace(second=0, microsecond=0),
+            'end_time': appointment.get_end_datetime().astimezone(self.tz).time().replace(second=0, microsecond=0),
             'notes': appointment.notes,
             'notify_patient': True,
             **kwargs.pop('initial', {}),
@@ -366,6 +394,15 @@ class AppointmentEditForm(forms.Form):
             if scheduled_at != self.appointment.scheduled_at and scheduled_at < timezone.now():
                 raise forms.ValidationError({'date': 'La cita no puede programarse en el pasado.'})
             cleaned['scheduled_at'] = scheduled_at
+
+            # Igual que con la hora de inicio: reenviar el mismo fin que ya tenía (a
+            # minuto) no es cambiarlo, así una nota no recalcula ni pisa segundos.
+            current_end = self.appointment.get_end_datetime().astimezone(self.tz)
+            if cleaned.get('end_time') == current_end.time().replace(second=0, microsecond=0) and \
+                    date == current_end.date():
+                cleaned['end_at'] = self.appointment.get_end_datetime()
+            else:
+                cleaned['end_at'] = _end_at_from_form(cleaned, date, self.tz, scheduled_at, self.add_error)
         return cleaned
 
 

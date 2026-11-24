@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
 from django.db import models
 
 from core.models import Clinic, TimeStampedModel
@@ -21,6 +22,15 @@ DEFAULT_CATEGORIES = (
 
 # Colores que se reparten a las categorías creadas desde el panel, en orden.
 CATEGORY_PALETTE = [color for _, color in DEFAULT_CATEGORIES]
+
+# Colores con los que se distingue cada servicio en la agenda. Doce tonos bien
+# separados entre sí (un servicio nuevo toma el primero que la clínica no usa);
+# todos válidos como acento sobre fondo claro y oscuro.
+SERVICE_PALETTE = [
+    '#7c3aed', '#0ea5e9', '#14b8a6', '#f97316', '#e11d48', '#84cc16',
+    '#d946ef', '#2563eb', '#eab308', '#059669', '#ef4444', '#64748b',
+]
+HEX_COLOR_RE = r'^#[0-9a-fA-F]{6}$'
 
 
 class ServiceCategory(TimeStampedModel):
@@ -82,6 +92,12 @@ class Service(TimeStampedModel):
     price = models.DecimalField(max_digits=10, decimal_places=2)
     price_type = models.CharField(max_length=10, choices=ValueType.choices, default=ValueType.FIXED)
     price_max = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    # Color propio del servicio: es lo que lo distingue en la agenda (el estado de
+    # la cita va aparte, en un punto). Vacío solo en memoria: `save()` asigna uno.
+    color = models.CharField(
+        max_length=7, blank=True, validators=[RegexValidator(HEX_COLOR_RE, 'Usa un color hexadecimal, p. ej. #7c3aed.')],
+        help_text='Color hexadecimal con el que se ve el servicio en la agenda.',
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -144,6 +160,26 @@ class Service(TimeStampedModel):
         if self.duration_max_minutes is None:
             return f'Desde {self.duration_minutes} min'
         return f'{self.duration_minutes} – {self.duration_max_minutes} min'
+
+    @classmethod
+    def next_color(cls, clinic_id):
+        """Primer color de la paleta que ningún servicio de la clínica usa todavía.
+
+        Con todos usados, reparte por turno (el más antiguo se repite primero).
+        """
+        usados = list(cls.objects.filter(clinic_id=clinic_id).values_list('color', flat=True))
+        usados_lc = {c.lower() for c in usados if c}
+        for color in SERVICE_PALETTE:
+            if color not in usados_lc:
+                return color
+        return SERVICE_PALETTE[len(usados) % len(SERVICE_PALETTE)]
+
+    def save(self, *args, **kwargs):
+        if not self.color:
+            self.color = self.next_color(self.clinic_id)
+            if (update_fields := kwargs.get('update_fields')) is not None:
+                kwargs['update_fields'] = [*update_fields, 'color']
+        super().save(*args, **kwargs)
 
     # ------------------------------------------------------------------
     # Borrado

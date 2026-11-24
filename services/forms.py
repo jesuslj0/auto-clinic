@@ -1,6 +1,6 @@
 from django import forms
 
-from services.models import Service, ServiceCategory
+from services.models import SERVICE_PALETTE, Service, ServiceCategory
 
 
 class ServiceForm(forms.ModelForm):
@@ -25,6 +25,7 @@ class ServiceForm(forms.ModelForm):
         fields = [
             'name',
             'description',
+            'color',
             'duration_type',
             'duration_minutes',
             'duration_max_minutes',
@@ -39,6 +40,7 @@ class ServiceForm(forms.ModelForm):
         labels = {
             'name': 'Nombre',
             'description': 'Descripción',
+            'color': 'Color en la agenda',
             'duration_type': 'Tipo de duración',
             'duration_minutes': 'Duración (minutos)',
             'duration_max_minutes': 'Duración máxima (minutos)',
@@ -57,8 +59,18 @@ class ServiceForm(forms.ModelForm):
         for campo in ('duration_type', 'price_type'):
             self.fields[campo].required = False
 
+        # El color no es obligatorio (`Service.save()` asigna uno), pero en un alta se
+        # ofrece ya el siguiente libre de la paleta para que se vea qué se va a guardar.
+        self.fields['color'].required = False
+        if not self.instance.pk and self.clinic is not None and 'color' not in self.initial:
+            self.fields['color'].initial = Service.next_color(self.clinic.pk)
+
         if self.instance.category_id:
             self.fields['category_name'].initial = self.instance.category.name
+
+    @property
+    def color_palette(self):
+        return SERVICE_PALETTE
 
     @property
     def category_suggestions(self):
@@ -72,6 +84,9 @@ class ServiceForm(forms.ModelForm):
 
     def clean_price_type(self):
         return self.cleaned_data.get('price_type') or Service.ValueType.FIXED
+
+    def clean_color(self):
+        return (self.cleaned_data.get('color') or '').lower()
 
     def clean_category_name(self):
         return (self.cleaned_data.get('category_name') or '').strip()

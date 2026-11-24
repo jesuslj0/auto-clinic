@@ -653,6 +653,17 @@ reagendar» on the manage page. Everything goes through `services.update_appoint
   exact `scheduled_at`, so saving a note is never read as a move (it would send a false change notice).
 - Another clinic's appointment is a 404. Not clinical data, so no `AccessLog`; changes land in `ChangeLog`.
 
+**Hora de fin y agenda (`appointments/views.py`, `templates/appointments/calendar.html`).**
+Alta y edición del panel llevan «Hora de fin» (`end_time`, opcional → `end_at`): vacía = duración del
+servicio; rellena manda aunque difiera. `update_appointment(end_at=…)`: sin fin explícito, cambiar el
+servicio recalcula la duración, mover solo la hora **conserva** la duración, y no tocar ninguna no cambia
+el fin. La agenda es de **media hora por fila** (`SLOT_MINUTES`, mínimo `ROW_MIN_PX` por fila; las filas
+se reparten el alto de pantalla y si no caben se hace scroll), el rango se amplía con las citas fuera de
+horario, y las tarjetas se colocan por porcentaje de minutos sobre una capa por día. **El color de la
+tarjeta es el del servicio** (`Service.color`, hex, asignado de `SERVICE_PALETTE` al crear, editable en el
+formulario del servicio); el **estado es solo el punto**. Tarjeta adaptativa: una línea, y servicio + tramo
+si dura ≥ 45 min; el detalle va en el `title`.
+
 ### Antelación mínima de reserva
 
 `Clinic.min_booking_notice_minutes` (default 120, 0 = sin mínimo). Solo rige la vía

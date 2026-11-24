@@ -348,6 +348,15 @@ class ProfessionalScheduleViewSet(viewsets.ModelViewSet):
         return queryset.filter(professional__clinic=user.clinic)
 
 
+#: Cada fila de la agenda es media hora (también cada casilla donde se crea una cita).
+SLOT_MINUTES = 30
+#: Alto mínimo de una fila. Por debajo de esto una tarjeta de 30 min no cabe ni con
+#: una línea; por encima, las filas se reparten el alto de pantalla.
+ROW_MIN_PX = 28
+#: Gris pizarra: color de una cita sin servicio (o de un servicio sin color).
+FALLBACK_SERVICE_COLOR = '#64748b'
+
+
 class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
     template_name = 'appointments/calendar.html'
 
@@ -397,48 +406,92 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
 
         has_schedules = bool(schedule_by_dow)
 
-        # Rango global de horas que cubre cualquier horario
-        if has_schedules:
-            global_start = min(s.start_time.hour for sl in schedule_by_dow.values() for s in sl)
-            global_end = max(s.end_time.hour for sl in schedule_by_dow.values() for s in sl)
-        else:
-            global_start, global_end = 8, 18
+        def minutes(t):
+            return t.hour * 60 + t.minute
 
-        time_slots = [time(hour=h) for h in range(global_start, global_end)]
-
-        days_with_appointments = {
-            timezone.localtime(appt.scheduled_at).date() for appt in appointments
+        # Tramos de cada día en minutos desde medianoche: [(inicio, fin), ...]
+        intervals_by_dow = {
+            dow: [(minutes(s.start_time), minutes(s.end_time)) for s in sl]
+            for dow, sl in schedule_by_dow.items()
         }
+
+        # Citas con su posición en minutos locales. Una cita fuera de horario (dada
+        # a mano o antes de cambiar el horario) también tiene que verse: amplía el
+        # rango de la rejilla en vez de quedarse sin pintar.
+        placed = []
+        for appt in appointments:
+            start_local = timezone.localtime(appt.scheduled_at)
+            end_local = timezone.localtime(appt.get_end_datetime())
+            start_min = minutes(start_local)
+            end_min = 24 * 60 if end_local.date() > start_local.date() else minutes(end_local)
+            end_min = max(end_min, start_min + 5)
+            placed.append((appt, start_local.date(), start_min, end_min))
+
+        # Rango global: lo que cubra cualquier horario o cita, a filas de media hora.
+        if has_schedules:
+            lo = min(a for iv in intervals_by_dow.values() for a, _ in iv)
+            hi = max(b for iv in intervals_by_dow.values() for _, b in iv)
+        else:
+            lo, hi = 8 * 60, 18 * 60
+        if placed:
+            lo = min(lo, min(p[2] for p in placed))
+            hi = max(hi, max(p[3] for p in placed))
+        range_start = lo // SLOT_MINUTES * SLOT_MINUTES
+        range_end = -(-hi // SLOT_MINUTES) * SLOT_MINUTES
+        range_end = min(max(range_end, range_start + SLOT_MINUTES), 24 * 60)
+        total_minutes = range_end - range_start
+        slot_starts = list(range(range_start, range_end, SLOT_MINUTES))
+
+        # Etiquetas de la columna de horas: una por fila.
+        time_slots = [
+            {'label': f'{m // 60}:{m % 60:02d}', 'is_hour': m % 60 == 0}
+            for m in slot_starts
+        ]
+
+        cards_by_day = {}
+        for appt, day, start_min, end_min in placed:
+            appt.top_pct = str(round((start_min - range_start) / total_minutes * 100, 4))
+            appt.height_pct = str(round((end_min - start_min) / total_minutes * 100, 4))
+            appt.duration_min = end_min - start_min
+            appt.tall = appt.duration_min >= 45
+            appt.dot_color = appt.service.color if appt.service_id and appt.service.color else FALLBACK_SERVICE_COLOR
+            cards_by_day.setdefault(day, []).append(appt)
+
+        days_with_appointments = set(cards_by_day)
 
         # Construir info de cada columna del calendario
         week_days_info = []
         for day in week_days:
             dow = day.weekday()
-            sched_list = schedule_by_dow.get(dow, [])
+            ivs = intervals_by_dow.get(dow, [])
 
-            if has_schedules and sched_list:
-                working_hours = set()
-                for s in sched_list:
-                    working_hours.update(range(s.start_time.hour, s.end_time.hour))
-                min_start = min(s.start_time for s in sched_list)
-                max_end = max(s.end_time for s in sched_list)
-                # Parón entre turnos (jornada partida): horas que caen DENTRO de la
-                # jornada pero no las cubre ningún tramo. Ej. 14–15 si trabaja
-                # 9–14 y 16–20. Se distingue así de las horas de fuera de jornada.
-                break_hours = set(range(min_start.hour, max_end.hour)) - working_hours
-                schedule_label = f'{min_start.strftime("%H:%M")}–{max_end.strftime("%H:%M")}'
+            if has_schedules and ivs:
+                min_start = min(a for a, _ in ivs)
+                max_end = max(b for _, b in ivs)
+                schedule_label = f'{min_start // 60:02d}:{min_start % 60:02d}–{max_end // 60:02d}:{max_end % 60:02d}'
                 is_working = True
             elif has_schedules:
-                working_hours = set()
-                break_hours = set()
+                min_start = max_end = 0
                 schedule_label = ''
                 is_working = False
             else:
                 # Sin horarios configurados: comportamiento anterior (todo activo)
-                working_hours = set(range(global_start, global_end))
-                break_hours = set()
+                ivs = [(range_start, range_end)]
+                min_start, max_end = range_start, range_end
                 schedule_label = ''
                 is_working = True
+
+            cells = []
+            for m in slot_starts:
+                if any(a < m + SLOT_MINUTES and b > m for a, b in ivs):
+                    state = 'work'
+                elif is_working and min_start <= m < max_end:
+                    # Parón entre turnos (jornada partida): dentro de la jornada pero
+                    # sin ningún tramo. Se distingue así de la hora de fuera de jornada.
+                    state = 'break'
+                else:
+                    state = 'off'
+                cells.append({'time': f'{m // 60:02d}:{m % 60:02d}', 'state': state})
 
             week_days_info.append({
                 'date': day,
@@ -446,8 +499,8 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
                 'has_appointments': day in days_with_appointments,
                 'is_working': is_working,
                 'schedule_label': schedule_label,
-                'working_hours': working_hours,
-                'break_hours': break_hours,
+                'cells': cells,
+                'cards': cards_by_day.get(day, []),
             })
 
         # Los días no laborables no ocupan columna: se avisan aparte. Salvo que
@@ -467,6 +520,7 @@ class AppointmentCalendarView(LoginRequiredMixin, TemplateView):
             'next_week': week_start + timedelta(days=7),
             'week_days_info': week_days_info,
             'time_slots': time_slots,
+            'row_min_px': ROW_MIN_PX,
             'has_schedules': has_schedules,
             # Para el aviso de «no hay horarios»: a un admin se le manda a la
             # lista de profesionales, y a quien solo puede tocar el suyo, a su
@@ -961,6 +1015,7 @@ class AppointmentCreateView(LoginRequiredMixin, FormView):
                 service=data['service'],
                 professional=data.get('professional'),
                 scheduled_at=data['scheduled_at'],
+                end_at=data.get('end_at'),
                 notes=data.get('notes', ''),
                 actor=AppointmentStatusHistory.Actor.STAFF,
                 actor_label=actor_label,
@@ -1059,6 +1114,9 @@ class AppointmentUpdateView(LoginRequiredMixin, FormView):
             updated = update_appointment(
                 self.appointment,
                 scheduled_at=data['scheduled_at'],
+                # Solo si el usuario tocó la hora de fin: si no, el service decide
+                # (duración del servicio nuevo, o la que la cita ya tenía).
+                end_at=data.get('end_at') if 'end_time' in form.changed_data else None,
                 professional=data['professional'],
                 service=data['service'],
                 notes=data['notes'],
@@ -1074,7 +1132,7 @@ class AppointmentUpdateView(LoginRequiredMixin, FormView):
             return self.form_invalid(form)
 
         moved = 'date' in form.changed_data or 'time' in form.changed_data
-        if not ({'service', 'professional', 'date', 'time', 'notes'} & set(form.changed_data)):
+        if not ({'service', 'professional', 'date', 'time', 'end_time', 'notes'} & set(form.changed_data)):
             messages.info(self.request, 'No había cambios que guardar.')
         elif not moved:
             messages.success(self.request, 'Cita actualizada.')

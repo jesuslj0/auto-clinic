@@ -112,6 +112,24 @@
                 {% endif %}
             </div>
 
+            {# ── Color en la agenda ── #}
+            <div x-data="{ color: '{{ form.color.value|default:'#7c3aed' }}' }">
+                <label for="{{ form.color.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.color.label }}</label>
+                <input type="hidden" name="{{ form.color.html_name }}" :value="color">
+                <div class="flex flex-wrap items-center gap-2">
+                    {% for c in form.color_palette %}
+                    <button type="button" @click="color = '{{ c }}'"
+                        class="h-7 w-7 rounded-full ring-offset-2 ring-offset-surface transition hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                        :class="color === '{{ c }}' ? 'ring-2 ring-content' : ''"
+                        style="background-color: {{ c }}" aria-label="Color {{ c }}"></button>
+                    {% endfor %}
+                    <input type="color" id="{{ form.color.id_for_label }}" x-model="color" aria-label="Otro color"
+                        class="h-7 w-9 cursor-pointer rounded-lg border border-line-strong bg-surface p-0.5">
+                </div>
+                <p class="mt-1.5 text-xs text-content-subtle">Así se distingue este servicio en la agenda.</p>
+                {% if form.color.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.color.errors|join:", " }}</p>{% endif %}
+            </div>
+
             {# ── Duración: fija o rango ── #}
             <div
                 x-data="{ tipo: '{{ form.duration_type.value|default:'fixed' }}' }"

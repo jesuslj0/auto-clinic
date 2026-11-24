@@ -109,7 +109,7 @@ class TestDiasNoLaborables:
         assert hidden == [monday + datetime.timedelta(days=5), monday + datetime.timedelta(days=6)]
         html = response.content.decode()
         assert 'Días no laborables ocultos' in html
-        assert 'repeat(5, minmax(140px, 1fr))' in html
+        assert 'repeat(5, minmax(120px, 1fr))' in html
 
     def test_un_dia_no_laborable_con_cita_sigue_visible(
         self, client, admin_user, lunes_a_viernes, clinic_a, patient_a, service_a,

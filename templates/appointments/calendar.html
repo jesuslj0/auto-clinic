@@ -90,7 +90,7 @@ sería marcado inválido.
     };
 </script>
 <section
-    class="space-y-6"
+    class="space-y-3"
     x-data="agendaSemanal()"
     @keydown.escape.window="cerrarPanel()"
 >
@@ -100,7 +100,45 @@ sería marcado inválido.
     `sm`, con `aria-label` para quien no los ve). Antes eran dos filas apiladas con
     botones a todo ancho que se comían media pantalla antes de ver la rejilla.
     {% endcomment %}
-    <div class="flex items-center justify-between gap-3 rounded-2xl bg-surface px-3 py-2.5 shadow-soft ring-1 ring-line sm:rounded-3xl sm:p-5">
+    {% if not has_schedules %}
+    <div class="flex items-center gap-3 rounded-2xl bg-warning-soft px-5 py-4 ring-1 ring-warning-line">
+        <svg class="h-5 w-5 shrink-0 text-warning" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+        </svg>
+        <p class="text-sm text-warning">
+            No hay horarios configurados. El calendario muestra el rango por defecto (08:00–18:00).
+            {% if can_manage %}
+            <a href="{% url 'professionals:list' %}" class="font-semibold underline">Configura los horarios de tus profesionales.</a>
+            {% else %}
+            <a href="{% url 'core:account-schedule' %}" class="font-semibold underline">Configura tu horario.</a>
+            {% endif %}
+        </p>
+    </div>
+    {% endif %}
+
+    {% comment %}
+    **Toda la agenda en una pantalla.** La tarjeta (barra de semana + rejilla) mide
+    el alto que queda bajo la barra de la app; el scroll, si hace falta, vive dentro
+    (`overflow-auto`), así la fila de días y la columna de horas —`sticky` respecto
+    a ese contenedor— se quedan fijas en los dos sentidos.
+
+    La rejilla es de **media hora por fila**. Cada fila mide al menos
+    `row_min_px` ({{ row_min_px }} px): si las horas del día caben con ese mínimo,
+    las filas se reparten el alto de pantalla y se ve el día entero sin scroll; si
+    no caben, se ven las máximas posibles y el resto se alcanza desplazando.
+
+    Cada columna de día es un contenedor relativo con las casillas (botones de crear
+    cita) apiladas, y encima una capa `pointer-events-none` con las citas colocadas
+    por porcentaje del rango del día; solo las tarjetas reciben el clic, y las
+    casillas libres de debajo siguen siendo pulsables.
+
+    El **color de la tarjeta es el del servicio**; el estado va solo en el punto.
+
+    `--app-header-h` lo escribe base.html con el alto real de lo pegajoso de la barra.
+    {% endcomment %}
+    <section class="sticky z-20 flex flex-col overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line"
+             style="top: calc(var(--app-header-h, 4.5rem) + 0.5rem); height: calc(100dvh - var(--app-header-h, 4.5rem) - 1rem);">
+    <div class="flex flex-shrink-0 items-center justify-between gap-3 border-b border-line px-3 py-2 sm:px-4 sm:py-2.5">
         <div class="flex min-w-0 flex-col sm:flex-row sm:items-center sm:gap-3">
             <h3 class="flex items-center gap-2.5 text-sm font-semibold text-content sm:text-lg">
                 <span class="hidden h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-fg ring-1 ring-brand-line sm:inline-flex">
@@ -134,172 +172,127 @@ sería marcado inválido.
         </div>
     </div>
 
-    {% if not has_schedules %}
-    <div class="flex items-center gap-3 rounded-2xl bg-warning-soft px-5 py-4 ring-1 ring-warning-line">
-        <svg class="h-5 w-5 shrink-0 text-warning" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
-        </svg>
-        <p class="text-sm text-warning">
-            No hay horarios configurados. El calendario muestra el rango por defecto (08:00–18:00).
-            {% if can_manage %}
-            <a href="{% url 'professionals:list' %}" class="font-semibold underline">Configura los horarios de tus profesionales.</a>
-            {% else %}
-            <a href="{% url 'core:account-schedule' %}" class="font-semibold underline">Configura tu horario.</a>
-            {% endif %}
-        </p>
-    </div>
-    {% endif %}
 
-    {% comment %}
-    La rejilla se ancla justo DEBAJO de la barra superior de la app y ocupa el
-    alto que queda de pantalla; el scroll vive dentro (`overflow-auto`), así la
-    fila de días y la columna de horas —`sticky` respecto a ese contenedor— se
-    quedan fijas en los dos sentidos. Hace falta que el desplazamiento sea del
-    contenedor y no de la página: `position: sticky` se pega al ancestro que
-    desplaza, y este ya desplazaba en horizontal.
-
-    `--app-header-h` lo escribe base.html con el alto real de lo pegajoso de la barra
-    (en móvil solo la barra de app; en escritorio también la cabecera de sección); el
-    valor por defecto cubre la carga antes de que corra. Todo lo de la rejilla va por
-    DEBAJO del z-30 de la barra, para que nunca la tape.
-    {% endcomment %}
-    <section class="sticky z-20 flex flex-col overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line"
-             style="top: calc(var(--app-header-h, 4.5rem) + 0.5rem); max-height: calc(100dvh - var(--app-header-h, 4.5rem) - 1rem);">
         <div class="min-h-0 flex-1 overflow-auto overscroll-contain">
-            {# Una columna por día visible: los no laborables se avisan arriba y no ocupan sitio. #}
-            <div class="grid" style="min-width: calc(80px + {{ visible_days_info|length }} * 140px); grid-template-columns: 80px repeat({{ visible_days_info|length }}, minmax(140px, 1fr));">
+            {# Una columna por día visible: los no laborables se avisan abajo y no ocupan sitio. #}
+            <div class="grid" style="min-height: 100%; min-width: calc(56px + {{ visible_days_info|length }} * 120px); grid-template-columns: 56px repeat({{ visible_days_info|length }}, minmax(120px, 1fr)); grid-template-rows: auto minmax(0, 1fr);">
 
-                {# Cabecera: columna de hora #}
-                <div class="sticky left-0 top-0 z-[35] border-b border-r border-line bg-muted p-3 text-xs sm:p-4 font-semibold uppercase tracking-wide text-content-subtle">Hora</div>
+                {# Cabecera: esquina de la columna de horas #}
+                <div class="sticky left-0 top-0 z-[35] border-b border-r border-line bg-muted"></div>
 
                 {# Cabecera: columnas de días #}
                 {% for day_info in visible_days_info %}
-                    <div class="sticky top-0 z-30 border-b border-r border-line p-3 sm:p-4
+                    <div class="sticky top-0 z-30 border-b border-r border-line px-2 py-1.5 sm:px-3
                         {% if day_info.is_working %}bg-muted{% else %}bg-muted-strong{% endif %}">
-                        <p class="text-xs font-semibold uppercase tracking-wide
-                            {% if day_info.is_working %}text-content-subtle{% else %}text-content-faint{% endif %}">
-                            {{ day_info.date|date:"D" }}
-                        </p>
-                        <p class="mt-1 text-sm font-semibold
-                            {% if day_info.is_working %}text-content{% else %}text-content-faint{% endif %}">
-                            {{ day_info.date|date:"j M" }}
+                        <p class="flex flex-wrap items-baseline gap-x-1.5 leading-tight">
+                            <span class="text-xs font-semibold uppercase tracking-wide {% if day_info.is_working %}text-content-subtle{% else %}text-content-faint{% endif %}">{{ day_info.date|date:"D" }}</span>
+                            <span class="text-sm font-semibold {% if day_info.is_working %}text-content{% else %}text-content-faint{% endif %}">{{ day_info.date|date:"j M" }}</span>
                         </p>
                         {% if day_info.schedule_label %}
-                            <p class="mt-1 text-[10px] font-medium text-brand-fg">{{ day_info.schedule_label }}</p>
+                            <p class="text-[10px] font-medium leading-tight text-brand-fg">{{ day_info.schedule_label }}</p>
                         {% elif has_schedules %}
-                            <p class="mt-1 text-[10px] font-medium text-content-faint">No laboral</p>
+                            <p class="text-[10px] font-medium leading-tight text-content-faint">No laboral</p>
                         {% endif %}
                     </div>
                 {% endfor %}
 
-                {# Filas de horas #}
-                {% for slot in time_slots %}
-                    <div class="sticky left-0 z-[25] border-r border-line bg-surface px-3 py-4 text-xs font-medium text-content-muted">
-                        {{ slot|time:"H:i" }}
-                    </div>
+                {# Columna de horas: una etiqueta por media hora #}
+                <div class="sticky left-0 z-[25] flex flex-col border-r border-line bg-surface">
+                    {% for slot in time_slots %}
+                        <div class="flex flex-1 items-start justify-end border-t border-line px-1.5 pt-0.5 text-[10px] leading-none {% if slot.is_hour %}font-semibold text-content-muted{% else %}text-content-faint border-dashed{% endif %}" style="flex-basis: 0; min-height: {{ row_min_px }}px;">{{ slot.label }}</div>
+                    {% endfor %}
+                </div>
 
-                    {% for day_info in visible_days_info %}
-                        {% if slot.hour in day_info.working_hours %}
-                            {% comment %}La clave de la casilla, en dos piezas: es lo
-                            que compara `esSlotActivo` para saber cuál está
-                            marcada.{% endcomment %}
-                            {% with slot_fecha=day_info.date|date:'Y-m-d' slot_hora=slot|time:'H:i' %}
-                            <div class="group relative h-28 border-r border-t border-line bg-surface align-top"
-                                 :class="esSlotActivo('{{ slot_fecha }}T{{ slot_hora }}') ? 'ring-2 ring-inset ring-brand-500 bg-brand-soft/40' : ''">
-                                {% comment %}Casilla libre: abre el formulario en el
-                                panel con esta fecha y esta hora en punto. `week`
-                                viaja para que al guardar se vuelva a la semana que
-                                se está mirando, y `professional` solo en la vista
-                                personal.{% endcomment %}
+                {# Columnas de días #}
+                {% for day_info in visible_days_info %}
+                    {% with slot_fecha=day_info.date|date:'Y-m-d' %}
+                    <div class="relative flex flex-col border-r border-line">
+                        {% for cell in day_info.cells %}
+                            {% if cell.state == 'work' %}
+                                {% with slot_clave=slot_fecha|add:'T'|add:cell.time %}
+                                <div class="group relative flex-1 border-t border-line bg-surface {% if cell.time|slice:'3:' != '00' %}border-dashed{% endif %}"
+                                     style="flex-basis: 0; min-height: {{ row_min_px }}px;"
+                                     :class="esSlotActivo('{{ slot_clave }}') ? 'ring-2 ring-inset ring-brand-500 bg-brand-soft/40' : ''">
+                                    {% comment %}Casilla libre: abre el formulario en el panel con esta
+                                    fecha y esta hora. `week` viaja para volver a la semana que se
+                                    mira, y `professional` solo en la vista personal.{% endcomment %}
+                                    <button
+                                        type="button"
+                                        class="absolute inset-0 z-0 flex items-center justify-center text-content-faint transition hover:bg-brand-soft/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
+                                        :class="esSlotActivo('{{ slot_clave }}') ? 'opacity-100' : 'opacity-0 focus:opacity-100 group-hover:opacity-100'"
+                                        hx-get="{% url 'appointments:create' %}?{% if professional %}professional={{ professional.pk }}&amp;{% endif %}date={{ slot_fecha }}&amp;time={{ cell.time }}&amp;week={{ week_start|date:'Y-m-d' }}"
+                                        hx-target="#calendar-panel-content"
+                                        hx-swap="innerHTML"
+                                        hx-indicator="#panel-spinner"
+                                        @click="abrirFormulario('{{ slot_clave }}')"
+                                        @htmx:after-request="panelLoading = false"
+                                        aria-label="Nueva cita el {{ day_info.date|date:'j \d\e F' }} a las {{ cell.time }}"
+                                    >
+                                        <span
+                                            aria-hidden="true"
+                                            class="inline-flex items-center gap-1 rounded-full px-1.5 text-[10px] font-semibold leading-4 ring-1"
+                                            :class="esSlotActivo('{{ slot_clave }}') ? 'bg-brand-600 text-white ring-brand-600 shadow-sm' : 'bg-surface/90 ring-brand-line'"
+                                        >
+                                            <template x-if="esSlotActivo('{{ slot_clave }}') && panelLoading">
+                                                <svg class="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                    <circle class="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                    <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"></path>
+                                                </svg>
+                                            </template>
+                                            <template x-if="!(esSlotActivo('{{ slot_clave }}') && panelLoading)">
+                                                <svg class="h-3 w-3" :class="esSlotActivo('{{ slot_clave }}') ? 'animate-pulse' : ''"
+                                                     fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                                </svg>
+                                            </template>
+                                            <span x-text="esSlotActivo('{{ slot_clave }}') ? (panelLoading ? 'Abriendo' : 'Creando') : '{{ cell.time }}'">{{ cell.time }}</span>
+                                        </span>
+                                    </button>
+                                </div>
+                                {% endwith %}
+                            {% elif cell.state == 'break' %}
+                                {# Parón entre turnos (jornada partida) #}
+                                <div class="flex flex-1 items-center justify-center border-t border-line bg-muted-strong/60" style="flex-basis: 0; min-height: {{ row_min_px }}px;">
+                                    {% if cell.time|slice:'3:' == '00' %}<span class="text-[10px] font-medium text-content-faint">Descanso</span>{% endif %}
+                                </div>
+                            {% else %}
+                                <div class="flex-1 border-t border-line bg-muted/70" style="flex-basis: 0; min-height: {{ row_min_px }}px;"></div>
+                            {% endif %}
+                        {% endfor %}
+
+                        {# Citas del día, por encima de las casillas #}
+                        <div class="pointer-events-none absolute inset-0 z-10">
+                            {% for appointment in day_info.cards %}
                                 <button
                                     type="button"
-                                    class="absolute inset-0 z-0 flex items-start justify-center pt-2 text-content-faint transition hover:bg-brand-soft/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
-                                    :class="esSlotActivo('{{ slot_fecha }}T{{ slot_hora }}') ? 'opacity-100' : 'opacity-0 focus:opacity-100 group-hover:opacity-100'"
-                                    hx-get="{% url 'appointments:create' %}?{% if professional %}professional={{ professional.pk }}&amp;{% endif %}date={{ day_info.date|date:'Y-m-d' }}&amp;time={{ slot|time:'H:i' }}&amp;week={{ week_start|date:'Y-m-d' }}"
+                                    style="top: {{ appointment.top_pct }}%; height: {{ appointment.height_pct }}%; min-height: 16px; left: calc({{ appointment.col_left|default:0 }}% + 2px); width: calc({{ appointment.col_width|default:100 }}% - 4px); border-left-color: {{ appointment.dot_color }}; background-color: {{ appointment.dot_color }}26;"
+                                    class="pointer-events-auto absolute flex flex-col justify-center overflow-hidden rounded-md border-l-4 px-1.5 text-left shadow-sm ring-1 ring-line transition hover:z-20 hover:shadow-md active:scale-[0.99]"
+                                    title="{{ appointment.patient|default:appointment.patient_name|default:'Sin paciente' }} · {{ appointment.service|default:appointment.service_name }} · {{ appointment.scheduled_at|date:'H:i' }}–{{ appointment.get_end_datetime|date:'H:i' }} · {{ appointment.get_status_display }}"
+                                    hx-get="{% url 'core:appointment-quick-detail' appointment.id %}"
                                     hx-target="#calendar-panel-content"
                                     hx-swap="innerHTML"
                                     hx-indicator="#panel-spinner"
-                                    @click="abrirFormulario('{{ slot_fecha }}T{{ slot_hora }}')"
+                                    @click="abrirDetalle()"
                                     @htmx:after-request="panelLoading = false"
-                                    aria-label="Nueva cita el {{ day_info.date|date:'j \d\e F' }} a las {{ slot|time:'H:i' }}"
+                                    aria-label="Ver cita de {{ appointment.patient|default:appointment.patient_name }} a las {{ appointment.scheduled_at|time:'H:i' }}, {{ appointment.get_status_display }}"
                                 >
-                                    {% comment %}Tres estados en el mismo sitio: la
-                                    invitación al pasar por encima, el icono de carga
-                                    mientras llega el formulario y la marca de «se
-                                    está creando aquí» mientras el panel siga
-                                    abierto.{% endcomment %}
-                                    <span
-                                        aria-hidden="true"
-                                        class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1"
-                                        :class="esSlotActivo('{{ slot_fecha }}T{{ slot_hora }}') ? 'bg-brand-600 text-white ring-brand-600 shadow-sm' : 'bg-surface/90 ring-brand-line'"
-                                    >
-                                        <template x-if="esSlotActivo('{{ slot_fecha }}T{{ slot_hora }}') && panelLoading">
-                                            <svg class="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                                                <circle class="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                                <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"></path>
-                                            </svg>
-                                        </template>
-                                        <template x-if="!(esSlotActivo('{{ slot_fecha }}T{{ slot_hora }}') && panelLoading)">
-                                            <svg class="h-3 w-3" :class="esSlotActivo('{{ slot_fecha }}T{{ slot_hora }}') ? 'animate-pulse' : ''"
-                                                 fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                                            </svg>
-                                        </template>
-                                        <span x-text="esSlotActivo('{{ slot_fecha }}T{{ slot_hora }}') ? (panelLoading ? 'Abriendo' : 'Creando') : 'Cita'">Cita</span>
+                                    {% comment %}Adaptativa: una línea (punto de estado + nombre + hora) y,
+                                    si la cita dura 45 min o más, el servicio y el tramo en una segunda.
+                                    El detalle completo, en el `title` y al pulsar. El estado es SOLO el
+                                    punto; el color de la tarjeta es el del servicio.{% endcomment %}
+                                    <span class="flex min-w-0 items-center gap-1 leading-4">
+                                        <span class="h-2 w-2 flex-shrink-0 rounded-full {{ appointment.status|status_dot }}"></span>
+                                        <span class="truncate text-[11px] font-semibold text-content">{{ appointment.patient|default:appointment.patient_name|default:"Sin paciente" }}</span>
+                                        {% if not appointment.tall %}<span class="flex-shrink-0 text-[10px] text-content-subtle">{{ appointment.scheduled_at|date:"H:i" }}</span>{% endif %}
                                     </span>
-                                </button>
-                                {% for appointment in appointments %}
-                                    {% if appointment.scheduled_at|date:'Y-m-d' == day_info.date|date:'Y-m-d' and appointment.scheduled_at|time:'H' == slot|time:'H' %}
-                                        <button
-                                            type="button"
-                                            style="top: calc({% widthratio appointment.scheduled_at|local_minute 60 100 %}% + 2px); height: calc({% widthratio appointment|duration_minutes 60 100 %}% - 4px); left: calc({{ appointment.col_left|default:0 }}% + 3px); width: calc({{ appointment.col_width|default:100 }}% - 6px);"
-                                            class="absolute z-10 flex flex-col overflow-hidden rounded-xl border px-2 py-1.5 text-left shadow-sm transition
-                                                    hover:z-20 hover:shadow-md active:scale-[0.99]
-                                                    {{ appointment.status|status_cell }}"
-                                            hx-get="{% url 'core:appointment-quick-detail' appointment.id %}"
-                                            hx-target="#calendar-panel-content"
-                                            hx-swap="innerHTML"
-                                            hx-indicator="#panel-spinner"
-                                            @click="abrirDetalle()"
-                                            @htmx:after-request="panelLoading = false"
-                                            aria-label="Ver cita de {{ appointment.patient|default:appointment.patient_name }} a las {{ appointment.scheduled_at|time:'H:i' }}"
-                                        >
-                                            {% comment %}Quién es, antes que qué se le hace: es lo que se busca
-                                            en la agenda. El avatar solo cuando la cita tiene ancho completo; si
-                                            comparte hueco con otras, el nombre manda y la foto se omite.{% endcomment %}
-                                            <div class="flex items-center gap-1.5">
-                                                {% if appointment.patient and appointment.col_wide %}
-                                                    {% include 'patients/_avatar.html' with patient=appointment.patient classes='h-5 w-5 text-[8px]' %}
-                                                {% else %}
-                                                    <span class="h-1.5 w-1.5 flex-shrink-0 rounded-full {{ appointment.status|status_dot }}"></span>
-                                                {% endif %}
-                                                <span class="truncate text-[11px] font-semibold text-content">{{ appointment.patient|default:appointment.patient_name|default:"Sin paciente" }}</span>
-                                            </div>
-                                            <span class="mt-0.5 flex items-center gap-1 truncate text-[10px] text-content-subtle">
-                                                {% if appointment.col_wide and appointment.patient %}<span class="h-1.5 w-1.5 flex-shrink-0 rounded-full {{ appointment.status|status_dot }}"></span>{% endif %}
-                                                <span class="truncate">{{ appointment.service|default:appointment.service_name }} · {{ appointment.scheduled_at|date:"H:i" }}{% if appointment.end_at %}–{{ appointment.end_at|date:"H:i" }}{% endif %}</span>
-                                            </span>
-                                        </button>
+                                    {% if appointment.tall %}
+                                    <span class="truncate text-[10px] leading-4 text-content-subtle">{{ appointment.service|default:appointment.service_name }} · {{ appointment.scheduled_at|date:"H:i" }}–{{ appointment.get_end_datetime|date:"H:i" }}</span>
                                     {% endif %}
-                                {% endfor %}
-                            </div>
-                            {% endwith %}
-                        {% elif slot.hour in day_info.break_hours %}
-                            {# Parón entre turnos (jornada partida) #}
-                            <div class="flex h-28 items-center justify-center border-r border-t border-line bg-muted-strong/60 align-top">
-                                <span class="inline-flex items-center gap-1 rounded-full bg-surface/80 px-2 py-0.5 text-[10px] font-medium text-content-faint ring-1 ring-line">
-                                    <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
-                                    </svg>
-                                    Descanso
-                                </span>
-                            </div>
-                        {% else %}
-                            <div class="h-28 border-r border-t border-line bg-muted/70 align-top">
-                            </div>
-                        {% endif %}
-                    {% endfor %}
-
+                                </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endwith %}
                 {% empty %}
                     <div style="grid-column: 1 / -1" class="px-6 py-10 text-center text-sm text-content-subtle">
                         No hay franjas horarias configuradas para esta semana.
@@ -308,7 +301,7 @@ sería marcado inválido.
 
             </div>
         </div>
-        {# Pie de la tarjeta, siempre visible: la rejilla ocupa el alto de pantalla y un aviso debajo quedaría fuera de vista. #}
+        {# Pie de la tarjeta, siempre visible #}
         {% if hidden_days_info %}
         <p class="flex flex-shrink-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 border-t border-line bg-muted px-4 py-2 text-xs text-content-subtle">
             <svg aria-hidden="true" class="h-4 w-4 flex-shrink-0 text-content-faint" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">

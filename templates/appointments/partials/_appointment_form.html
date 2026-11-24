@@ -149,7 +149,7 @@ Lo que sí sale de aquí son **los datos**: las dos listas precargadas, en sendo
 
     {# --- Fecha y hora --------------------------------------------------- #}
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
+        <div class="sm:col-span-2">
             <label for="{{ form.date.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.date.label }}</label>
             <input type="date" name="{{ form.date.html_name }}" id="{{ form.date.id_for_label }}" value="{{ form.date.value|default:'' }}"
                 class="block w-full rounded-xl border {% if form.date.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
@@ -161,6 +161,14 @@ Lo que sí sale de aquí son **los datos**: las dos listas precargadas, en sendo
                 class="block w-full rounded-xl border {% if form.time.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
             {% if form.time.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.time.errors|join:", " }}</p>{% endif %}
         </div>
+
+        <div>
+            <label for="{{ form.end_time.id_for_label }}" class="mb-1.5 block text-sm font-medium text-content-muted">{{ form.end_time.label }}</label>
+            <input type="time" name="{{ form.end_time.html_name }}" id="{{ form.end_time.id_for_label }}" value="{{ form.end_time.value|default:'' }}"
+                class="block w-full rounded-xl border {% if form.end_time.errors %}border-danger focus:ring-danger{% else %}border-line-strong focus:ring-brand-500{% endif %} bg-surface px-4 py-2.5 text-sm text-content shadow-sm focus:border-transparent focus:outline-none focus:ring-2 transition">
+            {% if form.end_time.errors %}<p class="mt-1.5 text-xs text-danger">{{ form.end_time.errors|join:", " }}</p>{% endif %}
+        </div>
+        <p class="-mt-2 text-xs text-content-subtle sm:col-span-2">Si dejas la hora de fin vacía, la cita dura lo que el servicio. Puedes poner otra si esta cita va a durar más o menos.</p>
     </div>
 
     {# --- Notas ---------------------------------------------------------- #}

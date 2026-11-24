@@ -999,6 +999,7 @@ def update_appointment(
     *,
     notify_patient=True,
     scheduled_at=_UNSET,
+    end_at=None,
     professional=_UNSET,
     service=_UNSET,
     notes=_UNSET,
@@ -1016,6 +1017,10 @@ def update_appointment(
       conserva (una `pending` sigue `pending`).
     - **No cambia de paciente.** Cuelga historia clínica, consentimientos y
       facturación; es otra operación.
+    - **La hora de fin es de la cita, no del servicio.** Con `end_at` explícito manda
+      ese. Sin él: si cambia el servicio, el fin se recalcula con su duración; si solo
+      se mueve la hora, la cita conserva su duración (una cita alargada a mano no se
+      encoge sola); si no cambia ni una cosa ni otra, el fin no se toca.
     - No relaja nada: la misma elegibilidad que el alta (horario, ausencias,
       solapamiento, servicio que presta), con `require_online_booking=False` y sin
       antelación mínima, como el resto de lo que hace el staff.
@@ -1042,6 +1047,9 @@ def update_appointment(
         ):
             if valor is not _UNSET and valor != getattr(appointment, campo):
                 cambios[campo] = valor
+        fin_anterior = appointment.get_end_datetime()
+        if end_at is not None and end_at != fin_anterior:
+            cambios['end_at'] = end_at
         mueve_la_hora = 'scheduled_at' in cambios
         hora_anterior = appointment.scheduled_at
         notes_cambian = notes is not _UNSET and notes != appointment.notes
@@ -1058,6 +1066,9 @@ def update_appointment(
             # Con `scheduled_at` en los cambios, el validador recalcula `end_at`: también
             # hace falta si solo cambia el servicio, porque la duración es otra.
             cambios.setdefault('scheduled_at', appointment.scheduled_at)
+            if 'end_at' not in cambios and 'service' not in cambios:
+                # Ni fin explícito ni servicio nuevo: se conserva la duración que tenía.
+                cambios['end_at'] = cambios['scheduled_at'] + (fin_anterior - appointment.scheduled_at)
             cambios.update(
                 validate_appointment_update(appointment, cambios, require_online_booking=False)
             )

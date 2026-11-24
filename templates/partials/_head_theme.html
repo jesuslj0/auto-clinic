@@ -436,6 +436,9 @@ opacidades sobre ellos (bg-surface/90, ring-line/70…).
        vertical, para que se lea como dependiente del grupo y no como cuatro
        entradas sueltas más. */
     .sidebar-subnav { @apply ml-3 border-l border-line pl-2; }
+    /* El menú sigue desplazándose con rueda y táctil, pero sin barra visible. */
+    .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
 
     /* Cabecera de un grupo del sidebar, en sus tres estados. Cuál se aplica lo
        decide Alpine (`partials/_sidebar_nav.html`), porque depende de si el
@@ -507,6 +510,7 @@ opacidades sobre ellos (bg-surface/90, ring-line/70…).
 
         .sidebar-collapsed .sidebar-chevron { @apply hidden; }
         .sidebar-collapsed .sidebar-subnav { @apply ml-0 border-l-0 pl-0; }
+        .sidebar-collapsed .sidebar-section-rule { @apply block; }
     }
 
     /* Formularios en oscuro. El plugin @tailwindcss/forms fuerza fondo blanco y
