@@ -174,6 +174,18 @@ def record_message(
         # F() en vez de sumar en Python: el webhook puede entregar dos mensajes
         # a la vez y la suma tiene que resolverse en la base de datos.
         session.unread_count = F('unread_count') + 1
+        if not session.can_send_free_text:
+            # La ventana de 24 h estaba cerrada (o nunca se abrió): este mensaje abre
+            # una conversación nueva, ya sea porque el paciente escribe de cero o
+            # porque contesta a una plantilla. Se olvida lo que dijo el agente la
+            # vez anterior; n8n da por «primer mensaje» (aviso de IA y privacidad,
+            # bienvenida) el hilo sin `last_response`. Se mira ANTES de actualizar
+            # `last_interaction`, así solo el primero de una ráfaga abre sesión.
+            data = dict(session.session_data or {})
+            data.pop('last_response', None)
+            data.pop('last_message', None)
+            session.session_data = data
+            fields.append('session_data')
         session.last_interaction = now
         fields += ['unread_count', 'last_interaction']
     elif sender == ChatMessage.Sender.STAFF:

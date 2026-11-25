@@ -379,7 +379,7 @@ adds an «AVISO OBLIGATORIO DE IA Y PRIVACIDAD»: in the first message of a conv
 (`ES PRIMER MENSAJE=true`, new or known patient) the agent says it is an AI assistant of
 the clinic, that messages are stored and voice notes transcribed — **with no link**. For a
 new contact with a `welcome_message`, that first message **opens with the welcome copied
-verbatim**, then the AI notice, then the answer. `Clinic.privacy_policy_url` is given only
+verbatim**, then the AI notice, then the answer. **«Primer mensaje» = primero de cada conversación, no del hilo**: `record_message` (`agent/services.py`), al llegar un mensaje del paciente con la ventana de 24 h cerrada (escribe de cero o contesta a una plantilla), borra `last_response`/`last_message` de `session_data`, y n8n (`is_first_message = !last_response`) vuelve a dar bienvenida + aviso. No se crea otra `ConversationSession` (sigue una por clínica+teléfono). `Clinic.privacy_policy_url` is given only
 if the patient asks about privacy/their data (empty = it is told not to invent one). The n8n
 prompt (`Agente IA Clinica`) carries the matching exceptions to its «don't mention the
 transcription / that you record the conversation» rules and asks for the notice in the
