@@ -270,6 +270,7 @@ emite en toda página del panel, aunque no contenga ningún formulario.
             el script del final). Va en `z-20`, por DEBAJO de la barra de app (`z-30`): si
             se tocan por un redondeo de la medición, la barra de app manda. En móvil queda
             estática, así que su `z`/`top` no aplican.{% endcomment %}
+            {% block page_header %}
             <header class="z-20 border-b border-line bg-surface/90 backdrop-blur lg:sticky lg:top-[var(--app-topbar-h,3.5rem)]" data-app-pageheader>
                 <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2 sm:px-6 sm:py-4 lg:px-8">
                     <div class="flex min-w-0 items-center gap-2 sm:gap-3">
@@ -288,6 +289,7 @@ emite en toda página del panel, aunque no contenga ningún formulario.
                     </div>
                 </div>
             </header>
+            {% endblock %}
 
             <main class="flex-1">
                 <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">

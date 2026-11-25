@@ -3,7 +3,10 @@
 {% load static %}
 
 {% block title %}Calendario · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
-{% block page_heading %}Calendario semanal{% endblock %}
+{% comment %}Sin cabecera de sección: la propia tarjeta de la agenda ya lleva icono, título y
+semana, y la cabecera pegajosa de base.html se pisaba con ella. base.html mide
+`--app-header-h` sin cabecera (solo la barra de app) cuando falta.{% endcomment %}
+{% block page_header %}{% endblock %}
 
 {% block content %}
 {% comment %}
@@ -165,7 +168,7 @@ sería marcado inválido.
                 <svg aria-hidden="true" class="h-4 w-4 sm:hidden" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
                 <span class="hidden sm:inline">Anterior</span>
             </a>
-            <a href="?week={{ next_week|date:'Y-m-d' }}" class="btn-primary max-sm:px-2.5 max-sm:py-2" aria-label="Semana siguiente">
+            <a href="?week={{ next_week|date:'Y-m-d' }}" class="btn-secondary max-sm:px-2.5 max-sm:py-2" aria-label="Semana siguiente">
                 <svg aria-hidden="true" class="h-4 w-4 sm:hidden" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
                 <span class="hidden sm:inline">Siguiente</span>
             </a>
@@ -185,12 +188,10 @@ sería marcado inválido.
                     <div class="sticky top-0 z-30 border-b border-r border-line px-2 py-1.5 sm:px-3
                         {% if day_info.is_working %}bg-muted{% else %}bg-muted-strong{% endif %}">
                         <p class="flex flex-wrap items-baseline gap-x-1.5 leading-tight">
-                            <span class="text-xs font-semibold uppercase tracking-wide {% if day_info.is_working %}text-content-subtle{% else %}text-content-faint{% endif %}">{{ day_info.date|date:"D" }}</span>
-                            <span class="text-sm font-semibold {% if day_info.is_working %}text-content{% else %}text-content-faint{% endif %}">{{ day_info.date|date:"j M" }}</span>
+                            <span class="text-sm font-bold {% if day_info.is_working %}text-content{% else %}text-content-faint{% endif %}">{{ day_info.date|date:"l"|capfirst }}</span>
+                            <span class="text-xs font-medium {% if day_info.is_working %}text-content-subtle{% else %}text-content-faint{% endif %}">{{ day_info.date|date:"j" }}</span>
                         </p>
-                        {% if day_info.schedule_label %}
-                            <p class="text-[10px] font-medium leading-tight text-brand-fg">{{ day_info.schedule_label }}</p>
-                        {% elif has_schedules %}
+                        {% if not day_info.schedule_label and has_schedules %}
                             <p class="text-[10px] font-medium leading-tight text-content-faint">No laboral</p>
                         {% endif %}
                     </div>
