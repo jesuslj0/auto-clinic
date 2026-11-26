@@ -1,0 +1,300 @@
+{% comment %}
+  Copia legible de la ficha de un paciente (se convierte en PDF con WeasyPrint).
+  AUTOCONTENIDA a propósito: no extiende `base.html`, no carga fuentes ni scripts
+  de terceros y las fotos van incrustadas. No cambiar eso: renderizarla no puede
+  salir a la red. Ver `exports/pdf.py`.
+{% endcomment %}<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Ficha de {{ patient.first_name }} {{ patient.last_name }}</title>
+<style>
+  @page {
+    size: A4;
+    margin: 20mm 15mm 18mm;
+    @top-left { content: element(running-clinic); font-size: 8pt; color: #6b7280; }
+    @top-right { content: element(running-patient); font-size: 8pt; color: #6b7280; }
+    @bottom-left { content: "Contiene datos de salud. Confidencial."; font-size: 8pt; color: #6b7280; }
+    @bottom-right { content: "Página " counter(page) " de " counter(pages); font-size: 8pt; color: #6b7280; }
+  }
+  * { box-sizing: border-box; }
+  body { font-family: "DejaVu Sans", "Liberation Sans", Arial, sans-serif; font-size: 9.5pt; line-height: 1.45; color: #111827; }
+  .running-clinic { position: running(running-clinic); }
+  .running-patient { position: running(running-patient); }
+  h1 { font-size: 20pt; margin: 0 0 2mm; }
+  h2 { font-size: 13pt; margin: 9mm 0 3mm; padding-bottom: 1.5mm; border-bottom: 1.5px solid #4f46e5; color: #312e81; break-after: avoid; }
+  h3 { font-size: 10.5pt; margin: 5mm 0 2mm; break-after: avoid; }
+  h4 { font-size: 9.5pt; margin: 3mm 0 1mm; color: #374151; break-after: avoid; }
+  p { margin: 0 0 2mm; }
+  .muted { color: #6b7280; }
+  .small { font-size: 8.5pt; }
+  .cover { margin-bottom: 6mm; }
+  .grid { display: table; width: 100%; border-collapse: collapse; }
+  .grid .row { display: table-row; }
+  .grid .k, .grid .v { display: table-cell; padding: 1mm 2mm 1mm 0; vertical-align: top; }
+  .grid .k { width: 38mm; color: #6b7280; }
+  table { width: 100%; border-collapse: collapse; margin: 1mm 0 3mm; }
+  th, td { text-align: left; padding: 1.2mm 2mm; border-bottom: 1px solid #e5e7eb; vertical-align: top; font-size: 8.8pt; }
+  th { background: #f3f4f6; font-weight: 600; }
+  td.num, th.num { text-align: right; }
+  .block { border: 1px solid #e5e7eb; border-radius: 2mm; padding: 3mm 4mm; margin: 2mm 0 4mm; break-inside: avoid-page; }
+  .block.flow { break-inside: auto; }
+  .tag { display: inline-block; font-size: 7.5pt; padding: 0.3mm 1.6mm; border-radius: 1mm; background: #e0e7ff; color: #3730a3; margin-left: 1mm; }
+  .tag.warn { background: #fef3c7; color: #92400e; }
+  .tag.bad { background: #fee2e2; color: #991b1b; }
+  .tag.ok { background: #dcfce7; color: #166534; }
+  .section-title { font-weight: 600; margin-top: 2mm; }
+  .section-letter { font-size: 7.5pt; color: #6b7280; margin-left: 1mm; }
+  .field-label { font-size: 8.5pt; color: #6b7280; }
+  .photo { max-width: 78mm; max-height: 70mm; border: 1px solid #e5e7eb; border-radius: 1mm; margin: 1mm 2mm 1mm 0; }
+  .signature { max-width: 55mm; max-height: 22mm; border: 1px solid #e5e7eb; background: #fff; }
+  .deleted { opacity: 0.75; }
+  .notice { font-size: 8.5pt; background: #f9fafb; border: 1px solid #e5e7eb; padding: 2mm 3mm; border-radius: 1.5mm; }
+</style>
+</head>
+<body>
+<div class="running-clinic">{{ clinic.name }}</div>
+<div class="running-patient">{{ patient.first_name }} {{ patient.last_name }}</div>
+
+<div class="cover">
+  <h1>Ficha del paciente</h1>
+  <p><strong>{{ patient.first_name }} {{ patient.last_name }}</strong></p>
+  <p class="muted small">
+    {{ clinic.name }}{% if clinic.nif %} · NIF {{ clinic.nif }}{% endif %}<br>
+    Generada el {{ generated_at|date:"d/m/Y H:i" }}
+  </p>
+  <p class="notice">
+    Copia de los datos que la clínica conserva sobre este paciente. Los datos completos y
+    estructurados, con los adjuntos originales y la verificación de las firmas, están en el
+    resto del paquete (carpeta <em>datos</em>). Los apartados marcados «baja lógica» fueron
+    dados de baja en su día y se incluyen porque forman parte del registro.
+  </p>
+</div>
+
+<h2>Datos del paciente</h2>
+<div class="grid">
+  {% if history %}<div class="row"><div class="k">Historia clínica</div><div class="v">{{ history.number }} (abierta el {{ history.opened_at|date:"d/m/Y" }})</div></div>{% endif %}
+  <div class="row"><div class="k">Fecha de nacimiento</div><div class="v">{{ patient.date_of_birth|date:"d/m/Y"|default:"—" }}</div></div>
+  <div class="row"><div class="k">Documento (NIF/NIE/pasaporte)</div><div class="v">{{ patient.tax_id|default:"—" }}</div></div>
+  <div class="row"><div class="k">Teléfono</div><div class="v">{{ patient.phone|default:"—" }}</div></div>
+  <div class="row"><div class="k">Correo</div><div class="v">{{ patient.email|default:"—" }}</div></div>
+  <div class="row"><div class="k">Dirección</div><div class="v">{% if patient.address or patient.postal_code or patient.city %}{{ patient.address }}{% if patient.postal_code %}, {{ patient.postal_code }}{% endif %}{% if patient.city %} {{ patient.city }}{% endif %}{% else %}—{% endif %}</div></div>
+  {% if patient.archived_at %}<div class="row"><div class="k">Archivado</div><div class="v">{{ patient.archived_at|date:"d/m/Y" }}</div></div>{% endif %}
+  {% if patient.notes %}<div class="row"><div class="k">Notas</div><div class="v">{{ patient.notes|linebreaksbr }}</div></div>{% endif %}
+</div>
+
+{% if guardian_links %}
+<h3>Contactos responsables</h3>
+<table>
+  <tr><th>Nombre</th><th>Relación</th></tr>
+  {% for link in guardian_links %}
+  <tr class="{% if link.obj.deleted_at %}deleted{% endif %}">
+    <td>{% if link.guardian %}{{ link.guardian.first_name }} {{ link.guardian.last_name }}{% else %}—{% endif %}{% if link.obj.deleted_at %}<span class="tag warn">baja lógica</span>{% endif %}</td>
+    <td>{{ link.obj.get_relationship_display }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{% if alerts %}
+<h2>Alertas clínicas</h2>
+<table>
+  <tr><th>Alerta</th><th>Gravedad</th><th>Origen</th><th>Estado</th><th>Nota</th></tr>
+  {% for alert in alerts %}
+  <tr class="{% if alert.deleted_at or not alert.is_active %}deleted{% endif %}">
+    <td>{{ alert.get_alert_type_display }}</td>
+    <td>{{ alert.get_severity_display }}</td>
+    <td>{{ alert.get_source_display }}</td>
+    <td>{% if alert.is_active %}Activa{% else %}Desactivada{% endif %}</td>
+    <td>{{ alert.note|default:"" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h2>Historia clínica</h2>
+{% for episode in episodes %}
+<div class="block flow {% if episode.obj.deleted_at %}deleted{% endif %}">
+  <h3 style="margin-top:0">
+    Episodio · {{ episode.obj.opened_at|date:"d/m/Y" }}
+    <span class="tag">{{ episode.obj.get_status_display }}</span>
+    {% if episode.obj.deleted_at %}<span class="tag warn">baja lógica</span>{% endif %}
+  </h3>
+  <p><strong>Motivo:</strong> {{ episode.obj.reason }}</p>
+  <p class="muted small">
+    {% if episode.responsible %}Responsable: {{ episode.responsible }}.{% endif %}
+    {% if episode.obj.discharged_at %}Alta el {{ episode.obj.discharged_at|date:"d/m/Y" }}.{% endif %}
+  </p>
+
+  {% for visit in episode.visits %}
+  <h4>Visita del {{ visit.obj.occurred_at|date:"d/m/Y H:i" }}{% if visit.professional %} · {{ visit.professional }}{% endif %}{% if visit.obj.deleted_at %} <span class="tag warn">baja lógica</span>{% endif %}</h4>
+
+  {% for note in visit.notes %}
+  <div class="block flow {% if note.obj.deleted_at %}deleted{% endif %}">
+    <p class="small muted">
+      Nota clínica ·
+      {% if note.obj.status == "signed" %}
+        <span class="tag ok">firmada</span>
+        por {{ note.signed_by|default:"—" }} el {{ note.obj.signed_at|date:"d/m/Y H:i" }}
+        {% if note.seal_ok %}<span class="tag ok">sello íntegro</span>{% else %}<span class="tag bad">el sello no coincide</span>{% endif %}
+      {% else %}
+        <span class="tag warn">borrador sin firmar</span>
+      {% endif %}
+      {% if note.obj.deleted_at %}<span class="tag warn">baja lógica</span>{% endif %}
+    </p>
+    {% for section in note.sections %}{% if section.filled %}
+      <p class="section-title">{{ section.title }}{% if section.letter %}<span class="section-letter">({{ section.letter }})</span>{% endif %}</p>
+      {% for field in section.fields %}
+        {% if field.label %}<p class="field-label">{{ field.label }}</p>{% endif %}
+        <p>{{ field.value|linebreaksbr }}</p>
+      {% endfor %}
+    {% endif %}{% endfor %}
+    {% for addendum in note.addenda %}
+      <p class="small"><span class="tag">Adenda</span> {{ addendum.obj.created_at|date:"d/m/Y H:i" }}{% if addendum.author %} · {{ addendum.author }}{% endif %}<br>{{ addendum.obj.text|linebreaksbr }}</p>
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+  {% if visit.procedures %}
+  <table>
+    <tr><th>Procedimiento</th><th>Zona</th><th>Fecha</th><th class="num">Precio</th></tr>
+    {% for procedure in visit.procedures %}
+    <tr class="{% if procedure.deleted_at %}deleted{% endif %}">
+      <td>{{ procedure.frozen_service_name }}</td>
+      <td>{% if procedure.affected_zone %}{{ procedure.get_affected_zone_display }}{% endif %}{% if procedure.laterality %} · {{ procedure.get_laterality_display }}{% endif %}</td>
+      <td>{{ procedure.performed_at|date:"d/m/Y" }}</td>
+      <td class="num">{{ procedure.frozen_price }} €</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+  {% empty %}
+  <p class="muted small">Sin visitas registradas.</p>
+  {% endfor %}
+</div>
+{% empty %}
+<p class="muted">Sin episodios registrados.</p>
+{% endfor %}
+
+{% if responses %}
+<h2>Anamnesis</h2>
+{% for response in responses %}
+<div class="block flow {% if response.obj.deleted_at %}deleted{% endif %}">
+  <p class="small muted">Rellenada el {{ response.obj.filled_at|date:"d/m/Y H:i" }} · {{ response.obj.get_source_display }}{% if response.obj.deleted_at %} <span class="tag warn">baja lógica</span>{% endif %}</p>
+  <table>
+    {% for entry in response.entries %}
+    <tr><td style="width:55%">{{ entry.text }}</td><td>{% if entry.answer is None %}<span class="muted">Sin respuesta</span>{% else %}{{ entry.answer }}{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if lesions %}
+<h2>Lesiones y su evolución</h2>
+{% for lesion in lesions %}
+<div class="block flow {% if lesion.obj.deleted_at %}deleted{% endif %}">
+  <h3 style="margin-top:0">
+    {{ lesion.obj.get_lesion_type_display }} · {{ lesion.obj.get_anatomical_zone_display }}
+    <span class="tag">{{ lesion.obj.get_status_display }}</span>
+    {% if lesion.obj.deleted_at %}<span class="tag warn">baja lógica</span>{% endif %}
+  </h3>
+  <p class="small muted">
+    {{ lesion.obj.get_laterality_display }} · vista {{ lesion.obj.get_view_display }} ·
+    detectada el {{ lesion.obj.detected_at|date:"d/m/Y" }}{% if lesion.obj.resolved_at %} · resuelta el {{ lesion.obj.resolved_at|date:"d/m/Y" }}{% endif %}
+  </p>
+  {% if lesion.observations %}
+  <table>
+    <tr><th>Fecha</th><th class="num">Largo (mm)</th><th class="num">Ancho (mm)</th><th class="num">Prof. (mm)</th><th>Descripción</th></tr>
+    {% for item in lesion.observations %}
+    <tr>
+      <td>{{ item.obj.observed_at|date:"d/m/Y" }}</td>
+      <td class="num">{{ item.obj.length_mm|default_if_none:"—" }}</td>
+      <td class="num">{{ item.obj.width_mm|default_if_none:"—" }}</td>
+      <td class="num">{{ item.obj.depth_mm|default_if_none:"—" }}</td>
+      <td>{{ item.obj.description }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% for item in lesion.observations %}{% for photo in item.photos %}
+    {% if photo.uri %}<img class="photo" src="{{ photo.uri }}" alt="Foto del {{ item.obj.observed_at|date:'d/m/Y' }}">{% else %}<p class="small muted">Foto del {{ item.obj.observed_at|date:"d/m/Y" }} no disponible en esta copia (ver adjuntos).</p>{% endif %}
+  {% endfor %}{% endfor %}
+  {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+
+{% if consents %}
+<h2>Consentimientos firmados</h2>
+{% for consent in consents %}
+<div class="block flow {% if consent.obj.deleted_at %}deleted{% endif %}">
+  <p class="small muted">
+    Firmado el {{ consent.obj.signed_at|date:"d/m/Y H:i" }}
+    {% if consent.obj.signer_name %}· por {{ consent.obj.signer_name }}{% if consent.obj.signer_relationship %} ({{ consent.obj.signer_relationship }}){% endif %}{% endif %}
+    {% if consent.obj.deleted_at %}<span class="tag warn">baja lógica</span>{% endif %}
+  </p>
+  <p class="small">{{ consent.obj.text_copy|linebreaksbr }}</p>
+  {% if consent.signature %}<img class="signature" src="{{ consent.signature }}" alt="Firma">{% endif %}
+</div>
+{% endfor %}
+{% endif %}
+
+{% if appointments %}
+<h2>Citas</h2>
+<table>
+  <tr><th>Fecha</th><th>Servicio</th><th>Profesional</th><th>Estado</th></tr>
+  {% for appointment in appointments %}
+  <tr>
+    <td>{{ appointment.scheduled_at|date:"d/m/Y H:i" }}</td>
+    <td>{{ appointment.service_name|default:appointment.service }}</td>
+    <td>{{ appointment.professional|default:"—" }}</td>
+    <td>{{ appointment.get_status_display }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{% if invoices %}
+<h2>Facturación</h2>
+{% for invoice in invoices %}
+<div class="block flow {% if invoice.obj.deleted_at %}deleted{% endif %}">
+  <p>
+    <strong>{% if invoice.obj.number %}Factura {{ invoice.obj.number }}{% else %}Borrador de factura{% endif %}</strong>
+    <span class="tag">{{ invoice.obj.get_status_display }}</span>
+    {% if invoice.obj.deleted_at %}<span class="tag warn">baja lógica</span>{% endif %}
+  </p>
+  <p class="small muted">
+    {% if invoice.obj.issued_at %}Emitida el {{ invoice.obj.issued_at|date:"d/m/Y" }}.{% endif %}
+    {% if invoice.obj.voided_at %}Anulada el {{ invoice.obj.voided_at|date:"d/m/Y" }}{% if invoice.obj.void_reason %}: {{ invoice.obj.void_reason }}{% endif %}.{% endif %}
+  </p>
+  {% if invoice.lines %}
+  <table>
+    <tr><th>Concepto</th><th>Fecha</th><th class="num">Importe</th></tr>
+    {% for line in invoice.lines %}
+    <tr><td>{{ line.service_name }}</td><td>{{ line.performed_at|slice:":10" }}</td><td class="num">{{ line.price }} €</td></tr>
+    {% endfor %}
+    <tr><th colspan="2">Total</th><th class="num">{{ invoice.obj.total }} €</th></tr>
+  </table>
+  {% endif %}
+  {% if invoice.payments %}
+  <table>
+    <tr><th>Cobro</th><th>Recibo</th><th>Método</th><th class="num">Importe</th></tr>
+    {% for payment in invoice.payments %}
+    <tr class="{% if payment.deleted_at %}deleted{% endif %}">
+      <td>{{ payment.paid_at|date:"d/m/Y" }}</td><td>{{ payment.receipt_number|default:"—" }}</td>
+      <td>{{ payment.get_method_display }}</td><td class="num">{{ payment.amount }} €</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+
+{% if chat_messages %}
+<h2>Conversaciones de WhatsApp</h2>
+<p>La clínica conserva {{ chat_messages }} mensaje{{ chat_messages|pluralize }} de WhatsApp con este paciente. Están en el
+fichero <em>datos/chat_messages.jsonl</em>, con sus fotos y notas de voz en la carpeta <em>adjuntos</em>.</p>
+{% endif %}
+</body>
+</html>

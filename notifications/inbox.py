@@ -42,12 +42,13 @@ TEXTS = {
     Kind.MESSAGE_FAILED: ('Mensaje no entregado', 'Un mensaje de WhatsApp no ha llegado.'),
     Kind.PATIENT_FORM_COMPLETED: ('Ficha completada', 'Un paciente ha rellenado su ficha.'),
     Kind.TEMPLATE_STATUS: ('Plantilla de WhatsApp revisada', 'Meta ha respondido a una plantilla.'),
+    Kind.EXPORT_READY: ('Exportación de datos', 'Una exportación ha terminado.'),
 }
 #: Cuerpo cuando una fila agrupa varios avisos.
 GROUPED_BODY = '{n} avisos nuevos.'
 
 #: Categorías que solo ven los administradores de la clínica.
-ADMIN_ONLY = {Kind.TEMPLATE_STATUS}
+ADMIN_ONLY = {Kind.TEMPLATE_STATUS, Kind.EXPORT_READY}
 
 
 def kind_is_valid(kind) -> bool:
@@ -58,20 +59,26 @@ def push_enabled() -> bool:
     return bool(getattr(settings, 'VAPID_PRIVATE_KEY', '') and getattr(settings, 'VAPID_PUBLIC_KEY', ''))
 
 
-def recipients(clinic, kind, *, exclude_user=None):
-    """Usuarios activos de la clínica a los que este tipo les interesa (in-app)."""
+def recipients(clinic, kind, *, exclude_user=None, only_user=None):
+    """Usuarios activos de la clínica a los que este tipo les interesa (in-app).
+
+    `only_user` limita el aviso a una sola persona (la que pidió una exportación,
+    por ejemplo): sigue pasando por el filtro de rol y por sus preferencias.
+    """
     users = User.objects.filter(clinic=clinic, is_active=True)
     if kind in ADMIN_ONLY:
         users = users.filter(role=User.Role.ADMIN)
     if exclude_user is not None:
         users = users.exclude(pk=getattr(exclude_user, 'pk', exclude_user))
+    if only_user is not None:
+        users = users.filter(pk=getattr(only_user, 'pk', only_user))
     muted = set(
         NotificationPreference.objects.filter(kind=kind, in_app=False).values_list('user_id', flat=True)
     )
     return [u for u in users if u.pk not in muted]
 
 
-def notify(clinic, kind, *, url='', object_id='', exclude_user=None, detail='') -> None:
+def notify(clinic, kind, *, url='', object_id='', exclude_user=None, only_user=None, detail='') -> None:
     """Avisa al personal de la clínica. Se ejecuta al confirmarse la transacción."""
     if clinic is None or not kind_is_valid(kind):
         return
@@ -82,7 +89,8 @@ def notify(clinic, kind, *, url='', object_id='', exclude_user=None, detail='') 
     def run():
         try:
             with transaction.atomic():
-                _deliver(clinic_pk, kind, url=url, object_id=object_id, exclude_user=exclude_user, detail=detail)
+                _deliver(clinic_pk, kind, url=url, object_id=object_id, exclude_user=exclude_user,
+                         only_user=only_user, detail=detail)
         except Exception:
             # El aviso es un extra: nunca debe romper lo que lo originó.
             logger.exception('No se pudo crear la notificación %s', kind)
@@ -90,13 +98,13 @@ def notify(clinic, kind, *, url='', object_id='', exclude_user=None, detail='') 
     transaction.on_commit(run)
 
 
-def _deliver(clinic_pk, kind, *, url, object_id, exclude_user, detail=''):
+def _deliver(clinic_pk, kind, *, url, object_id, exclude_user, only_user=None, detail=''):
     from core.models import Clinic
 
     clinic = Clinic.objects.filter(pk=clinic_pk).first()
     if clinic is None:
         return
-    users = recipients(clinic, kind, exclude_user=exclude_user)
+    users = recipients(clinic, kind, exclude_user=exclude_user, only_user=only_user)
     if not users:
         return
 

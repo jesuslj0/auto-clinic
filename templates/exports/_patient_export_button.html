@@ -1,0 +1,39 @@
+{% comment %}
+Botón «Exportar ficha» de la ficha del paciente. Solo se incluye para administradores
+(`can_export`). Abre una confirmación y hace POST a `exports:patient-create`: la
+exportación se genera en segundo plano y se avisa al terminar.
+{% endcomment %}
+<div x-data="{ open: false }">
+    <button type="button" @click="open = true" class="btn-secondary w-full whitespace-nowrap">
+        <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+        </svg>
+        Exportar ficha
+    </button>
+
+    <template x-teleport="body">
+        <div x-cloak x-show="open" @keydown.escape.window="open = false" class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="export-patient-title">
+            <div x-show="open" x-transition.opacity @click="open = false" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+            <form method="post" action="{% url 'exports:patient-create' patient.pk %}" x-show="open" x-transition
+                  class="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+                {% csrf_token %}
+                <h3 id="export-patient-title" class="text-base font-semibold text-content">¿Exportar la ficha de {{ patient }}?</h3>
+                <p class="mt-2 text-sm text-content-subtle">
+                    Se prepara un ZIP con la historia clínica completa, las fotos, los consentimientos firmados, las citas, la facturación
+                    y los chats de este paciente: un PDF para leerlo y los datos estructurados para guardarlos o llevarlos a otro programa.
+                </p>
+                <div class="mt-4 rounded-xl bg-warning-soft px-4 py-3 ring-1 ring-warning-line">
+                    <p class="text-sm font-semibold text-warning">Contiene datos de salud</p>
+                    <p class="mt-1 text-xs text-content-muted">
+                        Queda registrado quién la pide y quién la descarga. Estará disponible en
+                        <a href="{% url 'exports:list' %}" class="underline">Exportaciones</a> unos días y después se borra.
+                    </p>
+                </div>
+                <div class="mt-5 flex justify-end gap-2">
+                    <button type="button" @click="open = false" class="btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn-primary">Preparar exportación</button>
+                </div>
+            </form>
+        </div>
+    </template>
+</div>

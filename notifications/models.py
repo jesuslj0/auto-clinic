@@ -46,6 +46,7 @@ class Notification(models.Model):
         MESSAGE_FAILED = 'message_failed', 'Mensaje no entregado'
         PATIENT_FORM_COMPLETED = 'patient_form_completed', 'Ficha completada por el paciente'
         TEMPLATE_STATUS = 'template_status', 'Plantilla de WhatsApp revisada'
+        EXPORT_READY = 'export_ready', 'Exportación de datos lista'
 
     clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name='notifications')
     user = models.ForeignKey(

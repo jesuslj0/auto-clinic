@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'agent',
     'audit',
     'clinical',
+    'exports',
 ]
 
 MIDDLEWARE = [
@@ -314,6 +315,12 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'notifications.tasks.purge_old_notifications',
         'schedule': crontab(hour=3, minute=45),
     },
+    # Caducidad de las exportaciones de datos: borra del bucket los ZIP pasados de
+    # `EXPORT_RETENTION_DAYS` y da por fallidas las que se quedaron colgadas.
+    'purge-expired-exports': {
+        'task': 'exports.tasks.purge_expired_exports',
+        'schedule': crontab(hour=4, minute=0),
+    },
 }
 
 # Web Push (VAPID). Sin claves el push queda desactivado y las notificaciones
@@ -362,6 +369,10 @@ AUDIT_FAILURE_POLICY = config('AUDIT_FAILURE_POLICY', default='fail_closed')
 # autonómica, pendiente de confirmar. Es solo andamiaje de cálculo: no hay purga
 # automática. Ver `clinical/conf.py` y el README de la app `clinical`.
 CLINICAL_RETENTION_YEARS = config('CLINICAL_RETENTION_YEARS', default=15, cast=int)
+
+# Días que el ZIP de una exportación de datos (paciente o clínica) se conserva en el
+# bucket privado antes de borrarse. Ver `exports/`.
+EXPORT_RETENTION_DAYS = config('EXPORT_RETENTION_DAYS', default=7, cast=int)
 
 # Tamaño máximo de una foto clínica, en BYTES. El segundo límite se aplica a lo
 # que llega de fuera de la consulta (el paciente por WhatsApp o por la web): esa

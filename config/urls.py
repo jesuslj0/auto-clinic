@@ -79,6 +79,8 @@ urlpatterns = [
     path('agente/', include('agent.settings_urls')),
     path('facturacion/', include('billing.urls')),
     path('notificaciones/', include('notifications.urls')),
+    # Exportación de datos (paciente y clínica): solo administradores, sin API. Ver `exports/`.
+    path('exportaciones/', include('exports.urls')),
     # PWA: el service worker ha de colgar de la raíz para controlar todo el panel.
     path('sw.js', ServiceWorkerView.as_view(), name='service-worker'),
     path('manifest.webmanifest', ManifestView.as_view(), name='manifest'),

@@ -31,8 +31,9 @@ from django.views.decorators.debug import sensitive_post_parameters
 
 from audit.context import acting_as
 from core import login_guard, two_factor
-from core.forms import SecurityReauthForm, TwoFactorCodeForm
+from core.forms import TwoFactorCodeForm
 from core.mixins import ClinicAdminRequiredMixin
+from core.reauth import reauthenticate
 from core.models import RecoveryCode, TOTPDevice, User
 
 
@@ -197,24 +198,7 @@ class _SecurityActionView(LoginRequiredMixin, View):
         prestado no basta para quitárselo a su dueño. Los fallos cuentan para el
         mismo bloqueo que el login.
         """
-        user = request.user
-        if login_guard.mfa_locked(request, user):
-            messages.error(request, login_guard.LOCKED_MESSAGE)
-            return False
-        form = SecurityReauthForm(request.POST)
-        valid = (
-            form.is_valid()
-            and user.check_password(form.cleaned_data['password'])
-            and two_factor.verify_second_factor(user, form.cleaned_data['code']) is not None
-        )
-        if not valid:
-            if login_guard.record_mfa_failure(request, user):
-                messages.error(request, login_guard.LOCKED_MESSAGE)
-            else:
-                messages.error(request, 'La contraseña o el código no son correctos.')
-            return False
-        login_guard.record_mfa_success(user)
-        return True
+        return reauthenticate(request)
 
 
 class TwoFactorAccountSetupView(LoginRequiredMixin, View):

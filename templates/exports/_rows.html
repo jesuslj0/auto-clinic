@@ -1,0 +1,61 @@
+{% comment %}
+Listado de exportaciones. Mientras haya alguna en marcha se vuelve a pedir a sí mismo
+cada pocos segundos (`?fragment=1`) y, al no quedar ninguna, deja de hacerlo solo.
+{% endcomment %}
+<div id="export-rows"
+     {% if has_active %}hx-get="{% url 'exports:list' %}?fragment=1" hx-trigger="every 4s" hx-swap="outerHTML"{% endif %}>
+    {% if exports %}
+    <ul class="divide-y divide-line overflow-hidden rounded-3xl bg-surface shadow-soft ring-1 ring-line">
+        {% for export in exports %}
+        <li class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                    <p class="truncate text-sm font-semibold text-content">
+                        {% if export.scope == 'patient' %}Ficha de {{ export.patient_label|default:"un paciente" }}{% else %}Toda la clínica{% endif %}
+                    </p>
+                    {% if export.status == 'ready' and export.is_expired %}
+                    <span class="inline-flex items-center rounded-full bg-muted-strong px-2 py-0.5 text-xs font-medium text-content-subtle">Caducada</span>
+                    {% elif export.status == 'ready' %}
+                    <span class="inline-flex items-center rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success ring-1 ring-success-line">Lista</span>
+                    {% elif export.status == 'failed' %}
+                    <span class="inline-flex items-center rounded-full bg-danger-soft px-2 py-0.5 text-xs font-medium text-danger ring-1 ring-danger-line">Fallida</span>
+                    {% elif export.status == 'expired' %}
+                    <span class="inline-flex items-center rounded-full bg-muted-strong px-2 py-0.5 text-xs font-medium text-content-subtle">Caducada</span>
+                    {% else %}
+                    <span class="inline-flex items-center gap-1.5 rounded-full bg-info-soft px-2 py-0.5 text-xs font-medium text-info ring-1 ring-info-line">
+                        <svg class="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                        {{ export.get_status_display }}
+                    </span>
+                    {% endif %}
+                </div>
+                <p class="mt-1 text-xs text-content-subtle">
+                    Pedida por {{ export.requested_by_label|default:"—" }} el {{ export.created_at|date:"j M Y · H:i" }}
+                    {% if export.status == 'ready' and export.size_bytes %} · {{ export.size_bytes|filesizeformat }}{% endif %}
+                    {% if export.status == 'ready' and not export.is_expired %} · disponible hasta el {{ export.expires_at|date:"j M Y" }}{% endif %}
+                    {% if export.downloads %} · descargada {{ export.downloads }} vez{{ export.downloads|pluralize:"es" }}{% endif %}
+                </p>
+                {% if export.status == 'failed' and export.error %}
+                <p class="mt-1 text-xs text-danger">{{ export.error }}</p>
+                {% endif %}
+                {% if export.counts.files_unavailable %}
+                <p class="mt-1 text-xs text-warning">{{ export.counts.files_unavailable }} adjunto{{ export.counts.files_unavailable|pluralize }} no estaba{{ export.counts.files_unavailable|pluralize:"n" }} disponible{{ export.counts.files_unavailable|pluralize }} al exportar; el detalle está en el manifest del ZIP.</p>
+                {% endif %}
+            </div>
+            {% if export.is_downloadable %}
+            <a href="{% url 'exports:download' export.pk %}" class="btn-primary flex-shrink-0 max-sm:w-full">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+                Descargar
+            </a>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <div class="rounded-3xl bg-surface px-6 py-12 text-center shadow-soft ring-1 ring-line">
+        <p class="text-sm font-semibold text-content">Todavía no hay exportaciones</p>
+        <p class="mt-1 text-sm text-content-subtle">Abre la ficha de un paciente y pulsa «Exportar ficha» para crear la primera.</p>
+    </div>
+    {% endif %}
+</div>

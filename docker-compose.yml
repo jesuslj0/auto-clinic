@@ -27,6 +27,14 @@ x-django-env: &django-env
   REDIS_URL: redis://redis:6379/0
   CELERY_BROKER_URL: redis://redis:6379/1
   CELERY_RESULT_BACKEND: redis://redis:6379/2
+  # Bucket privado de DESARROLLO (fotos clínicas, firmas, adjuntos de WhatsApp y ZIP de
+  # exportación). Compose las toma del `.env` por sustitución, y solo estas cuatro: el
+  # resto del `.env` es de producción y no entra en los contenedores. Tiene que ser un
+  # bucket de pruebas, nunca el de producción. Sin ellas, esas subidas fallan en dev.
+  R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+  R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+  R2_BUCKET_NAME: ${R2_BUCKET_NAME:-}
+  R2_ENDPOINT_URL: ${R2_ENDPOINT_URL:-}
 
 services:
   db:

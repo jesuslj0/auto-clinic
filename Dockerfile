@@ -5,7 +5,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential libpq-dev && rm -rf /var/lib/apt/lists/*
+# libpango*/fuentes: las pide WeasyPrint para el PDF de las exportaciones de datos
+# (`exports/pdf.py`). Sin una fuente del sistema el PDF saldría sin letras.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential libpq-dev libpango-1.0-0 libpangoft2-1.0-0 fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
