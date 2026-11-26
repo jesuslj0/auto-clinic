@@ -441,6 +441,8 @@ class PatientDetailView(PatientTabView):
             if guardian_profile else []
         )
         context['can_archive'] = is_clinic_admin(self.request.user)
+        # Exportar la ficha entera es de administradores, como archivarla (`exports/`).
+        context['can_export'] = context['can_archive'] and bool(self.request.user.clinic_id)
         if context['can_archive'] and not self.object.is_archived:
             context['upcoming_appointments'] = list(upcoming_appointments(self.object))
         return context

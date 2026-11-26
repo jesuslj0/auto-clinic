@@ -65,7 +65,7 @@ Configuración) ya se ven como pestañas dentro de la página (`agent/settings/_
     </svg>
     <span class="sidebar-label{% if section == 'agent' %} bg-brand-gradient bg-clip-text font-semibold text-transparent{% endif %}">Agente WhatsApp</span>
 </a>
-{% with settings_sections='services professionals knowledge clinic' %}
+{% with settings_sections='services professionals knowledge clinic exports' %}
 <div x-data="{ open: {% if section in settings_sections %}true{% else %}false{% endif %}, active: {% if section in settings_sections %}true{% else %}false{% endif %} }" class="space-y-1">
     <button type="button" @click="open = !open" :aria-expanded="open ? 'true' : 'false'" aria-controls="sidebar-settings" title="Configuración"
             class="sidebar-link flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition {% if section in settings_sections %}sidebar-group-open{% else %}sidebar-group-idle{% endif %}"
@@ -104,6 +104,14 @@ Configuración) ya se ven como pestañas dentro de la página (`agent/settings/_
             </svg>
             <span class="sidebar-label{% if section == 'clinic' %} bg-brand-gradient bg-clip-text font-semibold text-transparent{% endif %}">Mi clínica</span>
         </a>
+        {% if user.is_superuser or user.role == 'admin' %}
+        <a href="{% url 'exports:list' %}" title="Exportaciones" class="sidebar-link group flex items-center gap-3 rounded-xl border px-4 py-2.5 transition {% if section == 'exports' %}border-brand-line bg-brand-soft{% else %}border-transparent text-content-muted hover:border-brand-line hover:bg-brand-soft hover:text-brand-fg{% endif %}">
+            <svg class="h-5 w-5 flex-shrink-0 {% if section == 'exports' %}text-brand-fg{% else %}text-content-faint group-hover:text-brand-fg{% endif %}" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            <span class="sidebar-label{% if section == 'exports' %} bg-brand-gradient bg-clip-text font-semibold text-transparent{% endif %}">Exportaciones</span>
+        </a>
+        {% endif %}
     </div>
 </div>
 {% endwith %}

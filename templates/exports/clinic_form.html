@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+
+{% block title %}Exportar la clínica · {{ clinic.name|default:"Auto Clinic" }}{% endblock %}
+{% block page_heading %}Exportar toda la clínica{% endblock %}
+{% block page_subheading %}<p class="hidden truncate text-sm text-content-subtle sm:block">Copia completa de los datos</p>{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-2xl space-y-5">
+    <div class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+        <h3 class="text-sm font-semibold text-content">Qué incluye</h3>
+        <p class="mt-2 text-sm text-content-subtle">
+            Todas las fichas de pacientes con su historia clínica, fotos, consentimientos firmados, citas, facturación y chats;
+            además del catálogo de servicios, los profesionales, las plantillas y el registro de auditoría. Es el paquete para
+            cambiar de programa o guardar una copia completa. No incluye contraseñas ni claves de acceso.
+        </p>
+        <div class="mt-4 rounded-xl bg-warning-soft px-4 py-3 ring-1 ring-warning-line">
+            <p class="text-sm font-semibold text-warning">Es el volcado más sensible de la aplicación</p>
+            <p class="mt-1 text-xs text-content-muted">
+                Contiene datos de salud de todos los pacientes. Queda registrado quién lo pide y quién lo descarga, y se borra
+                a los {{ retention_days }} día{{ retention_days|pluralize }}. Guárdalo cifrado y no lo reenvíes por canales no seguros.
+            </p>
+        </div>
+    </div>
+
+    {% if not has_two_factor %}
+    <div class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+        <h3 class="text-sm font-semibold text-content">Activa la verificación en dos pasos</h3>
+        <p class="mt-2 text-sm text-content-subtle">
+            Para exportar toda la clínica hay que confirmar con la contraseña y un código de tu app de autenticación. Todavía no la
+            tienes activada, así que no se puede continuar.
+        </p>
+        <a href="{% url 'core:account-security' %}" class="btn-primary mt-4">Ir a Seguridad</a>
+    </div>
+    {% elif running %}
+    <div class="rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+        <p class="text-sm text-content-subtle">Ya hay una exportación de la clínica en marcha. Puedes seguirla en <a href="{% url 'exports:list' %}" class="font-medium text-brand-fg underline">Exportaciones</a>.</p>
+    </div>
+    {% else %}
+    <form method="post" class="space-y-4 rounded-3xl bg-surface p-5 shadow-soft ring-1 ring-line sm:p-6">
+        <h3 class="text-sm font-semibold text-content">Confirma que eres tú</h3>
+        {% include 'core/_two_factor_reauth.html' with prefix='export' %}
+        <div class="flex justify-end gap-2 pt-1">
+            <a href="{% url 'exports:list' %}" class="btn-secondary">Cancelar</a>
+            <button type="submit" class="btn-primary">Preparar exportación</button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

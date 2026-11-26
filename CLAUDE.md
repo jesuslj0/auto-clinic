@@ -50,6 +50,7 @@ python manage.py runserver    # Uses config.settings.dev by default
 | `knowledge` | Clinic knowledge base: `ClinicKnowledgeBase`, `ClinicInfoQuery`, `ClinicInfoCache` |
 | `audit` | Append-only audit trail: `ChangeLog` (writes, via signals) and `AccessLog` (reads, instrumented per view) |
 | `clinical` | Clinical core: `MedicalHistory`, `Episode`, `Visit`, `ClinicalNote` (SOAP), `Addendum`. Immutable after signing; soft-delete only. Also versioned anamnesis: `QuestionnaireTemplate`, `TemplateVersion`, `Question`, `QuestionnaireResponse` (immutable literal snapshot) , `ClinicalAlert` (per-patient, deactivated never deleted), `Lesion` (foot-map, coded zone + normalized coords) and its follow-up: `LesionObservation` (measurements per visit) + `LesionAttachment` (photo in a private R2 bucket, signed URLs only). `PerformedProcedure` links a visit to the service catalogue with the price frozen. Versioned informed consent: `ConsentTemplate`, `ConsentVersion`, `SignedConsent` (literal `text_copy` + signature in the private bucket) |
+| `exports` | Exportación de datos: ZIP de la ficha de un paciente (con PDF) o de toda la clínica, para la copia que pide el paciente o el traspaso a otro programa. `DataExport` (estado, clave en el bucket privado, caducidad), motor en `builder.py`/`schema.py`. Ver «Exportación de datos» |
 | `core.models.SoftDeleteModel` | Reusable soft-delete mixin (`deleted_at`, `objects`/`all_objects`, `can_be_deleted()`) |
 
 ### Auditing (mandatory for clinical data)
@@ -356,8 +357,34 @@ Panel map (namespace in brackets):
 | `/agente/` (`agent_settings`, admins only) | test chat at the root («Chat»), `probar/enviar/`, `personalidad/`, `plantillas/` (+ `nueva/`, `sincronizar/`, `<pk>/` with `enviar/`, `duplicar/`, `eliminar/`), `configuracion/` (Meta credentials + webhook, two forms told apart by a hidden `form` field) — views in `agent/settings_views.py` and `agent/template_views.py` |
 | `/notificaciones/` (`notifications`) | `` (listado), `contador/`, `recientes/`, `leer-todas/`, `preferencias/`, `push/suscribir/`, `push/baja/`, `<id>/abrir|leer|descartar/`; además `/sw.js` y `/manifest.webmanifest` en la raíz |
 | `/facturacion/` (`billing`) | `nueva/`, `pendientes/`, `<pk>/` (`emitir/`, `anular/`, `cobrar/`, `procedimientos/`, `eliminar/`) |
+| `/exportaciones/` (`exports`, admins only) | `` (historial), `paciente/<id>/crear/` (POST), `clinica/crear/` (contraseña + 2FA), `<uuid>/descargar/` |
 | `/clinico/` (`clinical`) | `procedimientos/` (listado global), `adjuntos/<uuid>/`, `consentimientos/<uuid>/firma/` |
 | `/ficha/` (`intake`, **public, no session**) | `<token>/` (the patient's form), `gracias/` — views in `clinical/public_views.py` |
+
+### Exportación de datos (`exports`)
+
+La copia de la ficha que pide un paciente (RGPD arts. 15 y 20, Ley 41/2002 art. 18) y el traspaso de toda
+la clínica (cambio de software, cierre). Un ZIP con `datos/<entidad>.jsonl`, `adjuntos/`, `manifest.json` (SHA-256 de
+todo), un `LEEME.txt` y `verificar_firmas.py` (comprueba el paquete y los sellos de las notas sin la aplicación).
+La ficha de un paciente lleva además `paciente.pdf` (WeasyPrint). Detalle y reglas en `exports/README.md`. Lo
+imprescindible:
+
+- **Solo panel, solo administradores, sin API REST.** El agente (`Api-Key`) no llega. Pedir y descargar dejan
+  `AccessLog` (`EXPORT`). Exportar **la clínica entera** pide contraseña + código 2FA (`core/reauth.py`, mismo
+  bloqueo que el login) y **exige 2FA activo**; esa página manda `Referrer-Policy: same-origin`, nunca `no-referrer`.
+- **El contenido se decide en `exports/schema.py`**: lista explícita de campos por entidad, más los excluidos con su
+  motivo. `tests/exports/test_schema_guard.py` falla si un modelo exportado gana un campo sin decidir. **Si añades un
+  campo a un modelo exportado, decide ahí si sale** (y si es un secreto, que no).
+- **Lee con `all_objects` (también lo borrado) y filtra por `patient_id`/`clinic_id`**, no por `patient.<relación>`.
+  Exporta lo congelado (`frozen_*`, `text_copy`, `snapshot`, `lines`), nunca lo recalculado.
+- **El hash de las notas firmadas se calcula también en `exports/assets/verificar_firmas.py`**: si cambia el JSON
+  canónico de `clinical/hashing.py`, hay que cambiar el script (un test exige que den lo mismo).
+- **El ZIP vive en el bucket privado** (`exports/<2>/<uuid>.zip`, solo la clave en la base) `EXPORT_RETENTION_DAYS` (7)
+  días; después se borra el objeto y la fila queda `expired`. Una sola exportación activa por paciente y por clínica
+  (constraint parcial).
+- **El PDF no sale a la red** (plantilla autocontenida, `URLFetcher` solo `data:`); si falla, la exportación falla.
+  La imagen necesita `libpango` y una fuente (están en el `Dockerfile`); los tests de PDF requieren WeasyPrint.
+- **Pendiente**: CSV, FHIR, importador y nombre amigable del fichero al descargar.
 
 ### Agent personality (`agent.AgentProfile`)
 
@@ -550,6 +577,7 @@ Configured in `config/celery.py`. Beat schedule runs:
 - `expire_appointment_holds` — every 10 minutes
 - `send_whatsapp_reminders_24h` — every 15 minutes (see below)
 - `purge_old_conversations` — every night at 03:30 (chat retention, see below)
+- `purge_expired_exports` — every night at 04:00 (borra los ZIP de exportación caducados, ver «Exportación de datos»)
 
 Broker: Redis DB 1. Result backend: Redis DB 2. Channel layer: Redis DB 0.
 
@@ -767,6 +795,7 @@ VAPID_PUBLIC_KEY=              # Web Push (notifications); empty = push off
 VAPID_PRIVATE_KEY=
 VAPID_CLAIMS_EMAIL=            # generic service mailbox, not a person's
 CACHE_REDIS_URL=               # default: REDIS_URL on DB 3
+EXPORT_RETENTION_DAYS=7        # días que un ZIP de exportación se conserva en el bucket
 ```
 
 Clinical photo storage (Cloudflare R2, private bucket — the `clinical_media`

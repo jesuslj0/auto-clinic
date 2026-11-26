@@ -27,6 +27,10 @@ pywebpush>=2.0
 django-storages>=1.14
 boto3>=1.34
 
+# Exportación de datos: PDF legible de la ficha del paciente (`exports/pdf.py`).
+# >=68: usa `weasyprint.urls.URLFetcher` para impedir que el render salga a la red.
+weasyprint>=68
+
 # Testing
 pytest>=8.0
 pytest-django>=4.8
